@@ -1,0 +1,27 @@
+# quickshell - Qt/QML toolkit for building Wayland shells
+# Generated from manifest.tsv by gen-ports.py. Edit the manifest, not this file,
+# unless the package needs something the template cannot express - in which case
+# drop a `recipe.local` beside it and it will be preserved.
+name=quickshell
+version=0.2.0
+release=1
+desc="Qt/QML toolkit for building Wayland shells"
+url="https://quickshell.outfoxxed.me/"
+license="LGPL-3.0-only"
+depend="qt6-base qt6-declarative qt6-wayland wayland pipewire"
+makedepend="cmake ninja"
+source="https://git.outfoxxed.me/outfoxxed/quickshell/archive/v0.2.0.tar.gz"
+sha256="SKIP"
+
+build() {
+	cmake -S "quickshell-0.2.0" -B build -G Ninja \
+		-DCMAKE_INSTALL_PREFIX=/usr \
+		-DCMAKE_INSTALL_LIBDIR=lib \
+		-DCMAKE_BUILD_TYPE=Release \
+		-DBUILD_SHARED_LIBS=ON
+	ninja -C build -j"$JOBS"
+}
+
+package() {
+	DESTDIR="$pkgdir" ninja -C build install
+}

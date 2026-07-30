@@ -546,3 +546,23 @@ extra	hyperfine	1.20.0	cargo	MIT Apache-2.0	glibc	rust,cargo	https://github.com/
 extra	difftastic	0.65.0	cargo	MIT	glibc	rust,cargo	https://difftastic.wilfred.me.uk/	https://github.com/Wilfred/difftastic/archive/refs/tags/{version}.tar.gz	A diff that understands syntax
 base	nushell	0.109.0	cargo	MIT	glibc,libressl	rust,cargo	https://www.nushell.sh/	https://github.com/nushell/nushell/archive/refs/tags/{version}.tar.gz	A shell built around structured data
 base	yazi	26.5.6	cargo	MIT	glibc,ffmpeg,libwebp	rust,cargo	https://yazi-rs.github.io/	https://github.com/sxyazi/yazi/archive/refs/tags/v{version}.tar.gz	Terminal file manager
+base	dankmaterialshell	1.5.0	meson	GPL-3.0-only	quickshell,niri,pipewire,ttf-jetbrains-mono	meson,ninja	https://github.com/AvengeMedia/DankMaterialShell	https://github.com/AvengeMedia/DankMaterialShell/archive/refs/tags/v{version}.tar.gz	DankMaterialShell, the DMS bar and shell for niri
+base	quickshell	0.2.0	cmake	LGPL-3.0-only	qt6-base,qt6-declarative,qt6-wayland,wayland,pipewire	cmake,ninja	https://quickshell.outfoxxed.me/	https://git.outfoxxed.me/outfoxxed/quickshell/archive/v{version}.tar.gz	Qt/QML toolkit for building Wayland shells
+base	picom	12.5	meson	MIT MPL-2.0	libx11,libxcb,mesa,libconfig,pixman,libev	meson,ninja	https://github.com/yshui/picom	https://github.com/yshui/picom/archive/refs/tags/v{version}.tar.gz	X11 compositor, shadows and fading
+base	libconfig	1.8.1	autotools	LGPL-2.1-or-later	glibc	-	https://hyperrealm.github.io/libconfig/	https://github.com/hyperrealm/libconfig/releases/download/v{version}/libconfig-{version}.tar.gz	Structured configuration file library
+base	libev	4.33	autotools	BSD-2-Clause	glibc	-	http://software.schmorp.de/pkg/libev.html	http://dist.schmorp.de/libev/libev-{version}.tar.gz	High performance event loop
+base	feh	3.10.3	make	MIT	libx11,imlib2,libxt	-	https://feh.finalrewind.org/	https://feh.finalrewind.org/feh-{version}.tar.bz2	Lightweight image viewer and wallpaper setter
+base	imlib2	1.12.5	autotools	Imlib2	libx11,libpng,libjpeg-turbo,freetype	-	https://docs.enlightenment.org/api/imlib2/html/	https://downloads.sourceforge.net/enlightenment/imlib2-{version}.tar.gz	Image loading and rendering library
+base	libxt	1.3.1	autotools	MIT	libx11,libsm	-	https://x.org/	https://x.org/pub/individual/lib/libXt-{version}.tar.xz	X Toolkit Intrinsics
+base	libsm	1.2.6	autotools	MIT	libice,libx11	-	https://x.org/	https://x.org/pub/individual/lib/libSM-{version}.tar.xz	X Session Management library
+base	libice	1.1.2	autotools	MIT	glibc	-	https://x.org/	https://x.org/pub/individual/lib/libICE-{version}.tar.xz	X Inter-Client Exchange library
+base	wlogout	1.1.1	meson	MIT	gtk3,wayland	meson,ninja	https://github.com/ArtsyMacaw/wlogout	https://github.com/ArtsyMacaw/wlogout/archive/refs/tags/{version}.tar.gz	Wayland logout menu
+#
+# =============================================================== profile
+# Profile packages. Each installs a whole working setup and writes its
+# configuration, instead of dropping a bare component on you. alpm prints a
+# warning before installing one, because they touch /etc and the user's home.
+profile	niri-dms	1.0.0	meta	BSD-2-Clause	niri,dankmaterialshell,foot,fuzzel,mako,swaylock,wl-clipboard,grim,slurp,xorg-xwayland,pipewire,wireplumber,ttf-jetbrains-mono,ttf-nerd-fonts-symbols,noto-fonts,noto-fonts-emoji,nemo,firefox	-	https://github.com/apiwo/arctic-linux	-	Niri + DankMaterialShell with the Arctic neutral rice and keybinds
+profile	arctic-kde	1.0.0	meta	BSD-2-Clause	plasma-meta,foot,sddm,sddm-arctic-theme,arctic-plasma-theme,dolphin,kate,ark,spectacle,gwenview,okular,pipewire,wireplumber,ttf-jetbrains-mono,noto-fonts,noto-fonts-emoji	-	https://github.com/apiwo/arctic-linux	-	KDE Plasma with foot and the Arctic colour scheme
+profile	arctic-xfce	1.0.0	meta	BSD-2-Clause	xfce4-meta,foot,xfce4-notifyd,xfce4-screenshooter,thunar,xorg-server,sddm,pipewire,wireplumber,ttf-jetbrains-mono,noto-fonts,noto-fonts-emoji,arctic-plasma-theme	-	https://github.com/apiwo/arctic-linux	-	Xfce with the Arctic theme, foot and a neutral panel layout
+profile	apiwow-dwm	1.0.0	meta	MIT BSD-2-Clause	dwm,dmenu,st,picom,slstatus,slock,foot,xorg-server,xorg-xinit,libx11,libxft,libxinerama,ttf-jetbrains-mono,ttf-nerd-fonts-symbols,noto-fonts,feh	clang,bmake	https://github.com/apiwo/arctic-linux	-	dwm + picom, calm grey and white, with the Arctic terminal and fonts

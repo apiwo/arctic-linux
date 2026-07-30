@@ -355,10 +355,25 @@ if [ ! -x "$R/usr/bin/toybox" ]; then
 			# toybox wins for the classic Unix tools; busybox keeps init and
 			# the network stack. Where both provide an applet, toybox is linked
 			# only if busybox has not already claimed the name as a real file.
-			tgt "$R/usr/bin/toybox" 2>/dev/null | tr ' ' '\n' | \
+			# Only link toybox for names busybox and glibc have not already
+			# taken - two providers of one path is a package conflict later.
+			GLIBC_CLAIMED="getconf getent ldd locale localedef iconv gencat sprof"
+			"$R/usr/bin/toybox" 2>/dev/null | tr ' ' '\n' | \
 			  while read -r a; do
 				[ -n "$a" ] || continue
-				case "$a" in toybox|init|sh|ash|getty|mdev|login|su|passwd) continue ;; esac
+				[ "$a" = toybox ] && continue
+				case " $GLIBC_CLAIMED " in *" $a "*) continue ;; esac
+				# busybox already owns this name if it is a symlink to busybox.
+				if [ -L "$R/usr/bin/$a" ] && \
+				   [ "$(readlink "$R/usr/bin/$a")" = busybox ]; then
+					case "$a" in
+					init|sh|ash|getty|mdev|login|su|passwd|blkid|mount|umount|\
+					fsck|swapon|swapoff|mkswap|findfs|mountpoint|losetup|ip|\
+					ifconfig|route|ping|wget|modprobe|insmod|rmmod|lsmod|depmod|\
+					sysctl|hwclock|reboot|halt|poweroff|vi|less|syslogd|crond)
+						continue ;;
+					esac
+				fi
 				ln -sf toybox "$R/usr/bin/$a" 2>/dev/null || :
 			  done
 			ok "toybox + $(tgt "$R/usr/bin/toybox" | wc -w) commands"

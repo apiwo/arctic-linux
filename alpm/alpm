@@ -1,6 +1,9 @@
 #!/bin/sh
 # alpm - Arctic Linux Package Manager
-# Binary packages are .alpmz (tar.xz). No GNU utilities required at runtime.
+#
+# Binary packages are .alpmz - Arctic Linux Package Management Zip - which is a
+# tar.xz holding .PKGINFO, .FILES, an optional .INSTALL, and the payload rooted
+# at /. No GNU utilities are required at runtime.
 # shellcheck shell=sh disable=SC2039,SC2044,SC2086
 
 set -u
@@ -44,7 +47,7 @@ ${C_B}FETCHING${C_R}
   alpm get -s <pkg>...       fetch upstream source here
   alpm fetch all             sync every enabled repo
   alpm fetch <repo>...       sync main | extra | base | source | kernels |
-                             nonfree | alt-nonfree | multilib
+                             nonfree | alt-nonfree | multilib | profile
 
 ${C_B}REPOSITORIES${C_R}
   alpm add repo <url>        add a repository
@@ -252,6 +255,12 @@ install_one() {
 	old=""
 	is_installed "$name" && old=$(installed_version "$name")
 
+	kind=$(meta "$tmp/.PKGINFO" kind)
+	if [ "$kind" = "profile" ]; then
+		printf '%sWARNING: This is a profile package it installs more than one package and configures it rather than being a basic installation.%s\n' \
+			"$A_AMB$C_B" "$C_R"
+	fi
+
 	if [ -n "$old" ]; then
 		msg2 "upgrading $name $old -> $ver-$rel"
 		pkg_script "$tmp" pre_upgrade "$name"
@@ -312,7 +321,17 @@ cmd_ins() {
 
 	if [ "$SOURCE" = "1" ]; then cmd_ins_source "$@"; return; fi
 
+	# Check the requested names before resolving. resolve_targets runs in a
+	# command substitution, so a die() inside it only exits that subshell and
+	# alpm would carry on with an empty list and report success.
+	for p in "$@"; do
+		idx_lookup "$p" >/dev/null 2>&1 && continue
+		is_installed "$p" && continue
+		die "package not found: $p (try 'alpm fetch all')"
+	done
+
 	targets=$(resolve_targets "$@")
+	[ -n "$targets" ] || die "could not resolve $* - see 'alpm deps <pkg>'"
 	todo=""
 	for p in $targets; do
 		if is_installed "$p"; then
@@ -344,6 +363,23 @@ cmd_ins() {
 	done
 	printf '\n\n  %sDownload size:%s  %s\n' "$A_GREY" "$C_R" "$(human $total)"
 	[ "$NOMOD" = "1" ] && printf '  %sMode:%s           staged (-nomod, not put into place)\n' "$A_AMB" "$C_R"
+
+	# Profile packages are not ordinary packages: they pull in a whole set and
+	# then write configuration on top. Say so before anything is downloaded.
+	profiles=""
+	for p in $todo; do
+		e=$(idx_lookup "$p") || continue
+		[ "$(printf '%s' "$e" | cut -f1)" = "profile" ] && profiles="$profiles $p"
+	done
+	if [ -n "$profiles" ]; then
+		printf '\n%sWARNING: This is a profile package it installs more than one package and configures it rather than being a basic installation.%s\n' \
+			"$A_AMB$C_B" "$C_R"
+		printf '\n  %sprofile package(s):%s%s\n' "$A_GREY" "$C_R" "$profiles"
+		printf '  %sconfiguration under /etc and in the user home directory will be\n' "$A_GREY"
+		printf '  written. Whatever is replaced is saved by the transaction, so\n'
+		printf "  'alpm rollback' puts it back.%s\n" "$C_R"
+	fi
+
 	printf '\n'
 	confirm "Proceed with installation?" || { msg "aborted"; return 1; }
 

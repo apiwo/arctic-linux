@@ -1,8 +1,10 @@
 #!/bin/sh
 # mkiso - build an Arctic Linux installation image.
 #
-#   mkiso minimal     Arctic-minimal: console only, the installer, ~300 MiB
-#   mkiso live        Arctic-Live: the same plus KDE Plasma and a session
+#   mkiso minimal     Arctic-minimal: a TTY, zsh, and the installer
+#
+# There is one image on purpose. Arctic boots to a text console running zsh -
+# no display manager, no desktop, no bash anywhere in the tree.
 #
 # The result is a hybrid image: it boots on BIOS and on UEFI, from a disc or
 # from a USB stick written with dd.
@@ -31,8 +33,7 @@ LABEL="ARCTIC"
 
 case "$PROFILE" in
 minimal) ISONAME="Arctic-minimal-$BUILD_ID-x86_64.iso"; LABEL="ARCTIC_MIN" ;;
-live)    ISONAME="Arctic-Live-$BUILD_ID-x86_64.iso";    LABEL="ARCTIC_LIVE" ;;
-*) echo "mkiso: unknown profile '$PROFILE' (use minimal or live)" >&2; exit 1 ;;
+*) echo "mkiso: unknown profile '$PROFILE' (only 'minimal' exists)" >&2; exit 1 ;;
 esac
 
 step() { printf '\n\033[1;36m:: %s\033[0m\n' "$*"; }
@@ -170,7 +171,7 @@ cp -f "$SRCTREE/skel/etc/alpm/repos.d/"*.repo "$S/etc/alpm/repos.d/"
 # install a complete system with no network at all. These entries come first;
 # the network mirrors stay configured behind them for anything not on the disc.
 if [ -d "$B/repo" ]; then
-	for r in main kernels source; do
+	for r in main kernels source profile; do
 		[ -d "$B/repo/$r" ] || continue
 		cat >"$S/etc/alpm/repos.d/00-medium-$r.repo" <<EOF
 # The copy of '$r' carried on this installation medium.
@@ -192,7 +193,7 @@ fi
 # compressed, which is exactly how it was broken.
 if [ -d "$B/repo" ]; then
 	mkdir -p "$S/var/lib/alpm/sync"
-	for r in main kernels source; do
+	for r in main kernels source profile; do
 		idx="$B/repo/$r/x86_64/INDEX"
 		[ -f "$idx" ] || continue
 		grep -v '^#' "$idx" >"$S/var/lib/alpm/sync/$r.idx" 2>/dev/null || :
@@ -304,22 +305,6 @@ cat >"$S/usr/bin/arctic-install" <<'INST'
 exec arctic-welcome
 INST
 chmod 755 "$S/usr/bin/arctic-install"
-
-# The live profile also brings up a graphical session.
-if [ "$PROFILE" = live ]; then
-	: >"$S/etc/arctic/services/sddm"
-	: >"$S/etc/arctic/services/pipewire"
-	# Plasma is not built yet; record what the profile expects so the ISO is
-	# honest about it rather than silently shipping a console-only image.
-	cat >"$S/usr/share/arctic/live-manifest" <<'EOF'
-# Arctic-Live expects these packages in the squashfs. They are built by
-# 'make packages live' from ports/base and folded in by mkiso.
-plasma-meta sddm sddm-arctic-theme arctic-plasma-theme
-konsole dolphin kate ark spectacle
-qt6-base qt6-wayland kf6 mesa pipewire wireplumber
-foot firefox
-EOF
-fi
 
 ok "image configured"
 
@@ -529,7 +514,7 @@ cp -f "$WORK/iso/boot/limine.conf" "$WORK/iso/limine.conf"
 step "copying the repositories onto the medium"
 if [ -d "$B/repo" ]; then
 	mkdir -p "$WORK/iso/arctic/repo"
-	for r in main kernels source; do
+	for r in main kernels source profile; do
 		[ -d "$B/repo/$r" ] || continue
 		cp -a "$B/repo/$r" "$WORK/iso/arctic/repo/"
 	done

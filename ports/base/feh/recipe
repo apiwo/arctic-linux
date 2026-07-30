@@ -1,0 +1,24 @@
+# feh - Lightweight image viewer and wallpaper setter
+# Generated from manifest.tsv by gen-ports.py. Edit the manifest, not this file,
+# unless the package needs something the template cannot express - in which case
+# drop a `recipe.local` beside it and it will be preserved.
+name=feh
+version=3.10.3
+release=1
+desc="Lightweight image viewer and wallpaper setter"
+url="https://feh.finalrewind.org/"
+license="MIT"
+depend="libx11 imlib2 libxt"
+makedepend=""
+source="https://feh.finalrewind.org/feh-3.10.3.tar.bz2"
+sha256="SKIP"
+
+build() {
+	cd "feh-3.10.3"
+	make -j"$JOBS" PREFIX=/usr
+}
+
+package() {
+	cd "feh-3.10.3"
+	make PREFIX=/usr DESTDIR="$pkgdir" install
+}

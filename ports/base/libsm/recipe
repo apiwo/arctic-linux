@@ -1,0 +1,31 @@
+# libsm - X Session Management library
+# Generated from manifest.tsv by gen-ports.py. Edit the manifest, not this file,
+# unless the package needs something the template cannot express - in which case
+# drop a `recipe.local` beside it and it will be preserved.
+name=libsm
+version=1.2.6
+release=1
+desc="X Session Management library"
+url="https://x.org/"
+license="MIT"
+depend="libice libx11"
+makedepend=""
+source="https://x.org/pub/individual/lib/libSM-1.2.6.tar.xz"
+sha256="SKIP"
+
+build() {
+	cd "libSM-1.2.6"
+	./configure \
+		--prefix=/usr \
+		--sysconfdir=/etc \
+		--localstatedir=/var \
+		--libdir=/usr/lib \
+		--disable-static \
+		--disable-nls
+	make -j"$JOBS"
+}
+
+package() {
+	cd "libSM-1.2.6"
+	make DESTDIR="$pkgdir" install
+}

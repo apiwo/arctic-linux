@@ -41,7 +41,7 @@ toolchain, busybox init, zsh, doas, and its own package manager.
 | make / yacc / awk / man | bmake, byacc, the one true awk, mandoc |
 | GPU | NVIDIA proprietary, AMD and Intel via mesa, all coexisting through libglvnd |
 | bootloader | Limine, BIOS and UEFI |
-| packages | `alpm`, packages are `.alpmz` (tar.xz) |
+| packages | `alpm`; packages are `.alpmz` — **A**rctic **L**inux **P**ackage **M**anagement **Z**ip (a tar.xz) |
 | kernel | 7.1.3, from the Gentoo dist-kernel config plus an Arctic delta |
 
 ### On GNU components
@@ -80,14 +80,17 @@ NVIDIA machine and an AMD/Intel machine can run the same image. Choosing
 rather not run a blob, `alt-nonfree` has `nouveau-drivers` as a drop-in
 counterpart, and they declare a conflict so you cannot install both.
 
-## Images
+## The image
 
-Two profiles, both hybrid BIOS + UEFI, both bootable from a disc or from a USB
-stick written with `dd`:
+One image: **Arctic-minimal**. Hybrid BIOS + UEFI, boots from a disc or from a
+USB stick written with `dd`.
 
-- **Arctic-minimal** — console, the installer, and a copy of the repositories so
-  it can install a complete system with no network.
-- **Arctic-Live** — the same plus KDE Plasma and a graphical session.
+It boots to a TTY running **zsh**. No display manager, no desktop, and no bash
+anywhere in the tree — `/bin/sh` is busybox ash and the login shell is zsh. It
+carries a copy of the repositories, so it can install a complete system with no
+network.
+
+A desktop is something you install afterwards, with `alpm`.
 
 ## Installing
 
@@ -176,6 +179,28 @@ mirrors `nonfree` package for package — `nvidia-drivers` ↔ `nouveau-drivers`
 you can swap a proprietary component for a free one and have the package manager
 keep you honest.
 
+## Profile packages
+
+A profile is not an ordinary package. Installing `niri-dms` does not give you a
+bare compositor — it pulls in the whole set and writes the configuration, so you
+get a working desktop rather than a starting point. alpm says so before it
+touches anything:
+
+```
+WARNING: This is a profile package it installs more than one package and
+configures it rather than being a basic installation.
+```
+
+| profile | what you get |
+|---|---|
+| `niri-dms` | niri + DankMaterialShell, the neutral grey/white rice, foot, fuzzel, mako, and the sway-style keybinds (Mod+Return terminal, Mod+D launcher, Mod+Shift+Q close) |
+| `arctic-kde` | KDE Plasma with foot as the terminal and the Arctic colour scheme |
+| `arctic-xfce` | Xfce with the Arctic theme, foot, and a neutral panel |
+| `apiwow-dwm` | dwm + picom + slstatus in a calm grey and white scheme, JetBrainsMono throughout |
+
+Config files are marked `backup=`, so alpm will not overwrite yours on upgrade,
+and anything a profile does replace is recoverable with `alpm rollback`.
+
 ## Repositories
 
 | repo | what is in it |
@@ -187,6 +212,7 @@ keep you honest.
 | `source` | build recipes for every package in every other repo |
 | `nonfree` | proprietary firmware and drivers |
 | `alt-nonfree` | free replacements for what is in `nonfree` |
+| `profile` | riced setups: install one and get a whole configured desktop |
 | `multilib` | 32-bit libraries, for Steam and Wine |
 
 502 packages are defined in `ports/manifest.tsv`. Recipes are generated from it
@@ -210,7 +236,7 @@ build/arctic-sandbox --check          # prove the sandbox holds, first
 build/arctic-sandbox build/build-kernel.sh base     # or libre / small
 build/arctic-sandbox build/build-rootfs.sh
 build/arctic-sandbox build/mkpkgs.sh
-build/arctic-sandbox iso/mkiso minimal              # or live
+build/arctic-sandbox iso/mkiso minimal
 ```
 
 It uses bubblewrap: the whole host is bind-mounted read-only, and only the build
@@ -237,9 +263,8 @@ on the medium. The package manager has been exercised end to end — dependency
 resolution, install, upgrade, removal with orphan cleanup, `-nomod` staging and
 `commit`, `verify` against a tampered file, and `rollback`.
 
-Arctic-Live's profile is wired up but Plasma is not built yet; that is a long
-compile, and `mkiso live` will produce a console-only image until the `base`
-repository has been built. `docs/` records what is done and what is not.
+There is deliberately no desktop image. Arctic boots to a TTY and you build up
+from there. `docs/STATUS.md` records what is done and what is not.
 
 ## Licence
 

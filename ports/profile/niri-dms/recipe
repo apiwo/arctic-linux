@@ -1,0 +1,39 @@
+# niri-dms - Niri with DankMaterialShell, set up the way apiwo runs it.
+#
+# A profile package: it installs a whole working desktop and writes the config
+# for it, rather than dropping a bare compositor on you and leaving you to it.
+name=niri-dms
+version=1.0.0
+release=1
+kind=profile
+desc="Niri + DankMaterialShell, with the Arctic neutral rice and keybinds"
+url="https://github.com/apiwo/arctic-linux"
+license="BSD-2-Clause"
+depend="niri dankmaterialshell foot fuzzel mako swaylock wl-clipboard grim slurp \
+	xorg-xwayland pipewire wireplumber ttf-jetbrains-mono ttf-nerd-fonts-symbols \
+	noto-fonts noto-fonts-emoji nemo firefox"
+makedepend=""
+source="config.kdl foot.ini"
+sha256="SKIP SKIP"
+backup="etc/skel/.config/niri/config.kdl etc/skel/.config/foot/foot.ini"
+
+package() {
+	# Shipped as skeleton config so every new account gets it, and as a
+	# system-wide default for accounts that already exist.
+	install -Dm644 config.kdl "$pkgdir/etc/skel/.config/niri/config.kdl"
+	install -Dm644 foot.ini   "$pkgdir/etc/skel/.config/foot/foot.ini"
+	install -Dm644 config.kdl "$pkgdir/etc/xdg/niri/config.kdl"
+	install -Dm644 foot.ini   "$pkgdir/etc/xdg/foot/foot.ini"
+
+	install -d "$pkgdir/usr/share/wayland-sessions"
+	cat >"$pkgdir/usr/share/wayland-sessions/niri-dms.desktop" <<-'DESK'
+		[Desktop Entry]
+		Name=Niri + DMS
+		Comment=Scrollable tiling with DankMaterialShell
+		Exec=niri-session
+		Type=Application
+	DESK
+
+	install -d "$pkgdir/usr/share/arctic/profiles"
+	printf 'niri-dms\n' >"$pkgdir/usr/share/arctic/profiles/active"
+}

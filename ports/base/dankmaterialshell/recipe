@@ -1,0 +1,32 @@
+# dankmaterialshell - DankMaterialShell, the DMS bar and shell for niri
+# Generated from manifest.tsv by gen-ports.py. Edit the manifest, not this file,
+# unless the package needs something the template cannot express - in which case
+# drop a `recipe.local` beside it and it will be preserved.
+name=dankmaterialshell
+version=1.5.0
+release=1
+desc="DankMaterialShell, the DMS bar and shell for niri"
+url="https://github.com/AvengeMedia/DankMaterialShell"
+license="GPL-3.0-only"
+depend="quickshell niri pipewire ttf-jetbrains-mono"
+makedepend="meson ninja"
+source="https://github.com/AvengeMedia/DankMaterialShell/archive/refs/tags/v1.5.0.tar.gz"
+sha256="SKIP"
+
+build() {
+	cd "dankmaterialshell-1.5.0"
+	meson setup build \
+		--prefix=/usr \
+		--libdir=/usr/lib \
+		--sysconfdir=/etc \
+		--localstatedir=/var \
+		--buildtype=release \
+		--wrap-mode=nodownload \
+		-Db_lto=true
+	ninja -C build -j"$JOBS"
+}
+
+package() {
+	cd "dankmaterialshell-1.5.0"
+	DESTDIR="$pkgdir" ninja -C build install
+}

@@ -1,6 +1,8 @@
 #!/bin/sh
 # alpm-repo - build a repository INDEX from a directory of .alpmz packages
 #
+# .alpmz is the Arctic Linux Package Management Zip: a tar.xz archive.
+#
 #   alpm-repo gen  <dir> [arch]   write <dir>/<arch>/INDEX
 #   alpm-repo add  <dir> <pkg>... file packages into the repo and reindex
 #   alpm-repo show <dir>          summarise a repo

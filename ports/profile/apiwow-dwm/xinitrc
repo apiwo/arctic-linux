@@ -1,0 +1,16 @@
+#!/bin/sh
+# Arctic Linux - apiwow-dwm session.
+
+[ -f "$HOME/.Xresources" ] && xrdb -merge "$HOME/.Xresources"
+
+# Neutral grey background; feh is a dependency so this always works.
+if [ -f "$HOME/.local/share/wallpaper.png" ]; then
+	feh --bg-fill "$HOME/.local/share/wallpaper.png"
+else
+	xsetroot -solid "#141414"
+fi
+
+picom --config "$HOME/.config/picom/picom.conf" &
+slstatus &
+
+exec dwm

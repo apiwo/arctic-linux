@@ -1,0 +1,84 @@
+#!/bin/sh
+# nvidia-drivers - alpm hook script.
+#
+# The proprietary driver needs a handful of decisions made about it: kernel
+# modesetting for Wayland, preserving video memory across suspend, blacklisting
+# nouveau so the two do not fight over the card, and an initramfs rebuild.
+#
+# Arctic asks rather than assuming, because plenty of people have a working
+# hand-rolled setup they do not want touched.
+# shellcheck shell=sh
+
+post_install() {
+	printf '\n'
+	printf '  The NVIDIA driver is installed but not configured yet.\n\n'
+	printf '  Automatic configuration would:\n'
+	printf '    - enable kernel modesetting (nvidia_drm modeset=1), which Wayland needs\n'
+	printf '    - preserve video memory across suspend\n'
+	printf '    - blacklist nouveau so it does not claim the card first\n'
+	printf '    - load nvidia, nvidia_modeset and nvidia_drm at boot\n'
+	printf '    - rebuild the initramfs\n\n'
+
+	printf 'Let alpm auto configure this driver or leave it be? N/y '
+	read -r answer </dev/tty 2>/dev/null || answer=n
+
+	case "$answer" in
+	y|Y|yes|YES|Yes) ;;
+	*)
+		printf '\n  Left alone. Nothing was written.\n'
+		printf '  To configure it later:  alpm-nvidia-configure\n\n'
+		return 0 ;;
+	esac
+
+	nvidia_configure
+	printf '\n  Configured. Reboot for the module to take over the console.\n\n'
+}
+
+post_upgrade() {
+	# On an upgrade, only rebuild what already exists - never re-ask.
+	if [ -f /etc/modprobe.d/nvidia.conf ]; then
+		printf '  nvidia: rebuilding the kernel module for the running kernels\n'
+		for kdir in /usr/lib/modules/*/build; do
+			[ -d "$kdir" ] || continue
+			gmake -C "$kdir" M=/usr/src/nvidia modules >/dev/null 2>&1 || :
+		done
+		have_initramfs && arctic-mkinitramfs >/dev/null 2>&1 || :
+	fi
+}
+
+pre_remove() {
+	rm -f /etc/modprobe.d/nvidia.conf /etc/modules-load.d/nvidia.conf
+	rm -f /etc/modprobe.d/nouveau-blacklist.conf
+}
+
+have_initramfs() { command -v arctic-mkinitramfs >/dev/null 2>&1; }
+
+nvidia_configure() {
+	mkdir -p /etc/modprobe.d /etc/modules-load.d
+
+	cat >/etc/modprobe.d/nvidia.conf <<-'CONF'
+		# Written by alpm when the NVIDIA driver was installed.
+		# Remove this file to hand configuration back to yourself.
+
+		# Keeps the framebuffer intact across suspend/resume.
+		options nvidia NVreg_PreserveVideoMemoryAllocations=1
+
+		# Kernel modesetting. Wayland compositors need this; without it you get
+		# a black screen on anything that is not Xorg.
+		options nvidia_drm modeset=1 fbdev=1
+	CONF
+
+	cat >/etc/modprobe.d/nouveau-blacklist.conf <<-'CONF'
+		# nouveau and the proprietary driver cannot both drive the card.
+		blacklist nouveau
+		options nouveau modeset=0
+	CONF
+
+	cat >/etc/modules-load.d/nvidia.conf <<-'CONF'
+		nvidia
+		nvidia_modeset
+		nvidia_drm
+	CONF
+
+	have_initramfs && arctic-mkinitramfs >/dev/null 2>&1 || :
+}

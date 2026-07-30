@@ -1,0 +1,31 @@
+# libev - High performance event loop
+# Generated from manifest.tsv by gen-ports.py. Edit the manifest, not this file,
+# unless the package needs something the template cannot express - in which case
+# drop a `recipe.local` beside it and it will be preserved.
+name=libev
+version=4.33
+release=1
+desc="High performance event loop"
+url="http://software.schmorp.de/pkg/libev.html"
+license="BSD-2-Clause"
+depend="glibc"
+makedepend=""
+source="http://dist.schmorp.de/libev/libev-4.33.tar.gz"
+sha256="SKIP"
+
+build() {
+	cd "libev-4.33"
+	./configure \
+		--prefix=/usr \
+		--sysconfdir=/etc \
+		--localstatedir=/var \
+		--libdir=/usr/lib \
+		--disable-static \
+		--disable-nls
+	make -j"$JOBS"
+}
+
+package() {
+	cd "libev-4.33"
+	make DESTDIR="$pkgdir" install
+}

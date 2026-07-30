@@ -1,0 +1,27 @@
+# arctic-xfce - Xfce with the Arctic look and foot as the terminal.
+name=arctic-xfce
+version=1.0.0
+release=1
+kind=profile
+desc="Xfce with the Arctic theme, foot and a neutral panel layout"
+url="https://github.com/apiwo/arctic-linux"
+license="BSD-2-Clause"
+depend="xfce4-meta foot xfce4-notifyd xfce4-screenshooter thunar \
+	xorg-server sddm pipewire wireplumber \
+	ttf-jetbrains-mono noto-fonts noto-fonts-emoji arctic-plasma-theme"
+makedepend=""
+source="foot.ini xfce4-desktop.xml xsettings.xml"
+sha256="SKIP SKIP SKIP"
+backup="etc/skel/.config/foot/foot.ini"
+
+package() {
+	install -Dm644 foot.ini "$pkgdir/etc/skel/.config/foot/foot.ini"
+	install -Dm644 foot.ini "$pkgdir/etc/xdg/foot/foot.ini"
+
+	x="$pkgdir/etc/skel/.config/xfce4/xfconf/xfce-perchannel-xml"
+	install -Dm644 xfce4-desktop.xml "$x/xfce4-desktop.xml"
+	install -Dm644 xsettings.xml     "$x/xsettings.xml"
+
+	install -d "$pkgdir/usr/share/arctic/profiles"
+	printf 'arctic-xfce\n' >"$pkgdir/usr/share/arctic/profiles/active"
+}

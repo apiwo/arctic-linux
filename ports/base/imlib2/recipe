@@ -1,0 +1,31 @@
+# imlib2 - Image loading and rendering library
+# Generated from manifest.tsv by gen-ports.py. Edit the manifest, not this file,
+# unless the package needs something the template cannot express - in which case
+# drop a `recipe.local` beside it and it will be preserved.
+name=imlib2
+version=1.12.5
+release=1
+desc="Image loading and rendering library"
+url="https://docs.enlightenment.org/api/imlib2/html/"
+license="Imlib2"
+depend="libx11 libpng libjpeg-turbo freetype"
+makedepend=""
+source="https://downloads.sourceforge.net/enlightenment/imlib2-1.12.5.tar.gz"
+sha256="SKIP"
+
+build() {
+	cd "imlib2-1.12.5"
+	./configure \
+		--prefix=/usr \
+		--sysconfdir=/etc \
+		--localstatedir=/var \
+		--libdir=/usr/lib \
+		--disable-static \
+		--disable-nls
+	make -j"$JOBS"
+}
+
+package() {
+	cd "imlib2-1.12.5"
+	make DESTDIR="$pkgdir" install
+}

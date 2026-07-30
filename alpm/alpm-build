@@ -1,6 +1,8 @@
 #!/bin/sh
 # alpm-build - turn an Arctic port recipe into an .alpmz binary package
 #
+# .alpmz is the Arctic Linux Package Management Zip: a tar.xz archive.
+#
 # A recipe is a POSIX sh fragment. Required: name version release desc.
 # Optional: url license arch depend makedepend source sha256 options
 # Functions: prepare() build() check() package()
@@ -56,7 +58,7 @@ fi
 # --------------------------------------------------------------- load the recipe
 name=""; version=""; release=1; desc=""; url=""; license="unknown"
 arch="${ALPM_ARCH:-x86_64}"; depend=""; makedepend=""; source=""; sha256=""
-options=""; provides=""; conflicts=""; replaces=""; backup=""
+options=""; provides=""; conflicts=""; replaces=""; backup=""; kind=""
 
 # shellcheck disable=SC1090
 . "$recipe"
@@ -181,6 +183,9 @@ isize = $isize
 builddate = $(date '+%s')
 builder = alpm-build $ALPM_VERSION
 EOF
+# kind=profile marks a package that installs a whole set and configures it.
+# alpm warns about those before it touches anything.
+[ -n "$kind" ] && printf 'kind = %s\n' "$kind" >>"$pkgdir/.PKGINFO"
 for d in $depend;    do printf 'depend = %s\n' "$d" >>"$pkgdir/.PKGINFO"; done
 for d in $makedepend;do printf 'makedepend = %s\n' "$d" >>"$pkgdir/.PKGINFO"; done
 for d in $provides;  do printf 'provides = %s\n' "$d" >>"$pkgdir/.PKGINFO"; done

@@ -33,9 +33,9 @@ Written at the end of the first build so nothing here is overstated.
   a full install-to-disk run has not been done in this session; the pieces it
   drives (alpm with `--root`, the package set, fstab and bootloader writing) have
   been tested individually.
-- **Arctic-Live** — the profile, package list and SDDM/Plasma theming exist.
-  Plasma itself is not built. `mkiso live` currently produces a console image
-  with a manifest of what it expects. Building `base` is a many-hour compile.
+- **There is no desktop image, by design.** Arctic ships one ISO that boots to a
+  TTY running zsh. Desktop packages exist as recipes in `base` for anyone who
+  wants to install one afterwards, but no graphical image is built or shipped.
 - **481 of the 502 recipes** have never been run. They are generated from the
   manifest against build-system templates, so the shape is right and the
   metadata is real, but expect the usual per-package friction on first build.

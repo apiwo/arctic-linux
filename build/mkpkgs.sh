@@ -78,6 +78,10 @@ reinstall() {
 # ------------------------------------------------------------------ main repo
 step "packaging glibc"
 if pd=$(reinstall glibc "$W/glibc-build"); then
+	# glibc ships ldd(1) as a #!/bin/bash script, and Arctic has no bash - it
+	# simply cannot run. arctic-base provides a POSIX ldd instead, so drop
+	# glibc's copy rather than leaving a broken tool and a file conflict.
+	rm -f "$pd/usr/bin/ldd"
 	emit "$pd" glibc 2.44 main "The GNU C library" "LGPL-2.1-or-later" \
 		"https://www.gnu.org/software/libc/" "linux-headers"
 fi
@@ -94,7 +98,7 @@ pd=$PKGDIRS/zstd; rm -rf "$pd"; mkdir -p "$pd"
 if ( cd "$W/zstd-1.5.7" && make PREFIX=/usr HAVE_LZ4=0 HAVE_LZMA=0 DESTDIR="$pd" install ) \
 	>"$B/logs/pkg-zstd.log" 2>&1; then
 	emit "$pd" zstd 1.5.7 main "Fast real-time compression" "BSD-3-Clause" \
-		"https://facebook.github.io/zstd/" "glibc"
+		"https://facebook.github.io/zstd/" "glibc zlib"
 else bad zstd; fi
 if pd=$(reinstall libmd "$W/libmd-1.1.0"); then
 	emit "$pd" libmd 1.1.0 main "BSD message digest functions" "BSD-3-Clause" \
@@ -141,11 +145,19 @@ emit "$pd" busybox 1.38.0 main "Init, getty, device manager and network tools" \
 step "packaging toybox"
 pd=$PKGDIRS/toybox; rm -rf "$pd"; mkdir -p "$pd/usr/bin"
 install -Dm755 "$W/toybox-0.8.14/toybox" "$pd/usr/bin/toybox"
-LOADER="$R/usr/lib/ld-linux-x86-64.so.2"
-"$LOADER" --library-path "$R/usr/lib" "$R/usr/bin/toybox" 2>/dev/null | tr ' ' '\n' | \
+# Whatever busybox already claimed, plus the tools glibc itself installs.
+# Overlapping names are a hard conflict at install time, so the two multiplexers
+# must not both link the same applet.
+BB_CLAIMED=$(ls "$PKGDIRS/busybox/usr/bin" 2>/dev/null | tr '\n' ' ')
+GLIBC_CLAIMED="getconf getent ldd locale localedef iconv gencat catchsegv sprof"
+CURSES_CLAIMED="reset clear tput tic toe infocmp captoinfo"
+"$R/usr/bin/toybox" 2>/dev/null | tr ' ' '\n' | \
 while read -r a; do
 	[ -n "$a" ] || continue
-	case "$a" in toybox|init|sh|ash|getty|mdev|login|su|passwd) continue ;; esac
+	case "$a" in toybox) continue ;; esac
+	case " $BB_CLAIMED " in *" $a "*) continue ;; esac
+	case " $GLIBC_CLAIMED " in *" $a "*) continue ;; esac
+	case " $CURSES_CLAIMED " in *" $a "*) continue ;; esac
 	ln -sf toybox "$pd/usr/bin/$a"
 done
 emit "$pd" toybox 0.8.14 main "The classic Unix commands, 0BSD licensed" \
@@ -183,7 +195,7 @@ step "packaging mandoc"
 if pd=$(reinstall mandoc "$W/mandoc-1.14.6"); then
 	ln -sf mandoc "$pd/usr/bin/man" 2>/dev/null || :
 	emit "$pd" mandoc 1.14.6 main "Manual reader, replacing man-db and groff" \
-		"ISC" "https://mandoc.bsd.lv/" "glibc"
+		"ISC" "https://mandoc.bsd.lv/" "glibc zlib"
 fi
 
 step "packaging the one true awk"
@@ -223,9 +235,7 @@ emit "$pd" limine 12.5.2 main "The Arctic bootloader, BIOS and UEFI" \
 # --------------------------------------------------------------- arctic's own
 step "packaging alpm"
 pd=$PKGDIRS/alpm; rm -rf "$pd"
-mkdir -p "$pd/usr/bin" "$pd/usr/lib/alpm" "$pd/etc/alpm/repos.d" \
-	"$pd/var/lib/alpm/local" "$pd/var/lib/alpm/sync" "$pd/var/lib/alpm/hold" \
-	"$pd/var/lib/alpm/snapshots" "$pd/var/cache/alpm/pkg" "$pd/var/cache/alpm/src"
+mkdir -p "$pd/usr/bin" "$pd/usr/lib/alpm" "$pd/etc/alpm/repos.d"
 install -Dm755 "$SRCTREE/alpm/alpm"       "$pd/usr/bin/alpm"
 install -Dm755 "$SRCTREE/alpm/alpm-build" "$pd/usr/bin/alpm-build"
 install -Dm755 "$SRCTREE/alpm/alpm-repo"  "$pd/usr/bin/alpm-repo"
