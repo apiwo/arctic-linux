@@ -324,11 +324,49 @@ cmd_ins() {
 	# Check the requested names before resolving. resolve_targets runs in a
 	# command substitution, so a die() inside it only exits that subshell and
 	# alpm would carry on with an empty list and report success.
+	# Sort the requested names into three groups before doing anything: ones we
+	# have a binary for, ones we only have a recipe for, and ones we have never
+	# heard of. resolve_targets runs in a command substitution, so a die() inside
+	# it only exits that subshell - the check has to happen out here.
+	need_build=""; keep=""
 	for p in "$@"; do
-		idx_lookup "$p" >/dev/null 2>&1 && continue
-		is_installed "$p" && continue
+		if idx_lookup "$p" >/dev/null 2>&1 || is_installed "$p"; then
+			keep="$keep $p"; continue
+		fi
+		if idx_lookup_src "$p" >/dev/null 2>&1; then
+			printf '\n%sWARN: This package has no binary. Proceed to compile Y/n?%s ' \
+				"$A_AMB$C_B" "$C_R"
+			if [ "${ALPM_YES:-0}" = "1" ]; then
+				printf 'y\n'
+				ans=y
+			# Read from the terminal so the prompt still works when stdin is a
+			# pipe. The braces matter: a failed redirect is reported by the
+			# shell itself, so redirecting only read's stderr would not
+			# suppress it on a machine with no controlling terminal.
+			elif { read -r ans </dev/tty; } 2>/dev/null; then
+				:
+			else
+				read -r ans 2>/dev/null || ans=n
+			fi
+			case "$ans" in
+			n|N|no|NO|No) printf '\n'; msg "skipping $p" ;;
+			*)            need_build="$need_build $p" ;;
+			esac
+			continue
+		fi
 		die "package not found: $p (try 'alpm fetch all')"
 	done
+
+	# Anything with only a recipe goes through the source path.
+	if [ -n "$need_build" ]; then
+		# shellcheck disable=SC2086
+		cmd_ins_source $need_build
+	fi
+
+	# Only the packages we actually have binaries for continue from here.
+	# shellcheck disable=SC2086
+	set -- $keep
+	[ $# -gt 0 ] || { [ -n "$need_build" ] || msg "nothing to do"; return 0; }
 
 	targets=$(resolve_targets "$@")
 	[ -n "$targets" ] || die "could not resolve $* - see 'alpm deps <pkg>'"

@@ -92,6 +92,7 @@ _dl_file() {
 
 dl() {
 	url=$1 out=$2
+	mkdir -p "$(dirname "$out")" 2>/dev/null || :
 	case "$url" in
 	file://*) _dl_file "$url" "$out"; return $? ;;
 	esac
@@ -108,6 +109,7 @@ dl() {
 # Silent variant for index files.
 dlq() {
 	url=$1 out=$2
+	mkdir -p "$(dirname "$out")" 2>/dev/null || :
 	case "$url" in
 	file://*) _dl_file "$url" "$out"; return $? ;;
 	esac
@@ -182,6 +184,22 @@ idx_lookup() {
 		# package. Binary resolution must skip those or it will try to download
 		# a .src.alpmz that was never built.
 		line=$(awk -F'\t' -v p="$want" '$1==p && $4!="src"{print; exit}' "$f") || :
+		if [ -n "$line" ]; then
+			printf '%s\t%s\n' "$(basename "$f" .idx)" "$line"
+			return 0
+		fi
+	done
+	return 1
+}
+
+# The mirror of idx_lookup: find a package that exists ONLY as a recipe. Used to
+# distinguish "no such package" from "we have the recipe but nobody built it".
+idx_lookup_src() {
+	local want f line
+	want=$1
+	for f in "$ALPM_DB"/sync/*.idx; do
+		[ -f "$f" ] || continue
+		line=$(awk -F'\t' -v p="$want" '$1==p && $4=="src"{print; exit}' "$f") || :
 		if [ -n "$line" ]; then
 			printf '%s\t%s\n' "$(basename "$f" .idx)" "$line"
 			return 0

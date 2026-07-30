@@ -27,23 +27,40 @@ recipe=$(cd "$(dirname "$recipe")" && printf '%s/%s' "$(pwd)" "$(basename "$reci
 
 : "${ALPM_BUILDROOT:=$ALPM_CACHE/build}"
 OUT="$ALPM_BUILDROOT/out"
-mkdir -p "$OUT"
+# The source cache has to exist before anything is downloaded into it.
+mkdir -p "$OUT" "$ALPM_CACHE/src" "$ALPM_CACHE/pkg"
 
 # ---------------------------------------------------------------- Arctic CFLAGS
 # Arctic is an LLVM distribution: clang/lld everywhere, libc++ over libstdc++,
 # and glibc as the only GNU component in the system.
-export CC="${CC:-clang}"
-export CXX="${CXX:-clang++}"
-export LD="${LD:-ld.lld}"
-export AR="${AR:-llvm-ar}"
-export NM="${NM:-llvm-nm}"
-export RANLIB="${RANLIB:-llvm-ranlib}"
-export STRIP="${STRIP:-llvm-strip}"
-export OBJCOPY="${OBJCOPY:-llvm-objcopy}"
-export OBJDUMP="${OBJDUMP:-llvm-objdump}"
-export CFLAGS="${CFLAGS:--O2 -pipe -fstack-protector-strong -fno-plt -D_FORTIFY_SOURCE=2}"
+# Arctic's toolchain is clang, but a freshly installed system may not have LLVM
+# yet - and refusing to build anything until it does would be a silly bootstrap
+# problem. Prefer clang, fall back to whatever cc is present.
+if command -v clang >/dev/null 2>&1; then
+	export CC="${CC:-clang}" CXX="${CXX:-clang++}"
+else
+	export CC="${CC:-cc}" CXX="${CXX:-c++}"
+fi
+if command -v ld.lld >/dev/null 2>&1; then
+	export LD="${LD:-ld.lld}"
+else
+	export LD="${LD:-ld}"
+fi
+for _t in ar nm ranlib strip objcopy objdump; do
+	_u=$(printf '%s' "$_t" | tr '[:lower:]' '[:upper:]')
+	if command -v "llvm-$_t" >/dev/null 2>&1; then
+		eval "export $_u=\${$_u:-llvm-$_t}"
+	else
+		eval "export $_u=\${$_u:-$_t}"
+	fi
+done
+export CFLAGS="${CFLAGS:--O2 -pipe -fstack-protector-strong -fno-plt}"
 export CXXFLAGS="${CXXFLAGS:-$CFLAGS}"
-export LDFLAGS="${LDFLAGS:--fuse-ld=lld -Wl,-O1,--as-needed,-z,relro,-z,now}"
+if command -v ld.lld >/dev/null 2>&1; then
+	export LDFLAGS="${LDFLAGS:--fuse-ld=lld -Wl,-O1,--as-needed,-z,relro,-z,now}"
+else
+	export LDFLAGS="${LDFLAGS:--Wl,-O1,--as-needed,-z,relro,-z,now}"
+fi
 export MAKEFLAGS="-j${ALPM_JOBS}"
 JOBS=$ALPM_JOBS
 export JOBS
