@@ -15,11 +15,15 @@ sha256="SKIP"
 
 # Built against every installed kernel. alpm re-runs this from the package's
 # post_upgrade hook whenever a kernel changes, which is what dkms is for.
+#
+# gmake, not make: Linux's kbuild is written against GNU make and bmake cannot
+# drive it. /usr/bin/make on Arctic is bmake, so kernel modules ask for gmake
+# explicitly.
 build() {
 	cd "main"
 	for kdir in /usr/lib/modules/*/build; do
 		[ -d "$kdir" ] || continue
-		make -C "$kdir" M="$PWD" modules
+		gmake -C "$kdir" M="$PWD" modules
 	done
 }
 

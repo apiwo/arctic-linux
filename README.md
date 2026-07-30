@@ -31,7 +31,7 @@ toolchain, busybox init, zsh, doas, and its own package manager.
 
 | | |
 |---|---|
-| libc | glibc 2.44 — the only GNU component in the system |
+| libc | glibc 2.44 |
 | userland | toybox 0BSD (235 commands, static) + busybox for init and networking |
 | shell | zsh 5.9.2 |
 | init | busybox init, with shell rc scripts and `arctic-service` |
@@ -39,18 +39,46 @@ toolchain, busybox init, zsh, doas, and its own package manager.
 | privileges | doas — there is no sudo |
 | terminal library | netbsd-curses, not ncurses |
 | make / yacc / awk / man | bmake, byacc, the one true awk, mandoc |
+| GPU | NVIDIA proprietary, AMD and Intel via mesa, all coexisting through libglvnd |
 | bootloader | Limine, BIOS and UEFI |
 | packages | `alpm`, packages are `.alpmz` (tar.xz) |
 | kernel | 7.1.3, from the Gentoo dist-kernel config plus an Arctic delta |
 
-### On "no GNU other than glibc"
+### On GNU components
 
-glibc cannot be compiled by clang — upstream requires GCC — so the build
-machines keep a GCC purely as a stage-0 tool for glibc itself. Nothing it
-produces beyond glibc is packaged, and the shipped compiler is clang. Every
-usual GNU userland component has a non-GNU replacement: coreutils → toybox,
-bash → zsh, make → bmake, bison → byacc, gawk → the one true awk, groff/man-db →
-mandoc, ncurses → netbsd-curses, sudo → doas, readline → libedit.
+The goal is a BSD userland, and that holds: coreutils → toybox, bash → zsh,
+make → bmake, bison → byacc, gawk → the one true awk, groff/man-db → mandoc,
+ncurses → netbsd-curses, sudo → doas, readline → libedit. None of those are GNU.
+
+Four GNU pieces are shipped, each for a reason that cannot be engineered away:
+
+| component | why |
+|---|---|
+| **glibc** | the C library. Also the only libc the NVIDIA driver supports. |
+| **libstdc++** | `libnvidia-api.so.1` links against `libstdc++.so.6`. libc++ is not ABI-compatible and the blob cannot be relinked. |
+| **libgcc_s** | `libnvidia-rtcore.so` (OptiX / RT cores) links against `libgcc_s.so.1`. |
+| **GNU make** | Linux's kbuild is written against GNU make; bmake cannot drive it, so out-of-tree kernel modules need it. Installed as `gmake` — `/usr/bin/make` is still bmake. |
+
+These were not assumed. They were read straight off a real installed NVIDIA
+driver with `readelf -d`, and `gcc-libs` ships **only** those two runtime
+libraries — not the compiler. Arctic still compiles with clang.
+
+glibc additionally cannot be compiled by clang (upstream requires GCC), so the
+build machines keep a GCC as a stage-0 tool. It is not packaged.
+
+### NVIDIA proprietary driver
+
+Supported, and the package set reflects what the driver actually needs:
+
+    nvidia-drivers → glibc gcc-libs libglvnd libx11 libxext libxxf86vm
+                     libdrm wayland mesa libpciaccess
+    built with     → gmake linux-headers clang
+
+`libglvnd` is what lets the NVIDIA GL implementation and mesa coexist, so an
+NVIDIA machine and an AMD/Intel machine can run the same image. Choosing
+`nvidia` in the installer pulls all of this in automatically. If you would
+rather not run a blob, `alt-nonfree` has `nouveau-drivers` as a drop-in
+counterpart, and they declare a conflict so you cannot install both.
 
 ## Images
 
@@ -167,14 +195,27 @@ dependencies, upstream URL) separate from build-system boilerplate.
 
 ## Building it yourself
 
+**Every build runs in a sandbox, and the scripts refuse to start without one.**
+
+Arctic's glibc is configured with `slibdir=/usr/lib` so the target gets a
+merged-`/usr` layout. A recipe that forgets `DESTDIR` would therefore install
+that glibc straight over the *host's* `/usr/lib` and break every binary on the
+machine. That is not hypothetical — it happened once during development. So the
+host filesystem is now mounted read-only for all builds, and a stray install
+fails with `EROFS` instead of taking the machine down.
+
 ```sh
-build-kernel.sh base          # or libre / small
-build-rootfs.sh               # glibc, busybox, toybox, zsh, doas, ...
-mkpkgs.sh                     # .alpmz packages and repository indexes
-iso/mkiso minimal             # or live
+build/arctic-sandbox --check          # prove the sandbox holds, first
+
+build/arctic-sandbox build/build-kernel.sh base     # or libre / small
+build/arctic-sandbox build/build-rootfs.sh
+build/arctic-sandbox build/mkpkgs.sh
+build/arctic-sandbox iso/mkiso minimal              # or live
 ```
 
-Sources are fetched from upstream; nothing is vendored.
+It uses bubblewrap: the whole host is bind-mounted read-only, and only the build
+tree, the source tree and `/tmp` are writable. Sources are fetched from upstream;
+nothing is vendored.
 
 ## Layout
 

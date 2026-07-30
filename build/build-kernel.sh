@@ -4,6 +4,17 @@
 # then applies the Arctic delta: no BTF/debuginfo, no module signing, and the
 # live-ISO filesystems built in-tree instead of as modules.
 set -e
+
+# Refuse to run outside the sandbox. Arctic's glibc installs to /usr/lib by
+# design, so a recipe that forgets DESTDIR would overwrite the host's libc and
+# take the machine down - which is exactly what happened once. Run through
+# arctic-sandbox, where the host filesystem is read-only.
+if [ "${ARCTIC_SANDBOX:-0}" != "1" ]; then
+	echo "$(basename "$0"): refusing to build outside the sandbox." >&2
+	echo "  run it as:  arctic/build/arctic-sandbox $0 $*" >&2
+	echo "  (set ARCTIC_SANDBOX=1 only if you know the host is protected)" >&2
+	exit 1
+fi
 B=/home/apiwo/arctic-build
 V=7.1.3
 FLAVOUR=${1:-base}

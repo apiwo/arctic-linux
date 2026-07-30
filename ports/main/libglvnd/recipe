@@ -1,0 +1,32 @@
+# libglvnd - GL vendor dispatch, so mesa and NVIDIA can both provide GL
+# Generated from manifest.tsv by gen-ports.py. Edit the manifest, not this file,
+# unless the package needs something the template cannot express - in which case
+# drop a `recipe.local` beside it and it will be preserved.
+name=libglvnd
+version=1.7.0
+release=1
+desc="GL vendor dispatch, so mesa and NVIDIA can both provide GL"
+url="https://gitlab.freedesktop.org/glvnd/libglvnd"
+license="MIT"
+depend="glibc"
+makedepend="meson ninja"
+source="https://gitlab.freedesktop.org/glvnd/libglvnd/-/archive/v1.7.0/libglvnd-v1.7.0.tar.gz"
+sha256="SKIP"
+
+build() {
+	cd "libglvnd-v1.7.0"
+	meson setup build \
+		--prefix=/usr \
+		--libdir=/usr/lib \
+		--sysconfdir=/etc \
+		--localstatedir=/var \
+		--buildtype=release \
+		--wrap-mode=nodownload \
+		-Db_lto=true
+	ninja -C build -j"$JOBS"
+}
+
+package() {
+	cd "libglvnd-v1.7.0"
+	DESTDIR="$pkgdir" ninja -C build install
+}

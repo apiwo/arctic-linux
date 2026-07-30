@@ -1,0 +1,31 @@
+# gmake - GNU make as gmake, for kernel modules; /usr/bin/make is still bmake
+# Generated from manifest.tsv by gen-ports.py. Edit the manifest, not this file,
+# unless the package needs something the template cannot express - in which case
+# drop a `recipe.local` beside it and it will be preserved.
+name=gmake
+version=4.4.1
+release=1
+desc="GNU make as gmake, for kernel modules; /usr/bin/make is still bmake"
+url="https://www.gnu.org/software/make/"
+license="GPL-3.0-or-later"
+depend="glibc"
+makedepend=""
+source="https://ftp.gnu.org/gnu/make/make-4.4.1.tar.gz"
+sha256="SKIP"
+
+build() {
+	cd "make-4.4.1"
+	./configure \
+		--prefix=/usr \
+		--sysconfdir=/etc \
+		--localstatedir=/var \
+		--libdir=/usr/lib \
+		--disable-static \
+		--disable-nls
+	make -j"$JOBS"
+}
+
+package() {
+	cd "make-4.4.1"
+	make DESTDIR="$pkgdir" install
+}

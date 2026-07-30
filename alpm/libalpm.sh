@@ -159,7 +159,10 @@ idx_lookup() {
 	want=$1
 	for f in "$ALPM_DB"/sync/*.idx; do
 		[ -f "$f" ] || continue
-		line=$(awk -F'\t' -v p="$want" '$1==p{print; exit}' "$f") || :
+		# arch "src" marks a source-repo entry: a recipe, not an installable
+		# package. Binary resolution must skip those or it will try to download
+		# a .src.alpmz that was never built.
+		line=$(awk -F'\t' -v p="$want" '$1==p && $4!="src"{print; exit}' "$f") || :
 		if [ -n "$line" ]; then
 			printf '%s\t%s\n' "$(basename "$f" .idx)" "$line"
 			return 0

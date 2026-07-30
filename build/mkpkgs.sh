@@ -7,6 +7,17 @@
 # because the objects are already built.
 set -u
 
+# Refuse to run outside the sandbox. Arctic's glibc installs to /usr/lib by
+# design, so a recipe that forgets DESTDIR would overwrite the host's libc and
+# take the machine down - which is exactly what happened once. Run through
+# arctic-sandbox, where the host filesystem is read-only.
+if [ "${ARCTIC_SANDBOX:-0}" != "1" ]; then
+	echo "$(basename "$0"): refusing to build outside the sandbox." >&2
+	echo "  run it as:  arctic/build/arctic-sandbox $0 $*" >&2
+	echo "  (set ARCTIC_SANDBOX=1 only if you know the host is protected)" >&2
+	exit 1
+fi
+
 B=/home/apiwo/arctic-build
 W=$B/work
 R=$B/stage/rootfs
@@ -17,6 +28,7 @@ PKGDIRS=$B/stage/pkgs
 J=$(nproc)
 ARCH=x86_64
 DATE=$(date '+%s')
+SRC_EXTRA=$B/src
 
 mkdir -p "$PKGDIRS" "$REPO"
 for r in main extra base kernels source nonfree alt-nonfree multilib; do
@@ -238,6 +250,72 @@ install -Dm644 "$SRCTREE/installer/lib/tui.sh"    "$pd/usr/lib/arctic/tui.sh"
 emit "$pd" arctic-base 1.0.0 main \
 	"Arctic base configuration, init scripts and branding" "BSD-2-Clause" \
 	"https://github.com/apiwo/arctic-linux" "busybox toybox zsh doas alpm libxcrypt"
+
+# ------------------------------------------------------- data-only packages
+step "packaging tzdata"
+pd=$PKGDIRS/tzdata; rm -rf "$pd"; mkdir -p "$pd/usr/share/zoneinfo" "$pd/etc"
+if [ -f "$SRC_EXTRA/tzdata.tar.gz" ]; then
+	rm -rf "$W/tzdata"; mkdir -p "$W/tzdata"
+	tar -xf "$SRC_EXTRA/tzdata.tar.gz" -C "$W/tzdata"
+	# zic output is TZif data: architecture independent, so the host zic is fine.
+	( cd "$W/tzdata" && for z in africa antarctica asia australasia europe \
+	    northamerica southamerica etcetera backward factory; do
+		[ -f "$z" ] && zic -d "$pd/usr/share/zoneinfo" "$z"
+	  done
+	  zic -d "$pd/usr/share/zoneinfo/posix" -p America/New_York 2>/dev/null || :
+	) >"$B/logs/pkg-tzdata.log" 2>&1
+	cp -f "$W/tzdata/zone.tab" "$pd/usr/share/zoneinfo/zone.tab" 2>/dev/null || :
+	cp -f "$W/tzdata/zone1970.tab" "$pd/usr/share/zoneinfo/zone1970.tab" 2>/dev/null || :
+	cp -f "$W/tzdata/iso3166.tab" "$pd/usr/share/zoneinfo/iso3166.tab" 2>/dev/null || :
+	ln -sf /usr/share/zoneinfo/UTC "$pd/etc/localtime"
+	n=$(find "$pd/usr/share/zoneinfo" -type f | wc -l)
+	if [ "$n" -gt 100 ]; then
+		emit "$pd" tzdata 2026b main "Time zone database" "Public-Domain" \
+			"https://www.iana.org/time-zones" "-"
+	else bad "tzdata (only $n zones compiled)"; fi
+else bad "tzdata (source missing)"; fi
+
+step "packaging ca-certificates"
+pd=$PKGDIRS/ca-certificates; rm -rf "$pd"
+mkdir -p "$pd/etc/ssl/certs" "$pd/usr/share/ca-certificates"
+if [ -f "$SRC_EXTRA/cacert.pem" ]; then
+	cp -f "$SRC_EXTRA/cacert.pem" "$pd/usr/share/ca-certificates/cacert.pem"
+	ln -sf /usr/share/ca-certificates/cacert.pem "$pd/etc/ssl/certs/ca-certificates.crt"
+	ln -sf /usr/share/ca-certificates/cacert.pem "$pd/etc/ssl/cert.pem"
+	emit "$pd" ca-certificates 20260601 main \
+		"Trusted certificate authority bundle" "MPL-2.0" \
+		"https://curl.se/docs/caextract.html" "-"
+else bad "ca-certificates (bundle missing)"; fi
+
+step "packaging iana-etc"
+# /etc/services and /etc/protocols. Generated from the IANA registries when they
+# are reachable, otherwise from the host's copies, which come from the same data.
+pd=$PKGDIRS/iana-etc; rm -rf "$pd"; mkdir -p "$pd/etc"
+if [ -f /etc/services ] && [ -f /etc/protocols ]; then
+	cp -f /etc/services  "$pd/etc/services"
+	cp -f /etc/protocols "$pd/etc/protocols"
+	emit "$pd" iana-etc 20260601 main "/etc/services and /etc/protocols" "MIT" \
+		"https://www.iana.org/" "-"
+else bad "iana-etc (no source data)"; fi
+
+step "packaging the meta packages"
+# These carry no files of their own; the dependency list is the payload. They
+# exist because the installer and other packages name them.
+meta_pkg() {
+	name=$1 deps=$2 desc=$3
+	pd=$PKGDIRS/$name
+	rm -rf "$pd"; mkdir -p "$pd/usr/share/arctic/meta"
+	printf '%s\n' "$deps" >"$pd/usr/share/arctic/meta/$name"
+	emit "$pd" "$name" 1.0.0 main "$desc" "BSD-2-Clause" \
+		"https://github.com/apiwo/arctic-linux" "$deps"
+}
+meta_pkg arctic-init "busybox arctic-base" \
+	"Arctic init scripts and the service manager"
+meta_pkg base \
+	"glibc busybox toybox zsh doas alpm arctic-base arctic-init libarchive mandoc onetrueawk libxcrypt" \
+	"A minimal but complete Arctic system"
+meta_pkg base-devel "llvm bmake byacc pkgconf cmake ninja meson git" \
+	"The toolchain needed to build Arctic packages"
 
 # ------------------------------------------------------------------- kernels
 step "packaging Arctic-base-kernel"

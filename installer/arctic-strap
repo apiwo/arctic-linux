@@ -657,8 +657,14 @@ do_install() {
 	g=$A_GPU
 	[ "$g" = auto ] && g=$(detect_gpu)
 	case "$g" in
-	nvidia) target_alpm ins nvidia-drivers nvidia-utils || : ;;
-	nouveau) target_alpm ins mesa xf86-video-nouveau || : ;;
+	nvidia)
+		# gcc-libs and libglvnd are not optional here: libnvidia-api needs
+		# libstdc++.so.6 and libnvidia-rtcore needs libgcc_s.so.1, and glvnd is
+		# what lets the NVIDIA GL live alongside mesa. gmake goes in too, so the
+		# kernel module can be rebuilt when the kernel changes.
+		target_alpm ins gcc-libs libglvnd gmake || :
+		target_alpm ins nvidia-drivers nvidia-utils || : ;;
+	nouveau) target_alpm ins mesa nouveau-drivers || : ;;
 	amd) target_alpm ins mesa vulkan-radeon libva-mesa-driver || : ;;
 	intel) target_alpm ins mesa vulkan-intel intel-media-driver || : ;;
 	*) target_alpm ins mesa || : ;;

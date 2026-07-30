@@ -9,8 +9,12 @@ release=1
 desc="NVIDIA proprietary graphics driver and kernel module"
 url="https://www.nvidia.com/"
 license="NVIDIA-proprietary"
-depend="glibc"
-makedepend="clang lld linux-headers"
+# Read off the shipped blobs, not guessed: libnvidia-api.so.1 links libstdc++.so.6
+# and libnvidia-rtcore.so links libgcc_s.so.1, both of which come from GCC. That
+# is why Arctic ships gcc-libs despite otherwise avoiding GNU components - a
+# prebuilt blob cannot be relinked against libc++.
+depend="glibc gcc-libs libglvnd libx11 libxext libxxf86vm libdrm wayland mesa libpciaccess"
+makedepend="gmake linux-headers clang"
 provides="nvidia"
 conflicts="nouveau-drivers"
 source="NVIDIA-Linux-x86_64-$version.run::https://us.download.nvidia.com/XFree86/Linux-x86_64/$version/NVIDIA-Linux-x86_64-$version.run"
@@ -25,9 +29,11 @@ build() {
 	cd "NVIDIA-Linux-x86_64-$version/kernel"
 	# Build against every installed kernel, so a later kernel upgrade still has
 	# a module. alpm's post_upgrade hook rebuilds this when the kernel changes.
+	# gmake, not make: Linux kbuild is written against GNU make, and /usr/bin/make
+	# on Arctic is bmake.
 	for kdir in /usr/lib/modules/*/build; do
 		[ -d "$kdir" ] || continue
-		make -j"$JOBS" SYSSRC="$kdir" modules
+		gmake -j"$JOBS" SYSSRC="$kdir" modules
 	done
 }
 
