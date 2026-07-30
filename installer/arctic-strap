@@ -1155,6 +1155,13 @@ boot)
 	shift
 	cf=${1:?usage: arctic-strap -c <file> <target>}
 	shift
+	# The dot builtin searches PATH when given a bare filename, so a relative
+	# path like "answers.conf" is not found. Make it absolute first.
+	case "$cf" in
+	/*) ;;
+	*) cf="$(pwd)/$cf" ;;
+	esac
+	[ -f "$cf" ] || bail "no such answer file: $cf"
 	# shellcheck disable=SC1090
 	. "$cf"
 	TARGET=${1:-${TARGET:-}}
