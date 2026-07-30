@@ -1,0 +1,12 @@
+linux-7.1.3.tar.xz https://cdn.kernel.org/pub/linux/kernel/v7.x/linux-7.1.3.tar.xz
+glibc-2.44.tar.xz https://ftp.gnu.org/gnu/glibc/glibc-2.44.tar.xz
+busybox-1.38.0.tar.bz2 https://busybox.net/downloads/busybox-1.38.0.tar.bz2
+toybox-0.8.14.tar.gz https://landley.net/toybox/downloads/toybox-0.8.14.tar.gz
+zsh-5.9.2.tar.xz https://www.zsh.org/pub/zsh-5.9.2.tar.xz
+libarchive-3.8.9.tar.gz https://github.com/libarchive/libarchive/archive/refs/tags/v3.8.9.tar.gz
+opendoas-6.8.2.tar.gz https://github.com/Duncaen/OpenDoas/archive/refs/tags/v6.8.2.tar.gz
+mandoc-1.14.6.tar.gz https://mandoc.bsd.lv/snapshots/mandoc-1.14.6.tar.gz
+onetrueawk-20260426.tar.gz https://github.com/onetrueawk/awk/archive/refs/tags/20260426.tar.gz
+limine-12.5.2.tar.gz https://github.com/limine-bootloader/limine/releases/download/v12.5.2/limine-12.5.2.tar.gz
+bmake-20260714.tar.gz http://www.crufty.net/ftp/pub/sjg/bmake-20260714.tar.gz
+byacc.tar.gz https://invisible-island.net/datafiles/release/byacc.tar.gz

@@ -1,0 +1,328 @@
+#!/bin/sh
+# Arctic Linux - package the components built by build-rootfs.sh into .alpmz
+# binaries and lay out the repositories.
+#
+# Everything here was genuinely compiled from source by build-rootfs.sh. The
+# install steps are re-run into a per-package DESTDIR, which costs nothing
+# because the objects are already built.
+set -u
+
+B=/home/apiwo/arctic-build
+W=$B/work
+R=$B/stage/rootfs
+DEPS=$B/stage/deps
+SRCTREE=/home/apiwo/arctic
+REPO=$B/repo
+PKGDIRS=$B/stage/pkgs
+J=$(nproc)
+ARCH=x86_64
+DATE=$(date '+%s')
+
+mkdir -p "$PKGDIRS" "$REPO"
+for r in main extra base kernels source nonfree alt-nonfree multilib; do
+	mkdir -p "$REPO/$r/$ARCH"
+done
+
+step() { printf '\n\033[1;36m:: %s\033[0m\n' "$*"; }
+ok()   { printf '   \033[32mok\033[0m %s\n' "$*"; }
+bad()  { printf '   \033[31mfail\033[0m %s\n' "$*"; }
+
+# Write a .PKGINFO and roll the tarball. $1=pkgdir $2=name $3=ver $4=repo
+# $5=desc $6=license $7=url $8=deps
+emit() {
+	pd=$1 name=$2 ver=$3 repo=$4 desc=$5 lic=$6 url=$7 deps=$8
+	[ -d "$pd" ] || { bad "$name: nothing staged"; return 1; }
+	isize=$(du -sk "$pd" 2>/dev/null | cut -f1); isize=$(( ${isize:-0} * 1024 ))
+
+	{
+		printf '# Arctic Linux package, built %s\n' "$(date '+%Y-%m-%d %H:%M:%S')"
+		printf 'format = 2\nname = %s\nversion = %s\nrelease = 1\narch = %s\n' \
+			"$name" "$ver" "$ARCH"
+		printf 'desc = %s\nurl = %s\nlicense = %s\n' "$desc" "$url" "$lic"
+		printf 'isize = %s\nbuilddate = %s\nbuilder = mkpkgs.sh\nrepo = %s\n' \
+			"$isize" "$DATE" "$repo"
+		for d in $deps; do printf 'depend = %s\n' "$d"; done
+	} >"$pd/.PKGINFO"
+
+	( cd "$pd" && find . -type f -o -type l ) | sed 's|^\.||' \
+		| grep -v '^/\.\(PKGINFO\|FILES\|INSTALL\)$' | sort >"$pd/.FILES"
+
+	out="$REPO/$repo/$ARCH/$name-$ver-1.$ARCH.alpmz"
+	( cd "$pd" && tar -cf - . | xz -T0 -6 >"$out" ) || { bad "$name: tar failed"; return 1; }
+	ok "$(basename "$out") ($(du -h "$out" | cut -f1), $(wc -l <"$pd/.FILES") files)"
+}
+
+# Re-run an autotools/cmake install into a fresh DESTDIR. $1=name $2=builddir
+reinstall() {
+	name=$1 bdir=$2
+	pd=$PKGDIRS/$name
+	rm -rf "$pd"; mkdir -p "$pd"
+	[ -d "$bdir" ] || { bad "$name: no build dir $bdir"; return 1; }
+	( cd "$bdir" && make DESTDIR="$pd" install ) >"$B/logs/pkg-$name.log" 2>&1 \
+		|| { bad "$name: install failed (see logs/pkg-$name.log)"; return 1; }
+	printf '%s' "$pd"
+}
+
+# ------------------------------------------------------------------ main repo
+step "packaging glibc"
+if pd=$(reinstall glibc "$W/glibc-build"); then
+	emit "$pd" glibc 2.44 main "The GNU C library" "LGPL-2.1-or-later" \
+		"https://www.gnu.org/software/libc/" "linux-headers"
+fi
+
+step "packaging the compression libraries"
+if pd=$(reinstall zlib "$W/zlib-1.3.1"); then
+	emit "$pd" zlib 1.3.1 main "Compression library" "Zlib" "https://zlib.net/" "glibc"
+fi
+if pd=$(reinstall xz "$W/xz-5.8.3"); then
+	emit "$pd" xz 5.8.3 main "liblzma and the xz tools" "0BSD" \
+		"https://tukaani.org/xz/" "glibc"
+fi
+pd=$PKGDIRS/zstd; rm -rf "$pd"; mkdir -p "$pd"
+if ( cd "$W/zstd-1.5.7" && make PREFIX=/usr HAVE_LZ4=0 HAVE_LZMA=0 DESTDIR="$pd" install ) \
+	>"$B/logs/pkg-zstd.log" 2>&1; then
+	emit "$pd" zstd 1.5.7 main "Fast real-time compression" "BSD-3-Clause" \
+		"https://facebook.github.io/zstd/" "glibc"
+else bad zstd; fi
+if pd=$(reinstall libmd "$W/libmd-1.1.0"); then
+	emit "$pd" libmd 1.1.0 main "BSD message digest functions" "BSD-3-Clause" \
+		"https://www.hadrons.org/software/libmd/" "glibc"
+fi
+if pd=$(reinstall libxcrypt "$W/libxcrypt-4.5.2"); then
+	emit "$pd" libxcrypt 4.5.2 main "crypt(), which glibc no longer provides" \
+		"LGPL-2.1-or-later" "https://github.com/besser82/libxcrypt" "glibc"
+fi
+
+step "packaging netbsd-curses"
+pd=$PKGDIRS/netbsd-curses; rm -rf "$pd"; mkdir -p "$pd"
+if ( cd "$W/netbsd-curses-0.3.2" && \
+     make PREFIX=/usr DESTDIR="$pd" install-dynamic ) \
+     >"$B/logs/pkg-curses.log" 2>&1; then
+	# The ncurses compatibility names, same as the rootfs gets.
+	ln -sf libcurses.so   "$pd/usr/lib/libncurses.so"
+	ln -sf libcurses.so   "$pd/usr/lib/libncursesw.so"
+	ln -sf libterminfo.so "$pd/usr/lib/libtinfo.so"
+	ln -sf libterminfo.so "$pd/usr/lib/libtermcap.so"
+	emit "$pd" netbsd-curses 0.3.2 main \
+		"NetBSD curses, a BSD-licensed replacement for ncurses" "BSD-3-Clause" \
+		"https://github.com/sabotage-linux/netbsd-curses" "glibc"
+else bad netbsd-curses; fi
+
+step "packaging busybox"
+pd=$PKGDIRS/busybox; rm -rf "$pd"; mkdir -p "$pd/usr/bin" "$pd/usr/lib/arctic" "$pd/usr/share/busybox"
+install -Dm755 "$W/busybox-1.38.0/busybox" "$pd/usr/bin/busybox"
+[ -f "$B/stage/busybox.static" ] && \
+	install -Dm755 "$B/stage/busybox.static" "$pd/usr/lib/arctic/busybox.static"
+install -Dm644 "$W/busybox-1.38.0/.config" "$pd/usr/share/busybox/config"
+# Only the applets Arctic wants from busybox; toybox owns the rest.
+for a in init getty mdev sh ash login su passwd chpasswd adduser addgroup \
+	deluser delgroup mount umount swapon swapoff mkswap fsck blkid findfs \
+	mountpoint losetup switch_root pivot_root udhcpc ip ifconfig route ping \
+	wget modprobe insmod rmmod lsmod depmod sysctl hwclock killall5 \
+	start-stop-daemon syslogd klogd crond reboot halt poweroff setfont \
+	loadkmap vi less; do
+	ln -sf busybox "$pd/usr/bin/$a"
+done
+emit "$pd" busybox 1.38.0 main "Init, getty, device manager and network tools" \
+	"GPL-2.0-only" "https://busybox.net/" "glibc"
+
+step "packaging toybox"
+pd=$PKGDIRS/toybox; rm -rf "$pd"; mkdir -p "$pd/usr/bin"
+install -Dm755 "$W/toybox-0.8.14/toybox" "$pd/usr/bin/toybox"
+LOADER="$R/usr/lib/ld-linux-x86-64.so.2"
+"$LOADER" --library-path "$R/usr/lib" "$R/usr/bin/toybox" 2>/dev/null | tr ' ' '\n' | \
+while read -r a; do
+	[ -n "$a" ] || continue
+	case "$a" in toybox|init|sh|ash|getty|mdev|login|su|passwd) continue ;; esac
+	ln -sf toybox "$pd/usr/bin/$a"
+done
+emit "$pd" toybox 0.8.14 main "The classic Unix commands, 0BSD licensed" \
+	"0BSD" "https://landley.net/toybox/" "glibc"
+
+step "packaging zsh"
+if pd=$(reinstall zsh "$W/zsh-5.9.2"); then
+	mkdir -p "$pd/etc"
+	printf '/bin/zsh\n/usr/bin/zsh\n' >"$pd/etc/shells"
+	emit "$pd" zsh 5.9.2 main "The Z shell, Arctic's login shell" \
+		"MIT-Modern-Variant" "https://www.zsh.org/" "glibc netbsd-curses"
+fi
+
+step "packaging doas"
+DOASDIR=$(ls -d "$W"/OpenDoas-* 2>/dev/null | head -1)
+if [ -n "$DOASDIR" ] && pd=$(reinstall doas "$DOASDIR"); then
+	chmod 4755 "$pd/usr/bin/doas" 2>/dev/null || :
+	mkdir -p "$pd/etc"
+	printf '# Arctic Linux - doas rules\npermit persist :wheel\npermit nopass :wheel cmd alpm args fetch all\n' \
+		>"$pd/etc/doas.conf"
+	chmod 400 "$pd/etc/doas.conf"
+	emit "$pd" doas 6.8.2 main "Execute commands as another user" "ISC" \
+		"https://github.com/Duncaen/OpenDoas" "glibc libxcrypt"
+fi
+
+step "packaging libarchive"
+pd=$PKGDIRS/libarchive; rm -rf "$pd"; mkdir -p "$pd"
+if ( cd "$W/libarchive-build" && make DESTDIR="$pd" install ) \
+	>"$B/logs/pkg-libarchive.log" 2>&1; then
+	emit "$pd" libarchive 3.8.9 main "Archive library, provides bsdtar" \
+		"BSD-2-Clause" "https://libarchive.org/" "glibc zlib xz zstd libmd"
+else bad libarchive; fi
+
+step "packaging mandoc"
+if pd=$(reinstall mandoc "$W/mandoc-1.14.6"); then
+	ln -sf mandoc "$pd/usr/bin/man" 2>/dev/null || :
+	emit "$pd" mandoc 1.14.6 main "Manual reader, replacing man-db and groff" \
+		"ISC" "https://mandoc.bsd.lv/" "glibc"
+fi
+
+step "packaging the one true awk"
+pd=$PKGDIRS/onetrueawk; rm -rf "$pd"; mkdir -p "$pd/usr/bin" "$pd/usr/share/man/man1"
+AWKDIR=$(ls -d "$W"/awk-* 2>/dev/null | head -1)
+if [ -n "$AWKDIR" ]; then
+	cp -f "$AWKDIR/a.out" "$pd/usr/bin/awk" 2>/dev/null || \
+		cp -f "$AWKDIR/awk" "$pd/usr/bin/awk"
+	chmod 755 "$pd/usr/bin/awk"
+	ln -sf awk "$pd/usr/bin/nawk"
+	[ -f "$AWKDIR/awk.1" ] && cp -f "$AWKDIR/awk.1" "$pd/usr/share/man/man1/awk.1"
+	emit "$pd" onetrueawk 20260426 main "The one true awk" "MIT" \
+		"https://github.com/onetrueawk/awk" "glibc"
+fi
+
+step "packaging byacc and bmake"
+BYDIR=$(ls -d "$W"/byacc-* 2>/dev/null | head -1)
+if [ -n "$BYDIR" ] && pd=$(reinstall byacc "$BYDIR"); then
+	emit "$pd" byacc 20260426 main "Berkeley yacc, replacing bison" \
+		"Public-Domain" "https://invisible-island.net/byacc/" "glibc"
+fi
+pd=$PKGDIRS/bmake; rm -rf "$pd"; mkdir -p "$pd"
+if ( cd "$W/bmake-obj" && "$W/bmake/boot-strap" --prefix=/usr \
+     --install-destdir="$pd" op=install ) >"$B/logs/pkg-bmake.log" 2>&1; then
+	[ -f "$pd/usr/bin/bmake" ] && ln -sf bmake "$pd/usr/bin/make"
+	emit "$pd" bmake 20260714 main "The BSD make, replacing GNU make" \
+		"BSD-3-Clause" "https://www.crufty.net/help/sjg/bmake.html" "glibc"
+else bad bmake; fi
+
+step "packaging limine"
+pd=$PKGDIRS/limine; rm -rf "$pd"; mkdir -p "$pd/usr/bin" "$pd/usr/share/limine"
+cp -f "$R/usr/bin/limine" "$pd/usr/bin/limine" 2>/dev/null || :
+cp -f "$R"/usr/share/limine/* "$pd/usr/share/limine/" 2>/dev/null || :
+emit "$pd" limine 12.5.2 main "The Arctic bootloader, BIOS and UEFI" \
+	"BSD-2-Clause" "https://limine-bootloader.org/" "glibc"
+
+# --------------------------------------------------------------- arctic's own
+step "packaging alpm"
+pd=$PKGDIRS/alpm; rm -rf "$pd"
+mkdir -p "$pd/usr/bin" "$pd/usr/lib/alpm" "$pd/etc/alpm/repos.d" \
+	"$pd/var/lib/alpm/local" "$pd/var/lib/alpm/sync" "$pd/var/lib/alpm/hold" \
+	"$pd/var/lib/alpm/snapshots" "$pd/var/cache/alpm/pkg" "$pd/var/cache/alpm/src"
+install -Dm755 "$SRCTREE/alpm/alpm"       "$pd/usr/bin/alpm"
+install -Dm755 "$SRCTREE/alpm/alpm-build" "$pd/usr/bin/alpm-build"
+install -Dm755 "$SRCTREE/alpm/alpm-repo"  "$pd/usr/bin/alpm-repo"
+install -Dm644 "$SRCTREE/alpm/libalpm.sh" "$pd/usr/lib/alpm/libalpm.sh"
+install -Dm644 "$SRCTREE/skel/etc/alpm/alpm.conf" "$pd/etc/alpm/alpm.conf"
+cp -f "$SRCTREE/skel/etc/alpm/repos.d/"*.repo "$pd/etc/alpm/repos.d/"
+emit "$pd" alpm 1.0.0 main "Arctic Linux Package Manager" "BSD-2-Clause" \
+	"https://github.com/apiwo/arctic-linux" "busybox"
+
+step "packaging arctic-base"
+pd=$PKGDIRS/arctic-base; rm -rf "$pd"; mkdir -p "$pd/usr/share/arctic" "$pd/var/lib/arctic"
+cp -a "$SRCTREE/skel/etc" "$pd/etc"
+cp -a "$SRCTREE/skel/usr/bin" "$pd/usr/bin"
+rm -rf "$pd/etc/alpm"   # alpm owns those files
+chmod +x "$pd/etc/rc.boot" "$pd/etc/rc.shutdown" "$pd/etc/rc.d"/* "$pd/usr/bin"/*
+for d in ascii limine plasma wallpaper icons sddm misc; do
+	[ -d "$SRCTREE/branding/$d" ] && cp -a "$SRCTREE/branding/$d" "$pd/usr/share/arctic/"
+done
+install -Dm755 "$SRCTREE/installer/arctic-strap"  "$pd/usr/bin/arctic-strap"
+install -Dm755 "$SRCTREE/installer/arctic-chroot" "$pd/usr/bin/arctic-chroot"
+install -Dm644 "$SRCTREE/installer/lib/tui.sh"    "$pd/usr/lib/arctic/tui.sh"
+emit "$pd" arctic-base 1.0.0 main \
+	"Arctic base configuration, init scripts and branding" "BSD-2-Clause" \
+	"https://github.com/apiwo/arctic-linux" "busybox toybox zsh doas alpm libxcrypt"
+
+# ------------------------------------------------------------------- kernels
+step "packaging Arctic-base-kernel"
+pd=$PKGDIRS/Arctic-base-kernel; rm -rf "$pd"; mkdir -p "$pd/boot" "$pd/usr/lib/modules"
+cp -a "$B/stage/kernel-base/boot/." "$pd/boot/"
+cp -a "$B/stage/kernel-base/lib/modules/." "$pd/usr/lib/modules/"
+KREL=$(ls "$B/stage/kernel-base/lib/modules" | head -1)
+rm -f "$pd/usr/lib/modules/$KREL/build" "$pd/usr/lib/modules/$KREL/source"
+emit "$pd" Arctic-base-kernel 7.1.3 kernels \
+	"Arctic Linux kernel, broad hardware support" "GPL-2.0-only" \
+	"https://kernel.org/" "glibc"
+
+step "packaging linux-headers"
+pd=$PKGDIRS/linux-headers; rm -rf "$pd"; mkdir -p "$pd/usr"
+if ( cd "$W/linux-7.1.3" && make headers_install INSTALL_HDR_PATH="$pd/usr" ) \
+	>"$B/logs/pkg-headers.log" 2>&1; then
+	emit "$pd" linux-headers 7.1.3 kernels "Kernel headers for userspace" \
+		"GPL-2.0-only WITH Linux-syscall-note" "https://kernel.org/" "-"
+else bad linux-headers; fi
+
+# -------------------------------------------------------------- source repo
+step "laying out the source repository"
+SR=$REPO/source
+mkdir -p "$SR/recipes"
+n=0
+for r in main extra base kernels nonfree alt-nonfree multilib; do
+	for d in "$SRCTREE/ports/$r"/*/; do
+		[ -f "$d/recipe" ] || continue
+		p=$(basename "$d")
+		mkdir -p "$SR/recipes/$p"
+		cp -f "$d/recipe" "$SR/recipes/$p/recipe"
+		[ -f "$d/install" ] && cp -f "$d/install" "$SR/recipes/$p/install"
+		# sources.list is what 'alpm get -s' reads to fetch upstream tarballs.
+		awk -F'"' '/^source=/{print $2}' "$d/recipe" | tr ' ' '\n' | \
+			while read -r u; do
+				[ -n "$u" ] || continue
+				case "$u" in
+				*::*) printf '%s %s\n' "${u%%::*}" "${u#*::}" ;;
+				*)    printf '%s %s\n' "$(basename "$u")" "$u" ;;
+				esac
+			done >"$SR/recipes/$p/sources.list"
+		n=$((n+1))
+	done
+done
+ok "$n recipes published to the source repo"
+
+# The source repo index lists every buildable package.
+{
+	printf '# Arctic Linux source repository index\n'
+	printf '# format\t2\n# generated\t%s\n' "$(date '+%Y-%m-%d %H:%M:%S')"
+	printf '# fields\tname version release arch dlsize isize sha256 deps desc\n'
+	grep -v '^#' "$SRCTREE/ports/manifest.tsv" | while IFS='	' read -r repo name ver bs lic deps mdeps url src desc; do
+		[ -n "$name" ] || continue
+		d=$(printf '%s' "$deps" | tr ',' ' ' | sed 's/  */ /g; s/^ //; s/ $//')
+		[ -n "$d" ] && [ "$d" != "-" ] || d="-"
+		printf '%s\t%s\t1\tsrc\t0\t0\t-\t%s\t%s\n' "$name" "$ver" "$d" "$desc"
+	done
+} >"$SR/$ARCH/INDEX"
+ok "source INDEX: $(grep -vc '^#' "$SR/$ARCH/INDEX") packages"
+
+# ------------------------------------------------------- index the binary repos
+step "generating repository indexes"
+export ALPM_ROOT=/ ALPM_COLOR=never
+for r in main extra base kernels nonfree alt-nonfree multilib; do
+	c=$(ls -1 "$REPO/$r/$ARCH"/*.alpmz 2>/dev/null | wc -l | tr -d ' ')
+	if [ "$c" = "0" ]; then
+		# An empty repo still needs a valid index so 'alpm fetch' succeeds.
+		{
+			printf '# Arctic Linux %s repository index\n' "$r"
+			printf '# format\t2\n# generated\t%s\n' "$(date '+%Y-%m-%d %H:%M:%S')"
+			printf '# fields\tname version release arch dlsize isize sha256 deps desc\n'
+		} >"$REPO/$r/$ARCH/INDEX"
+		printf '   %-14s (no binaries yet, empty index written)\n' "$r"
+		continue
+	fi
+	sh "$SRCTREE/alpm/alpm-repo" gen "$REPO/$r" "$ARCH" >/dev/null 2>&1 \
+		&& printf '   %-14s %s packages indexed\n' "$r" "$c" \
+		|| bad "indexing $r"
+done
+
+printf '\n\033[1;36m=== REPOSITORIES ===\033[0m\n'
+for r in main extra base kernels source nonfree alt-nonfree multilib; do
+	c=$(grep -vc '^#' "$REPO/$r/$ARCH/INDEX" 2>/dev/null || echo 0)
+	s=$(du -sh "$REPO/$r" 2>/dev/null | cut -f1)
+	printf '%-14s %5s packages  %s\n' "$r" "$c" "$s"
+done
+printf '\ntotal: %s\n' "$(du -sh "$REPO" | cut -f1)"
+printf '=== PACKAGING DONE ===\n'
