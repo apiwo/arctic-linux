@@ -15,13 +15,15 @@ sha256="SKIP"
 
 build() {
 	cd "nmap-7.99"
-	./configure \
-		--prefix=/usr \
-		--sysconfdir=/etc \
-		--localstatedir=/var \
-		--libdir=/usr/lib \
-		--disable-static \
-		--disable-nls
+	# Not every configure script accepts the same options - sqlite rejects
+	# --disable-nls outright, for instance - so only pass the ones this one
+	# actually advertises. Guessing wrong fails the whole build.
+	_opts="--prefix=/usr --sysconfdir=/etc --localstatedir=/var --libdir=/usr/lib"
+	_help=$(./configure --help 2>/dev/null)
+	case "$_help" in *--disable-static*)  _opts="$_opts --disable-static" ;; esac
+	case "$_help" in *--disable-nls*)     _opts="$_opts --disable-nls" ;; esac
+	# shellcheck disable=SC2086
+	./configure $_opts
 	make -j"$JOBS"
 }
 

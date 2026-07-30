@@ -1,24 +1,39 @@
-# bzip2 - Block-sorting compressor
-# Generated from manifest.tsv by gen-ports.py. Edit the manifest, not this file,
-# unless the package needs something the template cannot express - in which case
-# drop a `recipe.local` beside it and it will be preserved.
+# bzip2 - block-sorting compressor.
+#
+# Hand written, not generated: bzip2's Makefile has no DESTDIR support at all -
+# PREFIX *is* the destination - so the generated "make" template installed into
+# the build host instead of the package directory and failed. It also does not
+# build a shared library by default, which everything linking -lbz2 expects.
 name=bzip2
 version=1.0.8
 release=1
-desc="Block-sorting compressor"
+desc="Block-sorting file compressor"
 url="https://sourceware.org/bzip2/"
 license="bzip2-1.0.6"
 depend="glibc"
 makedepend=""
-source="https://sourceware.org/pub/bzip2/bzip2-1.0.8.tar.gz"
+source="https://sourceware.org/pub/bzip2/bzip2-$version.tar.gz"
 sha256="SKIP"
 
 build() {
-	cd "bzip2-1.0.8"
-	make -j"$JOBS" PREFIX=/usr
+	cd "bzip2-$version"
+	# The shared library is a separate makefile target and does not pick up
+	# CFLAGS from the environment, so pass them in explicitly.
+	make -f Makefile-libbz2_so -j"$JOBS" CFLAGS="$CFLAGS -fPIC -D_FILE_OFFSET_BITS=64"
+	make clean
+	make -j"$JOBS" CFLAGS="$CFLAGS -D_FILE_OFFSET_BITS=64"
 }
 
 package() {
-	cd "bzip2-1.0.8"
-	make PREFIX=/usr DESTDIR="$pkgdir" install
+	cd "bzip2-$version"
+	# PREFIX is the install root here, so point it at the package directory.
+	make PREFIX="$pkgdir/usr" install
+
+	# Ship the shared library built above, plus the sonames anything linking
+	# -lbz2 will look for.
+	install -Dm755 "libbz2.so.$version" "$pkgdir/usr/lib/libbz2.so.$version"
+	ln -sf "libbz2.so.$version" "$pkgdir/usr/lib/libbz2.so.1.0"
+	ln -sf "libbz2.so.$version" "$pkgdir/usr/lib/libbz2.so.1"
+	ln -sf "libbz2.so.$version" "$pkgdir/usr/lib/libbz2.so"
+	rm -f "$pkgdir/usr/lib/libbz2.a"
 }

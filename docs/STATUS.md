@@ -85,6 +85,32 @@ The resolver refuses to accept a fix that drops a major version - a truncated
 listing had it downgrade chromium to 101 and blender to 2.82 before that guard
 existed. Package versions in `base` are best-effort until each one is built.
 
+## Binary packages
+
+**69 packages are built as binaries**: 51 in `main`, 11 in `extra`, 3 in
+`kernels`, 4 in `profile`. 43 of them pass full verification - installed into a
+clean root, every claimed file present, checksums confirmed, every ELF resolved,
+removed cleanly again. The other 4 fail only because they declare a dependency
+that is still source-only (`iproute2` wants `libcap`, `iwd` wants `dbus`,
+`pcre2` wants `bzip2`), which is the correct thing for them to do.
+
+Everything else in the 520-package manifest stays **source-only on purpose**.
+Asking for one now gives:
+
+    WARN: This package has no binary. Proceed to compile Y/n?
+
+Enter accepts, `n` skips it and carries on with the rest, and a genuine typo
+still fails outright. Building the whole manifest is not a matter of patience -
+Chromium, Firefox, Qt6, KDE and LLVM are days of compute between them.
+
+Still source-only after the batch run, with the reason:
+
+    bzip2         Makefile has no DESTDIR (hand-written recipe added, untested)
+    libcap        builds Go helpers that fail without a Go toolchain
+    curl/openssl  need a TLS backend selected explicitly
+    tmux          does not find libevent in the staging prefix
+    lua, json-c, wireless-regdb, nftables, vim
+
 ## Fixes from the first real install attempt
 
 Someone actually booted it and tried to install. Everything below came out of
