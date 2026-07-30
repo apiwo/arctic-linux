@@ -271,15 +271,18 @@ ARCTIC
 else
 	arcticfetch 2>/dev/null || true
 	printf '  %sWelcome to the Arctic Linux installer.%s\n\n' "$SNOW$B" "$R"
-	printf '  %s1.%s Get online. Wired is automatic; for wireless:\n' "$TEAL" "$R"
-	printf '       %siwctl station wlan0 connect YOUR-NETWORK%s\n\n' "$SNOW" "$R"
-	printf '  %s2.%s Partition and mount the target, for example:\n' "$TEAL" "$R"
-	printf '       %smount /dev/nvme0n1p1 /mnt%s\n\n' "$SNOW" "$R"
-	printf '  %s3.%s Install:\n' "$TEAL" "$R"
+	printf '  %s1.%s Get online (optional - the ISO can install without a network):\n' "$TEAL" "$R"
+	printf '       %siwctl station wlan0 connect YOUR-NETWORK%s   (wireless)\n' "$SNOW" "$R"
+	printf '       %sudhcpc -i eth0%s                              (wired)\n\n' "$SNOW" "$R"
+	printf '  %s2.%s Install. arctic-strap can partition and format the disk for\n' "$TEAL" "$R"
+	printf '       you - step 1 of its menu - so you do not have to mount anything\n'
+	printf '       first:\n'
 	printf '       %sarctic-strap /mnt%s\n\n' "$SNOW" "$R"
-	printf '  %s4.%s Then the bootloader:\n' "$TEAL" "$R"
-	printf '       %smount /dev/nvme0n1p2 /mnt/boot%s\n' "$SNOW" "$R"
+	printf '  %s3.%s Then the bootloader:\n' "$TEAL" "$R"
 	printf '       %sarctic-strap boot /mnt/boot%s\n\n' "$SNOW" "$R"
+	printf '  %sPrefer to do the disk yourself?  cfdisk  mkfs.ext4  mkfs.vfat  lsblk%s\n' \
+		"$GREY" "$R"
+	printf '  %sare all here.%s\n\n' "$GREY" "$R"
 	printf '  %sType %sarctic-strap /mnt%s%s to begin, or %sarctic-install%s for this reminder.%s\n\n' \
 		"$GREY" "$SNOW$B" "$R" "$GREY" "$SNOW" "$GREY" "$R"
 fi

@@ -58,6 +58,9 @@ A_TRIM="auto"
 A_EXTRA=""
 A_MIRROR=""
 A_FSTAB="yes"
+A_DISK_READY=""
+A_ESP=""
+A_ROOTDEV=""
 
 bail() { tui_done 2>/dev/null; printf '\033[38;5;203merror:\033[0m %s\n' "$*" >&2; exit 1; }
 logit() { printf '[%s] %s\n' "$(date '+%H:%M:%S')" "$*" >>"$LOGF"; }
@@ -231,6 +234,124 @@ screen_wifi() {
 	fi
 	tui_msgbox "Wireless" "Could not join $ssid. Check the passphrase."
 	return 1
+}
+
+
+# ------------------------------------------------------------------ disk setup
+
+list_disks() {
+	for d in /sys/block/*; do
+		n=$(basename "$d")
+		case "$n" in loop*|ram*|sr*|dm-*|md*|zram*) continue ;; esac
+		[ -r "$d/size" ] || continue
+		sz=$(cat "$d/size" 2>/dev/null)
+		[ "${sz:-0}" -gt 0 ] || continue
+		bytes=$((sz * 512))
+		model=$(cat "$d/device/model" 2>/dev/null | sed 's/[[:space:]]*$//')
+		printf '%s|%s|%s\n' "$n" "$(human $bytes)" "${model:-disk}"
+	done
+}
+
+# Partition names differ between /dev/sda1 and /dev/nvme0n1p1.
+part_name() {
+	case "$1" in
+	*[0-9]) printf '%sp%s' "$1" "$2" ;;
+	*)      printf '%s%s' "$1" "$2" ;;
+	esac
+}
+
+screen_disk() {
+	while :; do
+		items=""
+		while IFS='|' read -r n sz model; do
+			[ -n "$n" ] || continue
+			items="$items ${n}|/dev/${n}|$sz  $model"
+		done <<-EOF
+		$(list_disks)
+		EOF
+		items="$items manual|Do it myself|Drop to a shell with cfdisk, then come back"
+
+		# shellcheck disable=SC2086
+		tui_menu "Disk" "step 1 of 10 - where should Arctic go?" $items || return 1
+
+		if [ "$TUI_CHOICE" = manual ]; then
+			tui_done
+			printf '\n  Partition and format the disk, then mount it on %s.\n\n' "$TARGET"
+			printf '  Tools available:  cfdisk  sfdisk  fdisk  wipefs  lsblk\n'
+			printf '                    mkfs.ext4  mkfs.vfat  mkswap\n\n'
+			printf '  For a UEFI machine that usually means:\n'
+			printf '      cfdisk /dev/sdX          # 512M EFI System, rest Linux filesystem\n'
+			printf '      mkfs.vfat -F32 /dev/sdX1\n'
+			printf '      mkfs.ext4 /dev/sdX2\n'
+			printf '      mount /dev/sdX2 %s\n\n' "$TARGET"
+			printf '  Type exit when you are done to return to the installer.\n\n'
+			${SHELL:-/bin/sh} -l || :
+			tui_init
+			if mountpoint -q "$TARGET" 2>/dev/null; then
+				A_DISK_READY=1
+				return 0
+			fi
+			tui_msgbox "Disk" "Nothing is mounted on $TARGET yet."
+			continue
+		fi
+
+		disk=/dev/$TUI_CHOICE
+		fw=$(detect_firmware)
+		tui_yesno "Erase $disk" \
+			"This erases everything on $disk and creates a fresh $fw layout. Continue?" no \
+			|| continue
+		auto_partition "$disk" "$fw" && { A_DISK_READY=1; return 0; }
+	done
+}
+
+# Lay down a GPT and format it. Deliberately simple: one EFI partition when the
+# machine booted through UEFI, and one root filesystem taking the rest.
+auto_partition() {
+	disk=$1 fw=$2
+	tui_clear; tui_header "Disk" "$disk"
+	r=4
+	say_step() { tui_at "$r" 4; tui_el; printf '%s:: %s%s' "$c_teal" "$1" "$t_reset"; r=$((r+1)); }
+
+	say_step "wiping the old signatures"
+	wipefs -a "$disk" >>"$LOGF" 2>&1 || :
+
+	if [ "$fw" = efi ]; then
+		say_step "writing a GPT with an EFI partition and a root partition"
+		# sfdisk reads the whole layout on stdin, which avoids a pile of
+		# interactive fdisk keystrokes.
+		printf 'label: gpt\n,512M,U\n,,L\n' | sfdisk --quiet "$disk" >>"$LOGF" 2>&1 || {
+			tui_msgbox "Disk" "Partitioning failed. See $LOGF."; return 1; }
+		p1=$(part_name "$disk" 1); p2=$(part_name "$disk" 2)
+		say_step "formatting $p1 as FAT32 (EFI)"
+		mkfs.vfat -F32 -n ARCTIC_EFI "$p1" >>"$LOGF" 2>&1 || {
+			tui_msgbox "Disk" "mkfs.vfat failed on $p1."; return 1; }
+	else
+		say_step "writing a GPT with a BIOS boot partition and a root partition"
+		printf 'label: gpt\n,1M,21686148-6449-6E6F-744E-656564454649\n,,L\n' \
+			| sfdisk --quiet "$disk" >>"$LOGF" 2>&1 || {
+			tui_msgbox "Disk" "Partitioning failed. See $LOGF."; return 1; }
+		p1=""; p2=$(part_name "$disk" 2)
+	fi
+
+	say_step "formatting $p2 as ext4"
+	mkfs.ext4 -q -F -L arctic-root "$p2" >>"$LOGF" 2>&1 || {
+		tui_msgbox "Disk" "mkfs.ext4 failed on $p2."; return 1; }
+
+	say_step "mounting $p2 on $TARGET"
+	mkdir -p "$TARGET"
+	mount "$p2" "$TARGET" >>"$LOGF" 2>&1 || {
+		tui_msgbox "Disk" "Could not mount $p2 on $TARGET."; return 1; }
+
+	if [ -n "${p1:-}" ]; then
+		say_step "mounting $p1 on $TARGET/boot"
+		mkdir -p "$TARGET/boot"
+		mount "$p1" "$TARGET/boot" >>"$LOGF" 2>&1 || :
+		A_ESP=$p1
+	fi
+	A_ROOTDEV=$p2
+	sleep 1
+	tui_msgbox "Disk" "$disk is ready and mounted on $TARGET."
+	return 0
 }
 
 # ------------------------------------------------------------------- screens
@@ -517,25 +638,27 @@ EOF
 # ------------------------------------------------------------- the config menu
 
 config_menu() {
-	done_net=""; done_de=""; done_k=""; done_u=""; done_r=""
+	done_disk=""; done_net=""; done_de=""; done_k=""; done_u=""; done_r=""
 	done_l=""; done_t=""; done_s=""; done_h=""; done_hw=""
 	mark() { [ -n "$1" ] && printf 'done' || printf 'not set'; }
 	while :; do
 		tui_menu "Setup" "target $TARGET" \
-			"net|1. Network|$(mark "$done_net")  wired, wireless or offline" \
-			"de|2. Desktop|$(mark "$done_de")  ${A_DESKTOP}" \
-			"kern|3. Kernel|$(mark "$done_k")  ${A_KERNEL}" \
-			"user|4. User account|$(mark "$done_u")  ${A_USER:-none}" \
-			"root|5. Root password|$(mark "$done_r")" \
-			"loc|6. Locale and keymap|$(mark "$done_l")  ${A_LOCALE} / ${A_KEYMAP}" \
-			"tz|7. Time zone|$(mark "$done_t")  ${A_TZ}" \
-			"swap|8. Swap|$(mark "$done_s")  ${A_SWAP}" \
-			"host|9. Hostname|$(mark "$done_h")  ${A_HOSTNAME}" \
-			"hw|10. Drivers and extras|$(mark "$done_hw")  ${A_GPU}" \
+			"disk|1. Disk|$(mark "$done_disk")  partition and mount the target" \
+			"net|2. Network|$(mark "$done_net")  wired, wireless or offline" \
+			"de|3. Desktop|$(mark "$done_de")  ${A_DESKTOP}" \
+			"kern|4. Kernel|$(mark "$done_k")  ${A_KERNEL}" \
+			"user|5. User account|$(mark "$done_u")  ${A_USER:-none}" \
+			"root|6. Root password|$(mark "$done_r")" \
+			"loc|7. Locale and keymap|$(mark "$done_l")  ${A_LOCALE} / ${A_KEYMAP}" \
+			"tz|8. Time zone|$(mark "$done_t")  ${A_TZ}" \
+			"swap|9. Swap|$(mark "$done_s")  ${A_SWAP}" \
+			"host|10. Hostname|$(mark "$done_h")  ${A_HOSTNAME}" \
+			"hw|11. Drivers and extras|$(mark "$done_hw")  ${A_GPU}" \
 			"go|Install now|Review the settings and write to $TARGET" \
 			"quit|Quit|Leave without changing anything" \
 		|| return 1
 		case "$TUI_CHOICE" in
+		disk) screen_disk      && done_disk=1 ;;
 		net)  screen_network   && done_net=1 ;;
 		de)   screen_desktop   && done_de=1 ;;
 		kern) screen_kernel    && done_k=1 ;;
@@ -547,6 +670,11 @@ config_menu() {
 		host) screen_hostname  && done_h=1 ;;
 		hw)   screen_hardware  && done_hw=1 ;;
 		go)
+			if ! mountpoint -q "$TARGET" 2>/dev/null; then
+				tui_msgbox "Setup" \
+					"Nothing is mounted on $TARGET. Do step 1 first, or mount it yourself."
+				continue
+			fi
 			if [ -z "$A_USER" ]; then
 				tui_msgbox "Setup" "Create a user account first (step 4)."
 				continue

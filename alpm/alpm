@@ -655,20 +655,55 @@ cmd_fetch() {
 	need_root; alpm_init_db
 	which=${1:-all}
 	msg "Synchronising repositories"
-	rc=0
+
+	# Count what actually succeeded. Reporting "554 packages available" after
+	# every repository failed is worse than useless - it reads as success when
+	# nothing was reached and the numbers came from a stale cached index.
+	okc=0; failc=0
+	tmpres=$ALPM_DB/.fetch.$$
+	: >"$tmpres"
+
 	if [ "$which" = "all" ]; then
-		alpm_repos | while IFS='	' read -r n u; do sync_repo "$n" "$u" || :; done
+		alpm_repos | while IFS='	' read -r n u; do
+			if sync_repo "$n" "$u"; then echo ok >>"$tmpres"; else echo fail >>"$tmpres"; fi
+		done
 	else
 		for w in "$@"; do
 			u=$(alpm_repo_url "$w")
-			[ -n "$u" ] || { err "no such repo: $w"; rc=1; continue; }
-			sync_repo "$w" "$u" || rc=1
+			if [ -z "$u" ]; then
+				err "no such repo: $w"; echo fail >>"$tmpres"; continue
+			fi
+			if sync_repo "$w" "$u"; then echo ok >>"$tmpres"; else echo fail >>"$tmpres"; fi
 		done
 	fi
+	okc=$(grep -c '^ok$'   "$tmpres" 2>/dev/null); okc=${okc:-0}
+	failc=$(grep -c '^fail$' "$tmpres" 2>/dev/null); failc=${failc:-0}
+	rm -f "$tmpres"
+
 	tot=$(cat "$ALPM_DB"/sync/*.idx 2>/dev/null | wc -l | tr -d ' ')
 	printf '\n'
-	ok "$tot packages available"
-	alpm_log "fetch $*"
+
+	if [ "$okc" = "0" ] && [ "$failc" -gt 0 ]; then
+		warn "no repository could be reached"
+		if [ "${tot:-0}" -gt 0 ]; then
+			printf '  %s%s package(s) are known from the last sync, which may be out\n' \
+				"$A_GREY" "$tot"
+			printf '  of date. Anything already on this medium can still be installed.%s\n' "$C_R"
+		fi
+		printf '  %scheck the network:  ip addr   ping 1.1.1.1   iwctl%s\n' "$A_GREY" "$C_R"
+		alpm_log "fetch failed: no repository reachable"
+		return 1
+	fi
+
+	if [ "$failc" -gt 0 ]; then
+		warn "$failc of $((okc + failc)) repositories could not be reached"
+	fi
+	if [ "$okc" = "1" ]; then
+		ok "$tot packages available from 1 repository"
+	else
+		ok "$tot packages available from $okc repositories"
+	fi
+	alpm_log "fetch $* ok=$okc fail=$failc"
 
 	# Tell the user if upgrades are waiting, but do not act on it.
 	up=0
@@ -680,7 +715,7 @@ cmd_fetch() {
 		[ "$(installed_version "$p")" != "$nv" ] && up=$((up+1))
 	done
 	[ "$up" -gt 0 ] && msg "$up package(s) can be upgraded - run 'alpm update'"
-	return $rc
+	return 0
 }
 
 # ----------------------------------------------------------------------- update

@@ -3,11 +3,14 @@
 # arctic-service. Sourced, never executed.
 # shellcheck shell=sh disable=SC2039
 
-_rc_cols=80
-if [ -r /sys/class/tty/tty0/active ] 2>/dev/null; then
-	_rc_cols=$(stty size 2>/dev/null | cut -d' ' -f2)
-	[ "${_rc_cols:-0}" -gt 40 ] || _rc_cols=80
-fi
+# Console width. stty only answers when stdin is the terminal, which it is not
+# during early boot, so fall back to a safe 80 rather than an empty value.
+_rc_cols=$(stty size 2>/dev/null </dev/console | cut -d" " -f2)
+case "$_rc_cols" in
+''|*[!0-9]*) _rc_cols=80 ;;
+esac
+[ "$_rc_cols" -ge 40 ] || _rc_cols=80
+[ "$_rc_cols" -le 300 ] || _rc_cols=80
 
 if [ -t 1 ] && [ "${TERM:-linux}" != "dumb" ]; then
 	_R=$(printf '\033[0m');   _B=$(printf '\033[1m')
@@ -30,13 +33,24 @@ begin() {
 	printf '%s  ::%s %s' "$_TEAL$_B" "$_R" "$_rc_msg"
 }
 
+# Width of the status field "[  ok  ]" and of the "  :: " prefix begin() writes.
+_RC_STATUS_W=8
+_RC_PREFIX_W=5
+
+# Pad so the status sits flush right without ever reaching the last column - one
+# character too many wraps the closing bracket onto the next line, which is what
+# made the boot read as "[ OK" on one line and "]" on the next.
+_rc_pad() {
+	_p=$(( _rc_cols - ${#_rc_msg} - _RC_PREFIX_W - _RC_STATUS_W - 1 ))
+	[ "$_p" -lt 1 ] && _p=1
+	_i=0; _sp=""
+	while [ "$_i" -lt "$_p" ]; do _sp="$_sp "; _i=$((_i+1)); done
+	printf '%s' "$_sp"
+}
+
 good() {
 	[ "${QUIET:-0}" = "1" ] && return 0
-	pad=$(( _rc_cols - ${#_rc_msg} - 12 ))
-	[ "$pad" -lt 1 ] && pad=1
-	i=0; sp=""
-	while [ "$i" -lt "$pad" ]; do sp="$sp "; i=$((i+1)); done
-	printf '%s[%s  ok  %s]%s\n' "$sp$_GREY" "$_MINT$_B" "$_R$_GREY" "$_R"
+	printf '%s%s[%s  ok  %s]%s\n' "$(_rc_pad)" "$_GREY" "$_MINT$_B" "$_R$_GREY" "$_R"
 }
 
 bad() {
@@ -44,22 +58,14 @@ bad() {
 	if [ "${QUIET:-0}" = "1" ]; then
 		printf '%s  ::%s %s' "$_RED$_B" "$_R" "$_rc_msg"
 	fi
-	pad=$(( _rc_cols - ${#_rc_msg} - 12 ))
-	[ "$pad" -lt 1 ] && pad=1
-	i=0; sp=""
-	while [ "$i" -lt "$pad" ]; do sp="$sp "; i=$((i+1)); done
-	printf '%s[%s failed %s]%s\n' "$sp$_GREY" "$_RED$_B" "$_R$_GREY" "$_R"
+	printf '%s%s[%sfailed%s]%s\n' "$(_rc_pad)" "$_GREY" "$_RED$_B" "$_R$_GREY" "$_R"
 	[ -n "${1:-}" ] && printf '%s     %s%s\n' "$_GREY" "$*" "$_R"
 	printf '%s\n' "rc: failed: $_rc_msg ${*:-}" >>/run/arctic/boot.errors 2>/dev/null || :
 }
 
 skip() {
 	[ "${QUIET:-0}" = "1" ] && return 0
-	pad=$(( _rc_cols - ${#_rc_msg} - 12 ))
-	[ "$pad" -lt 1 ] && pad=1
-	i=0; sp=""
-	while [ "$i" -lt "$pad" ]; do sp="$sp "; i=$((i+1)); done
-	printf '%s[%s skipped%s]%s\n' "$sp$_GREY" "$_GREY" "$_GREY" "$_R"
+	printf '%s%s[%sskip%s]%s\n' "$(_rc_pad)" "$_GREY" "$_GREY" "$_GREY" "$_R"
 }
 
 # The gradient rule and wordmark shown at the top of a boot.

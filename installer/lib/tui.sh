@@ -193,49 +193,70 @@ tui_box() {
 TUI_CHOICE=""
 TUI_INDEX=0
 
+# Draw a single menu row. Kept separate so navigation can repaint just the two
+# rows that changed instead of the whole screen.
+_menu_row() {
+	_mr_row=$1 _mr_left=$2 _mr_w=$3 _mr_sel=$4 _mr_item=$5
+	lab=$(printf '%s' "$_mr_item" | cut -d'|' -f2)
+	dsc=$(printf '%s' "$_mr_item" | cut -d'|' -f3)
+	tui_at "$_mr_row" "$_mr_left"
+	if [ "$_mr_sel" = "1" ]; then
+		printf '%s %s %-22s %s%-*.*s%s' \
+			"$c_bgsel$c_snow$t_bold" ">" "$lab" \
+			"$c_bgsel$c_ice" $((_mr_w - 27)) $((_mr_w - 27)) "$dsc" "$t_reset"
+	else
+		printf '   %s%-22s%s %s%-*.*s%s' \
+			"$c_snow" "$lab" "$t_reset" "$c_grey" \
+			$((_mr_w - 26)) $((_mr_w - 26)) "$dsc" "$t_reset"
+	fi
+}
+
+# tui_menu "Title" "hint" "key|label|description" ...
+#
+# The screen is drawn once. Moving the selection repaints exactly two rows - the
+# one being left and the one being entered - because clearing and redrawing the
+# whole screen on every keypress flickers badly on a VGA console and is
+# genuinely unpleasant to look at.
 tui_menu() {
 	m_title=$1; m_hint=$2; shift 2
 	m_n=$#
 	[ "$m_n" -gt 0 ] || return 1
 	sel=${TUI_MENU_START:-1}
 	TUI_MENU_START=1
+	redraw=1
+	last_rows=0; last_cols=0
 
 	while :; do
 		tui_size
-		tui_clear
-		tui_header "$m_title" "$m_hint"
+		# Only a resize justifies repainting everything.
+		if [ "$TUI_ROWS" != "$last_rows" ] || [ "$TUI_COLS" != "$last_cols" ]; then
+			redraw=1
+			last_rows=$TUI_ROWS; last_cols=$TUI_COLS
+		fi
 
-		# Description panel width, list on the left.
 		top=4
 		listw=$(( TUI_COLS - 8 ))
 		[ "$listw" -gt 72 ] && listw=72
 		left=$(_centre "$listw")
 
-		tui_at "$top" "$left"
-		printf '%s%s%s' "$c_snow$t_bold" "$m_title" "$t_reset"
-		tui_at $((top + 1)) "$left"
-		printf '%s%s%s' "$c_grey" "$(_rep '-' "$listw")" "$t_reset"
+		if [ "$redraw" = "1" ]; then
+			tui_clear
+			tui_header "$m_title" "$m_hint"
+			tui_at "$top" "$left"
+			printf '%s%s%s' "$c_snow$t_bold" "$m_title" "$t_reset"
+			tui_at $((top + 1)) "$left"
+			printf '%s%s%s' "$c_grey" "$(_rep '-' "$listw")" "$t_reset"
+			i=1
+			for item in "$@"; do
+				s_flag=0; [ "$i" = "$sel" ] && s_flag=1
+				_menu_row $((top + 2 + i)) "$left" "$listw" "$s_flag" "$item"
+				i=$((i+1))
+			done
+			tui_footer "up/down move   enter select   $m_hint"
+			redraw=0
+		fi
 
-		i=1
-		for item in "$@"; do
-			key=$(printf '%s' "$item" | cut -d'|' -f1)
-			lab=$(printf '%s' "$item" | cut -d'|' -f2)
-			dsc=$(printf '%s' "$item" | cut -d'|' -f3)
-			row=$((top + 2 + i))
-			tui_at "$row" "$left"
-			if [ "$i" = "$sel" ]; then
-				printf '%s %s %-22s %s%-*.*s%s' \
-					"$c_bgsel$c_snow$t_bold" ">" "$lab" \
-					"$c_bgsel$c_ice" $((listw - 27)) $((listw - 27)) "$dsc" "$t_reset"
-			else
-				printf '   %s%-22s%s %s%-*.*s%s' \
-					"$c_snow" "$lab" "$t_reset" "$c_grey" \
-					$((listw - 26)) $((listw - 26)) "$dsc" "$t_reset"
-			fi
-			i=$((i+1))
-		done
-
-		tui_footer "up/down move   enter select   $m_hint"
+		prev=$sel
 		k=$(tui_key)
 		case "$k" in
 		up|k)     sel=$((sel - 1)); [ "$sel" -lt 1 ] && sel=$m_n ;;
@@ -257,6 +278,19 @@ tui_menu() {
 		[1-9])
 			if [ "$k" -le "$m_n" ]; then sel=$k; fi ;;
 		esac
+
+		# Repaint only what actually changed.
+		if [ "$sel" != "$prev" ]; then
+			i=1
+			for item in "$@"; do
+				if [ "$i" = "$prev" ]; then
+					_menu_row $((top + 2 + i)) "$left" "$listw" 0 "$item"
+				elif [ "$i" = "$sel" ]; then
+					_menu_row $((top + 2 + i)) "$left" "$listw" 1 "$item"
+				fi
+				i=$((i+1))
+			done
+		fi
 	done
 }
 
@@ -265,6 +299,26 @@ tui_menu() {
 # Result: TUI_SELECTED is a space separated list of chosen keys.
 TUI_SELECTED=""
 
+_check_row() {
+	_cr_row=$1 _cr_left=$2 _cr_w=$3 _cr_cur=$4 _cr_on=$5 _cr_item=$6
+	lab=$(printf '%s' "$_cr_item" | cut -d'|' -f2)
+	dsc=$(printf '%s' "$_cr_item" | cut -d'|' -f3)
+	mark=" "; [ "$_cr_on" = "1" ] && mark="x"
+	tui_at "$_cr_row" "$_cr_left"
+	if [ "$_cr_cur" = "1" ]; then
+		printf '%s [%s] %-20s %s%-*.*s%s' "$c_bgsel$c_snow$t_bold" "$mark" "$lab" \
+			"$c_bgsel$c_ice" $((_cr_w-28)) $((_cr_w-28)) "$dsc" "$t_reset"
+	else
+		m_col=$c_grey
+		[ "$mark" = "x" ] && m_col=$c_mint
+		printf ' %s[%s]%s %s%-20s%s %s%-*.*s%s' "$m_col" "$mark" "$t_reset" \
+			"$c_snow" "$lab" "$t_reset" "$c_grey" \
+			$((_cr_w-27)) $((_cr_w-27)) "$dsc" "$t_reset"
+	fi
+}
+
+# tui_checklist "Title" "hint" "key|label|desc|on" ...
+# Same repaint discipline as tui_menu: draw once, then touch only what moved.
 tui_checklist() {
 	m_title=$1; m_hint=$2; shift 2
 	m_n=$#
@@ -276,53 +330,53 @@ tui_checklist() {
 		[ "$on" = "on" ] && state="$state $i"
 		i=$((i+1))
 	done
+	redraw=1; last_rows=0; last_cols=0
+
+	is_on() { case " $state " in *" $1 "*) return 0 ;; esac; return 1; }
 
 	while :; do
-		tui_size; tui_clear
-		tui_header "$m_title" "$m_hint"
+		tui_size
+		if [ "$TUI_ROWS" != "$last_rows" ] || [ "$TUI_COLS" != "$last_cols" ]; then
+			redraw=1; last_rows=$TUI_ROWS; last_cols=$TUI_COLS
+		fi
 		top=4
 		listw=$(( TUI_COLS - 8 )); [ "$listw" -gt 72 ] && listw=72
 		left=$(_centre "$listw")
-		tui_at "$top" "$left"; printf '%s%s%s' "$c_snow$t_bold" "$m_title" "$t_reset"
-		tui_at $((top+1)) "$left"; printf '%s%s%s' "$c_grey" "$(_rep '-' "$listw")" "$t_reset"
 
-		i=1
-		for item in "$@"; do
-			lab=$(printf '%s' "$item" | cut -d'|' -f2)
-			dsc=$(printf '%s' "$item" | cut -d'|' -f3)
-			mark=" "
-			case " $state " in *" $i "*) mark="x" ;; esac
-			row=$((top + 2 + i))
-			tui_at "$row" "$left"
-			if [ "$i" = "$sel" ]; then
-				printf '%s [%s] %-20s %s%-*.*s%s' "$c_bgsel$c_snow$t_bold" "$mark" "$lab" \
-					"$c_bgsel$c_ice" $((listw-28)) $((listw-28)) "$dsc" "$t_reset"
-			else
-				m_col=$c_grey
-				[ "$mark" = "x" ] && m_col=$c_mint
-				printf ' %s[%s]%s %s%-20s%s %s%-*.*s%s' "$m_col" "$mark" "$t_reset" \
-					"$c_snow" "$lab" "$t_reset" "$c_grey" \
-					$((listw-27)) $((listw-27)) "$dsc" "$t_reset"
-			fi
-			i=$((i+1))
-		done
-		tui_footer "space toggle   enter confirm   $m_hint"
+		if [ "$redraw" = "1" ]; then
+			tui_clear
+			tui_header "$m_title" "$m_hint"
+			tui_at "$top" "$left"; printf '%s%s%s' "$c_snow$t_bold" "$m_title" "$t_reset"
+			tui_at $((top+1)) "$left"; printf '%s%s%s' "$c_grey" "$(_rep '-' "$listw")" "$t_reset"
+			i=1
+			for item in "$@"; do
+				c_flag=0; [ "$i" = "$sel" ] && c_flag=1
+				o_flag=0; is_on "$i" && o_flag=1
+				_check_row $((top + 2 + i)) "$left" "$listw" "$c_flag" "$o_flag" "$item"
+				i=$((i+1))
+			done
+			tui_footer "space toggle   enter confirm   $m_hint"
+			redraw=0
+		fi
+
+		prev=$sel; toggled=0
 		k=$(tui_key)
 		case "$k" in
 		up|k)   sel=$((sel-1)); [ "$sel" -lt 1 ] && sel=$m_n ;;
 		down|j) sel=$((sel+1)); [ "$sel" -gt "$m_n" ] && sel=1 ;;
 		space)
-			case " $state " in
-			*" $sel "*) state=$(printf '%s' "$state" | tr ' ' '\n' | grep -vx "$sel" | tr '\n' ' ') ;;
-			*) state="$state $sel" ;;
-			esac ;;
+			if is_on "$sel"; then
+				state=$(printf '%s' "$state" | tr ' ' '\n' | grep -vx "$sel" | tr '\n' ' ')
+			else
+				state="$state $sel"
+			fi
+			toggled=1 ;;
 		enter)
 			TUI_SELECTED=""
 			i=1
 			for item in "$@"; do
-				case " $state " in *" $i "*)
-					TUI_SELECTED="$TUI_SELECTED $(printf '%s' "$item" | cut -d'|' -f1)" ;;
-				esac
+				is_on "$i" && \
+					TUI_SELECTED="$TUI_SELECTED $(printf '%s' "$item" | cut -d'|' -f1)"
 				i=$((i+1))
 			done
 			TUI_SELECTED=$(printf '%s' "$TUI_SELECTED" | sed 's/^ *//')
@@ -330,6 +384,18 @@ tui_checklist() {
 		esc|q) return 1 ;;
 		ctrlc) tui_done; exit 130 ;;
 		esac
+
+		if [ "$sel" != "$prev" ] || [ "$toggled" = "1" ]; then
+			i=1
+			for item in "$@"; do
+				if [ "$i" = "$prev" ] || [ "$i" = "$sel" ]; then
+					c_flag=0; [ "$i" = "$sel" ] && c_flag=1
+					o_flag=0; is_on "$i" && o_flag=1
+					_check_row $((top + 2 + i)) "$left" "$listw" "$c_flag" "$o_flag" "$item"
+				fi
+				i=$((i+1))
+			done
+		fi
 	done
 }
 
@@ -337,27 +403,42 @@ tui_checklist() {
 # tui_input "Title" "prompt" [default] [hidden]
 TUI_VALUE=""
 
+# tui_input "Title" "prompt" [default] [hidden]
+#
+# The frame is drawn once; each keystroke repaints only the value line. Redrawing
+# the whole box per character made typing flicker.
 tui_input() {
 	i_title=$1; i_prompt=$2; i_def=${3:-}; i_hide=${4:-}
 	val=$i_def
+	redraw=1; last_cols=0
 	while :; do
-		tui_size; tui_clear
-		tui_header "$i_title"
+		tui_size
+		[ "$TUI_COLS" != "$last_cols" ] && { redraw=1; last_cols=$TUI_COLS; }
 		w=$(( TUI_COLS - 12 )); [ "$w" -gt 64 ] && w=64
 		left=$(_centre "$w")
 		top=$(( TUI_ROWS / 2 - 4 ))
-		tui_box "$top" "$left" 7 "$w" "$i_title"
-		tui_at $((top+2)) $((left+3))
-		printf '%s%s%s' "$c_ice" "$i_prompt" "$t_reset"
+
+		if [ "$redraw" = "1" ]; then
+			tui_clear
+			tui_header "$i_title"
+			tui_box "$top" "$left" 7 "$w" "$i_title"
+			tui_at $((top+2)) $((left+3))
+			printf '%s%s%s' "$c_ice" "$i_prompt" "$t_reset"
+			[ -n "$i_def" ] && {
+				tui_at $((top+5)) $((left+3))
+				printf '%sdefault: %s%s' "$c_grey" "$i_def" "$t_reset"
+			}
+			tui_footer "type to edit   enter accept   esc back"
+			redraw=0
+		fi
+
+		# Just the value line.
 		tui_at $((top+4)) $((left+3))
 		show=$val
 		[ -n "$i_hide" ] && show=$(_rep '*' "${#val}")
-		printf '%s%s%s%s%s' "$c_bgsel$c_snow" " " "$show" "$(_rep ' ' $((w - 8 - ${#show})))" "$t_reset"
-		[ -n "$i_def" ] && {
-			tui_at $((top+5)) $((left+3))
-			printf '%sdefault: %s%s' "$c_grey" "$i_def" "$t_reset"
-		}
-		tui_footer "type to edit   enter accept   esc back"
+		pad=$(( w - 8 - ${#show} )); [ "$pad" -lt 0 ] && pad=0
+		printf '%s %s%s%s' "$c_bgsel$c_snow" "$show" "$(_rep ' ' "$pad")" "$t_reset"
+
 		k=$(tui_key)
 		case "$k" in
 		enter) TUI_VALUE=$val; return 0 ;;

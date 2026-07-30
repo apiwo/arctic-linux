@@ -85,6 +85,46 @@ The resolver refuses to accept a fix that drops a major version - a truncated
 listing had it downgrade chromium to 101 and blender to 2.82 before that guard
 existed. Package versions in `base` are best-effort until each one is built.
 
+## Fixes from the first real install attempt
+
+Someone actually booted it and tried to install. Everything below came out of
+that, and every one of them would have blocked a real install:
+
+1. **The menu flickered on every keypress.** Each navigation redrew the entire
+   screen, including a full `ESC[2J` clear - visibly unpleasant on a VGA
+   console. The menu, checklist and text input now draw once and repaint only
+   the rows that changed. Measured: one clear for a whole interaction instead of
+   one per key.
+
+2. **`mount /dev/sdb1 /mnt` failed** because there was nothing to mount. busybox
+   provides `mke2fs` but it only makes **ext2**, so `mkfs.ext4` did not exist and
+   neither did `cfdisk`, `sfdisk` or `wipefs`. The image now ships util-linux,
+   e2fsprogs and dosfstools, and `arctic-strap` has a disk step that will
+   partition, format and mount the target for you.
+
+3. **The boot status column wrapped**, showing `[ OK` on one line and `]` on the
+   next. The padding was computed one character too wide: the `  :: ` prefix is
+   5 columns and `[  ok  ]` is 8, so the pad has to be `cols - len - 13`, not
+   `- 12`. It also read the width from `stty` on a non-terminal during early
+   boot and got nothing.
+
+4. **No `iwctl`, and no firmware at all**, so wireless could never have worked.
+   iwd, ell and the wireless firmware are now on the image.
+
+5. **`alpm fetch all` reported "554 packages available" while every repository
+   was unreachable.** It counted the cached index and called that success. It
+   now reports what was actually reached, and says plainly when nothing was.
+
+6. **The medium's own `file://` repositories never worked.** There is no curl on
+   the ISO and busybox wget rejects the scheme outright, so the offline install
+   could not read the packages on the disc it booted from. alpm now handles
+   `file://` itself with a copy.
+
+7. **The MediaTek firmware was silently missing.** The extraction pattern was
+   `mediatek/mt76*`, but the MT7922 blobs are `mediatek/WIFI_*MT7922*.bin` in
+   the top of `mediatek/`, so no MediaTek firmware shipped at all - on a machine
+   whose wireless card is an MT7922.
+
 ## Bugs found and fixed while building
 
 Kept because each one is a trap worth remembering.

@@ -77,8 +77,24 @@ sha256() {
 }
 
 # Downloader abstraction. Arctic ships busybox wget on the ISO and curl in base.
+#
+# file:// is handled here rather than passed to a downloader. The installation
+# medium serves its repositories over file://, curl is not on the ISO, and
+# busybox wget rejects the scheme outright ("not an http or ftp url") - so
+# without this the offline install could never reach the packages sitting on the
+# disc it booted from.
+_dl_file() {
+	src=${1#file://}
+	[ -f "$src" ] || return 1
+	mkdir -p "$(dirname "$2")"
+	cp -f "$src" "$2" 2>/dev/null
+}
+
 dl() {
 	url=$1 out=$2
+	case "$url" in
+	file://*) _dl_file "$url" "$out"; return $? ;;
+	esac
 	if have curl; then
 		curl -fL --retry 3 --retry-delay 2 -# -o "$out.part" "$url" || return 1
 	elif have wget; then
@@ -92,6 +108,9 @@ dl() {
 # Silent variant for index files.
 dlq() {
 	url=$1 out=$2
+	case "$url" in
+	file://*) _dl_file "$url" "$out"; return $? ;;
+	esac
 	if have curl; then curl -fsSL -o "$out.part" "$url" || return 1
 	elif have wget; then wget -q -O "$out.part" "$url" || return 1
 	else return 1; fi

@@ -1,0 +1,14 @@
+# Filesystems mount(8) tries, in order, when no -t is given.
+# busybox mount consults this before falling back to /proc/filesystems, so a
+# bare "mount /dev/sda1 /mnt" works without naming the type.
+ext4
+ext3
+ext2
+vfat
+exfat
+btrfs
+xfs
+f2fs
+iso9660
+ntfs3
+*

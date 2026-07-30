@@ -261,6 +261,76 @@ emit "$pd" arctic-base 1.0.0 main \
 	"Arctic base configuration, init scripts and branding" "BSD-2-Clause" \
 	"https://github.com/apiwo/arctic-linux" "busybox toybox zsh doas alpm libxcrypt"
 
+# --------------------------------------------- the tools that make it installable
+step "packaging util-linux (cfdisk, sfdisk, wipefs, lsblk)"
+pd=$PKGDIRS/util-linux; rm -rf "$pd"; mkdir -p "$pd/usr/bin" "$pd/usr/lib"
+n=0
+for t in cfdisk sfdisk fdisk wipefs lsblk blkid findmnt partx; do
+	[ -f "$R/usr/bin/$t" ] && { cp -a "$R/usr/bin/$t" "$pd/usr/bin/"; n=$((n+1)); }
+done
+for base in libblkid libmount libuuid libsmartcols libfdisk; do
+	cp -a "$R/usr/lib/$base.so"* "$pd/usr/lib/" 2>/dev/null || :
+done
+if [ "$n" -gt 4 ]; then
+	emit "$pd" util-linux 2.41.5 main \
+		"Partitioning and block device tools: cfdisk, sfdisk, wipefs, lsblk" \
+		"GPL-2.0-or-later LGPL-2.1-or-later" \
+		"https://github.com/util-linux/util-linux" "glibc"
+else bad "util-linux (only $n tools)"; fi
+
+step "packaging e2fsprogs"
+pd=$PKGDIRS/e2fsprogs; rm -rf "$pd"; mkdir -p "$pd/usr/bin" "$pd/usr/lib"
+n=0
+for t in mke2fs mkfs.ext2 mkfs.ext3 mkfs.ext4 e2fsck fsck.ext2 fsck.ext3 \
+         fsck.ext4 resize2fs tune2fs dumpe2fs badblocks e2label; do
+	[ -e "$R/usr/bin/$t" ] && { cp -a "$R/usr/bin/$t" "$pd/usr/bin/"; n=$((n+1)); }
+done
+for base in libext2fs libe2p libcom_err libss; do
+	cp -a "$R/usr/lib/$base.so"* "$pd/usr/lib/" 2>/dev/null || :
+done
+if [ "$n" -gt 5 ]; then
+	emit "$pd" e2fsprogs 1.47.4 main "ext2/3/4 filesystem tools, a real mkfs.ext4" \
+		"GPL-2.0-only" "https://e2fsprogs.sourceforge.net/" "glibc util-linux"
+else bad "e2fsprogs (only $n tools)"; fi
+
+step "packaging dosfstools"
+pd=$PKGDIRS/dosfstools; rm -rf "$pd"; mkdir -p "$pd/usr/bin"
+n=0
+for t in mkfs.fat mkfs.vfat mkfs.msdos mkdosfs fsck.fat fsck.vfat fatlabel; do
+	[ -e "$R/usr/bin/$t" ] && { cp -a "$R/usr/bin/$t" "$pd/usr/bin/"; n=$((n+1)); }
+done
+if [ "$n" -gt 2 ]; then
+	emit "$pd" dosfstools 4.2 main "FAT filesystem tools, for the EFI partition" \
+		"GPL-3.0-or-later" "https://github.com/dosfstools/dosfstools" "glibc"
+else bad "dosfstools (only $n tools)"; fi
+
+step "packaging ell and iwd"
+pd=$PKGDIRS/ell; rm -rf "$pd"; mkdir -p "$pd/usr/lib"
+cp -a "$R/usr/lib/libell.so"* "$pd/usr/lib/" 2>/dev/null || :
+if ls "$pd"/usr/lib/libell.so* >/dev/null 2>&1; then
+	emit "$pd" ell 0.83 main "Embedded Linux library, used by iwd" \
+		"LGPL-2.1-or-later" "https://git.kernel.org/pub/scm/libs/ell/ell.git" "glibc"
+else bad ell; fi
+
+pd=$PKGDIRS/iwd; rm -rf "$pd"; mkdir -p "$pd/usr/bin" "$pd/usr/lib" "$pd/var/lib/iwd"
+[ -f "$R/usr/lib/iwd" ] && cp -a "$R/usr/lib/iwd" "$pd/usr/lib/iwd"
+[ -f "$R/usr/bin/iwctl" ] && cp -a "$R/usr/bin/iwctl" "$pd/usr/bin/iwctl"
+[ -f "$R/usr/bin/iwmon" ] && cp -a "$R/usr/bin/iwmon" "$pd/usr/bin/iwmon"
+ln -sf ../lib/iwd "$pd/usr/bin/iwd"
+if [ -f "$pd/usr/bin/iwctl" ]; then
+	emit "$pd" iwd 3.12 main "iNet wireless daemon - this is what provides iwctl" \
+		"LGPL-2.1-or-later" "https://iwd.wiki.kernel.org/" "glibc ell dbus"
+else bad iwd; fi
+
+step "packaging linux-firmware (wireless)"
+pd=$PKGDIRS/linux-firmware; rm -rf "$pd"; mkdir -p "$pd/usr/lib"
+if [ -d "$R/usr/lib/firmware" ]; then
+	cp -a "$R/usr/lib/firmware" "$pd/usr/lib/"
+	emit "$pd" linux-firmware 20260622 kernels \
+		"Wireless and device firmware" "various-redistributable" \
+		"https://git.kernel.org/pub/scm/linux/kernel/git/firmware/linux-firmware.git" "-"
+else bad "linux-firmware (not installed)"; fi
+
 # ------------------------------------------ the GNU pieces the NVIDIA blob needs
 step "packaging gcc-libs (libstdc++ and libgcc_s, for the NVIDIA driver)"
 pd=$PKGDIRS/gcc-libs; rm -rf "$pd"; mkdir -p "$pd/usr/lib"
