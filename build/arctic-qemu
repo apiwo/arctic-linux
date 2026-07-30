@@ -1,0 +1,135 @@
+#!/bin/sh
+# arctic-qemu - boot the Arctic ISO in QEMU, or run a full install test.
+#
+#   arctic-qemu live            boot the ISO (BIOS), graphical window
+#   arctic-qemu live-uefi       boot the ISO through OVMF (UEFI)
+#   arctic-qemu install         boot the ISO with a blank 20G disk attached,
+#                               so you can install onto it
+#   arctic-qemu boot            boot that disk, after installing to it
+#   arctic-qemu serial          boot the ISO with output on this terminal
+#   arctic-qemu wipe            delete the test disk and UEFI variables
+#
+# The disk and the UEFI variable store live in the build tree, not in $HOME.
+# shellcheck shell=sh
+
+set -u
+
+B=${ARCTIC_BUILD:-/home/apiwo/arctic-build}
+DISK=$B/qemu/arctic-test.qcow2
+VARS=$B/qemu/OVMF_VARS.fd
+MEM=${ARCTIC_QEMU_MEM:-4096}
+CPUS=${ARCTIC_QEMU_CPUS:-4}
+
+OVMF_CODE=""
+for f in /usr/share/edk2-ovmf/OVMF_CODE.fd /usr/share/edk2/x64/OVMF_CODE.4m.fd \
+         /usr/share/OVMF/OVMF_CODE.fd /usr/share/qemu/OVMF_CODE.fd; do
+	[ -f "$f" ] && { OVMF_CODE=$f; break; }
+done
+OVMF_VARS_SRC=$(printf '%s' "$OVMF_CODE" | sed 's/CODE/VARS/')
+
+ISO=${ARCTIC_ISO:-$(ls -t "$B"/iso/Arctic-minimal-*.iso 2>/dev/null | head -1)}
+[ -n "$ISO" ] && [ -f "$ISO" ] || {
+	echo "arctic-qemu: no ISO found. Build one first:" >&2
+	echo "  build/arctic-sandbox iso/mkiso minimal" >&2
+	exit 1
+}
+
+KVM=""
+[ -w /dev/kvm ] && KVM="-enable-kvm -cpu host"
+
+mkdir -p "$B/qemu"
+
+need_disk() {
+	[ -f "$DISK" ] && return 0
+	echo ":: creating a 20G test disk at $DISK"
+	qemu-img create -f qcow2 "$DISK" 20G >/dev/null
+}
+
+need_vars() {
+	[ -f "$VARS" ] && return 0
+	[ -f "$OVMF_VARS_SRC" ] || { echo "arctic-qemu: no OVMF vars template" >&2; exit 1; }
+	cp "$OVMF_VARS_SRC" "$VARS"
+}
+
+# shellcheck disable=SC2086
+case "${1:-live}" in
+live)
+	echo ":: booting $(basename "$ISO") (BIOS)"
+	exec qemu-system-x86_64 $KVM -m "$MEM" -smp "$CPUS" \
+		-cdrom "$ISO" -boot d -no-reboot
+	;;
+
+live-uefi)
+	need_vars
+	echo ":: booting $(basename "$ISO") (UEFI)"
+	exec qemu-system-x86_64 $KVM -m "$MEM" -smp "$CPUS" \
+		-drive if=pflash,format=raw,readonly=on,file="$OVMF_CODE" \
+		-drive if=pflash,format=raw,file="$VARS" \
+		-cdrom "$ISO" -no-reboot
+	;;
+
+install)
+	need_disk; need_vars
+	cat <<EOF
+
+:: booting the installer with a blank disk attached (UEFI)
+
+   Inside the VM, the disk is /dev/vda. Partition, mount and install:
+
+     # an EFI partition and a root partition
+     fdisk /dev/vda
+       g          new GPT
+       n  1  <enter>  +512M   then  t 1  and type 1  (EFI System)
+       n  2  <enter>  <enter>
+       w
+
+     mkfs.vfat -F32 /dev/vda1
+     mkfs.ext4 /dev/vda2
+
+     mount /dev/vda2 /mnt
+     arctic-strap /mnt
+
+     mkdir -p /mnt/boot
+     mount /dev/vda1 /mnt/boot
+     arctic-strap boot /mnt/boot      # choose EFI
+
+     poweroff
+
+   Then boot what you installed:   arctic-qemu boot
+
+EOF
+	exec qemu-system-x86_64 $KVM -m "$MEM" -smp "$CPUS" \
+		-drive if=pflash,format=raw,readonly=on,file="$OVMF_CODE" \
+		-drive if=pflash,format=raw,file="$VARS" \
+		-drive file="$DISK",if=virtio,format=qcow2 \
+		-cdrom "$ISO" -boot d -no-reboot
+	;;
+
+boot)
+	[ -f "$DISK" ] || { echo "no test disk yet - run: arctic-qemu install" >&2; exit 1; }
+	need_vars
+	echo ":: booting the installed system from $DISK"
+	exec qemu-system-x86_64 $KVM -m "$MEM" -smp "$CPUS" \
+		-drive if=pflash,format=raw,readonly=on,file="$OVMF_CODE" \
+		-drive if=pflash,format=raw,file="$VARS" \
+		-drive file="$DISK",if=virtio,format=qcow2 \
+		-no-reboot
+	;;
+
+serial)
+	echo ":: booting on this terminal - log in as root, then 'poweroff'"
+	echo "   (ctrl-a x also kills QEMU)"
+	exec qemu-system-x86_64 $KVM -m "$MEM" -smp "$CPUS" \
+		-cdrom "$ISO" -boot d -no-reboot \
+		-nographic -serial mon:stdio -display none
+	;;
+
+wipe)
+	rm -f "$DISK" "$VARS"
+	echo "test disk and UEFI variables removed"
+	;;
+
+*)
+	sed -n '2,14p' "$0" | sed 's/^# \?//'
+	exit 1 ;;
+esac
