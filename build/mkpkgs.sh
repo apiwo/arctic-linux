@@ -251,6 +251,47 @@ emit "$pd" arctic-base 1.0.0 main \
 	"Arctic base configuration, init scripts and branding" "BSD-2-Clause" \
 	"https://github.com/apiwo/arctic-linux" "busybox toybox zsh doas alpm libxcrypt"
 
+# ------------------------------------------ the GNU pieces the NVIDIA blob needs
+step "packaging gcc-libs (libstdc++ and libgcc_s, for the NVIDIA driver)"
+pd=$PKGDIRS/gcc-libs; rm -rf "$pd"; mkdir -p "$pd/usr/lib"
+gl=0
+for f in "$R"/usr/lib/libstdc++.so.6* "$R"/usr/lib/libgcc_s.so.1; do
+	[ -e "$f" ] || continue
+	cp -a "$f" "$pd/usr/lib/" && gl=$((gl+1))
+done
+for f in "$pd"/usr/lib/libstdc++.so.6.* "$pd"/usr/lib/libgcc_s.so.1; do
+	[ -f "$f" ] && strip --strip-unneeded "$f" 2>/dev/null || :
+done
+if [ "$gl" -gt 0 ]; then
+	emit "$pd" gcc-libs 15.3.0 main \
+		"libstdc++ and libgcc_s runtime, required by the NVIDIA driver" \
+		"GPL-3.0-or-later WITH GCC-exception-3.1" "https://gcc.gnu.org/" "glibc"
+else bad "gcc-libs (not built yet)"; fi
+
+step "packaging gmake"
+pd=$PKGDIRS/gmake; rm -rf "$pd"; mkdir -p "$pd/usr/bin"
+if [ -x "$R/usr/bin/gmake" ]; then
+	cp -a "$R/usr/bin/gmake" "$pd/usr/bin/gmake"
+	# Deliberately not installed as /usr/bin/make: bmake owns that name.
+	emit "$pd" gmake 4.4.1 main \
+		"GNU make as gmake, for kernel modules; /usr/bin/make is still bmake" \
+		"GPL-3.0-or-later" "https://www.gnu.org/software/make/" "glibc"
+else bad "gmake (not built yet)"; fi
+
+step "packaging libglvnd"
+pd=$PKGDIRS/libglvnd; rm -rf "$pd"; mkdir -p "$pd/usr/lib"
+gv=0
+for f in "$R"/usr/lib/libGLdispatch.so* "$R"/usr/lib/libEGL.so* \
+         "$R"/usr/lib/libGLESv2.so* "$R"/usr/lib/libOpenGL.so*; do
+	[ -e "$f" ] || continue
+	cp -a "$f" "$pd/usr/lib/" && gv=$((gv+1))
+done
+if [ "$gv" -gt 0 ]; then
+	emit "$pd" libglvnd 1.7.0 main \
+		"GL vendor dispatch, so mesa and NVIDIA can both provide GL" "MIT" \
+		"https://gitlab.freedesktop.org/glvnd/libglvnd" "glibc"
+else bad "libglvnd (not built yet)"; fi
+
 # ------------------------------------------------------- data-only packages
 step "packaging tzdata"
 pd=$PKGDIRS/tzdata; rm -rf "$pd"; mkdir -p "$pd/usr/share/zoneinfo" "$pd/etc"

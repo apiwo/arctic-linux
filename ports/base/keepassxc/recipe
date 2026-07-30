@@ -3,18 +3,18 @@
 # unless the package needs something the template cannot express - in which case
 # drop a `recipe.local` beside it and it will be preserved.
 name=keepassxc
-version=2.8.0
+version=2.7.12
 release=1
 desc="Password manager"
 url="https://keepassxc.org/"
 license="GPL-3.0-only"
 depend="qt6-base qt6-svg libargon2 botan libxcb"
 makedepend="cmake ninja"
-source="https://github.com/keepassxreboot/keepassxc/releases/download/2.8.0/keepassxc-2.8.0-src.tar.xz"
+source="https://github.com/keepassxreboot/keepassxc/releases/download/2.7.12/keepassxc-2.7.12-src.tar.xz"
 sha256="SKIP"
 
 build() {
-	cmake -S "keepassxc-2.8.0-src" -B build -G Ninja \
+	cmake -S "keepassxc-2.7.12-src" -B build -G Ninja \
 		-DCMAKE_INSTALL_PREFIX=/usr \
 		-DCMAKE_INSTALL_LIBDIR=lib \
 		-DCMAKE_BUILD_TYPE=Release \

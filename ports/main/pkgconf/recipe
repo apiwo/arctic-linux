@@ -3,18 +3,18 @@
 # unless the package needs something the template cannot express - in which case
 # drop a `recipe.local` beside it and it will be preserved.
 name=pkgconf
-version=2.6.1
+version=3.0.4
 release=1
 desc="Build flag helper, replacing pkg-config"
 url="https://github.com/pkgconf/pkgconf"
 license="ISC"
 depend="glibc"
 makedepend="meson ninja"
-source="https://distfiles.ariadne.space/pkgconf/pkgconf-2.6.1.tar.xz"
+source="https://distfiles.ariadne.space/pkgconf/pkgconf-3.0.4.tar.xz"
 sha256="SKIP"
 
 build() {
-	cd "pkgconf-2.6.1"
+	cd "pkgconf-3.0.4"
 	meson setup build \
 		--prefix=/usr \
 		--libdir=/usr/lib \
@@ -27,6 +27,6 @@ build() {
 }
 
 package() {
-	cd "pkgconf-2.6.1"
+	cd "pkgconf-3.0.4"
 	DESTDIR="$pkgdir" ninja -C build install
 }

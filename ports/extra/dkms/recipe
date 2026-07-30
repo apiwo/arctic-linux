@@ -3,22 +3,22 @@
 # unless the package needs something the template cannot express - in which case
 # drop a `recipe.local` beside it and it will be preserved.
 name=dkms
-version=3.2.4
+version=3.4.2
 release=1
 desc="Rebuild kernel modules when the kernel changes"
 url="https://github.com/dell/dkms"
 license="GPL-2.0-or-later"
 depend="glibc kmod bmake"
 makedepend=""
-source="https://github.com/dell/dkms/archive/refs/tags/v3.2.4.tar.gz"
+source="https://github.com/dell/dkms/archive/refs/tags/v3.4.2.tar.gz"
 sha256="SKIP"
 
 build() {
-	cd "dkms-3.2.4"
+	cd "dkms-3.4.2"
 	make -j"$JOBS" PREFIX=/usr
 }
 
 package() {
-	cd "dkms-3.2.4"
+	cd "dkms-3.4.2"
 	make PREFIX=/usr DESTDIR="$pkgdir" install
 }

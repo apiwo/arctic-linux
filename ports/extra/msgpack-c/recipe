@@ -3,18 +3,18 @@
 # unless the package needs something the template cannot express - in which case
 # drop a `recipe.local` beside it and it will be preserved.
 name=msgpack-c
-version=6.1.1
+version=2.1.4
 release=1
 desc="MessagePack for C"
 url="https://msgpack.org/"
 license="BSL-1.0"
 depend="glibc"
 makedepend="cmake ninja"
-source="https://github.com/msgpack/msgpack-c/releases/download/c-6.1.1/msgpack-c-6.1.1.tar.gz"
+source="https://github.com/msgpack/msgpack-c/releases/download/c-2.1.4/msgpack-c-2.1.4.tar.gz"
 sha256="SKIP"
 
 build() {
-	cmake -S "msgpack-c-6.1.1" -B build -G Ninja \
+	cmake -S "msgpack-c-2.1.4" -B build -G Ninja \
 		-DCMAKE_INSTALL_PREFIX=/usr \
 		-DCMAKE_INSTALL_LIBDIR=lib \
 		-DCMAKE_BUILD_TYPE=Release \

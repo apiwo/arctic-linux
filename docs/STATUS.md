@@ -43,6 +43,48 @@ Written at the end of the first build so nothing here is overstated.
   `Arctic-lts-kernel` and `Arctic-hardened-kernel` recipes exist; only
   `Arctic-base-kernel` has been compiled.
 
+## NVIDIA proprietary driver
+
+Verified, not assumed. `readelf -d` on a real installed driver shows the whole
+stack needs only glibc, X/wayland libs, and two GNU runtime libraries:
+
+    libnvidia-api.so.1     NEEDED libstdc++.so.6
+    libnvidia-rtcore.so    NEEDED libgcc_s.so.1
+
+Arctic now builds and ships those two (package `gcc-libs`, runtime only - not
+the compiler), GNU make as `gmake` for kbuild, and `libglvnd` so NVIDIA GL and
+mesa can coexist. The proof:
+
+    $ ld-linux --library-path <arctic>/usr/lib --list libnvidia-api.so.1
+    libnvidia-api.so.1               missing=0   resolved-from-arctic=6
+    libnvidia-rtcore.so.610.43.03    missing=0   resolved-from-arctic=6
+    libnvidia-glcore.so.610.43.03    missing=0   resolved-from-arctic=6
+    nvidia-smi                       missing=0   resolved-from-arctic=6
+
+Every dependency of the real driver resolves against Arctic's libraries with
+nothing missing, and `libstdc++`/`libgcc_s` come from Arctic's own build.
+`/usr/bin/make` is still bmake; the userland is unchanged.
+
+## Builds are sandboxed now
+
+`build/arctic-sandbox` runs every build under bubblewrap with the host
+bind-mounted read-only. `arctic-sandbox --check` proves it, including that
+writing to `/usr/lib/libc.so.6` is refused. `build-rootfs.sh`, `build-kernel.sh`
+and `mkpkgs.sh` refuse to start unless `ARCTIC_SANDBOX=1`. This is not optional
+politeness - see bug 10.
+
+## Source URL health
+
+`build/check-sources.sh` verifies every manifest URL in parallel;
+`build/fix-versions.py` resolves the failures against upstream tags and
+directory listings. Currently **415 of 479 resolve**, up from 359. The remaining
+64 are versions I could not determine automatically and are listed in
+`arctic-build/logs/sources/bad`.
+
+The resolver refuses to accept a fix that drops a major version - a truncated
+listing had it downgrade chromium to 101 and blender to 2.82 before that guard
+existed. Package versions in `base` are best-effort until each one is built.
+
 ## Bugs found and fixed while building
 
 Kept because each one is a trap worth remembering.
@@ -84,10 +126,23 @@ Kept because each one is a trap worth remembering.
    does not know `GNU_LIBC_VERSION`. Arctic ships its own POSIX `ldd` that asks
    the dynamic loader, and records the libc version in `/etc/arctic-release`.
 
-9. **`rm -rf` into a live bind mount.** A chroot session left `/proc`, `/sys`
+9. **`mkiso` seeded the package index after the squashfs was already packed**,
+   so `/var/lib/alpm/sync` was empty on the booted image and `alpm info` could
+   not find anything until you ran `alpm fetch`. Order matters: anything writing
+   into the squashfs source tree has to happen before `mksquashfs`.
+
+10. **`rm -rf` into a live bind mount.** A chroot session left `/proc`, `/sys`
    and `/dev` bound under the ISO work tree; the next build's `rm -rf` walked
    into the host's `/dev` and emptied it. mkiso now refuses to delete a work
    tree with anything mounted under it.
+
+11. **A `make install` without `DESTDIR` replaced the host's glibc.** Arctic's
+    glibc is configured `slibdir=/usr/lib`, so it installed 2.44 over the host's
+    2.43 and every dynamically linked binary on the machine died with
+    `undefined symbol: __pointer_chk_guard`. The login shell included, so there
+    was no way to run a repair from inside. This is why builds are sandboxed
+    now, and why a static busybox is worth keeping around - it was the only
+    thing that still ran.
 
 ## Known rough edges
 

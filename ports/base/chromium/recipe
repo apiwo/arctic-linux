@@ -3,22 +3,22 @@
 # unless the package needs something the template cannot express - in which case
 # drop a `recipe.local` beside it and it will be preserved.
 name=chromium
-version=146.0.7500.60
+version=140.0.7339.80
 release=1
 desc="The Chromium browser"
 url="https://www.chromium.org/"
 license="BSD-3-Clause"
 depend="glibc gtk4 mesa nss nspr alsa-lib pipewire libva ffmpeg icu libwebp opus"
 makedepend="python nodejs clang lld ninja"
-source="https://commondatastorage.googleapis.com/chromium-browser-official/chromium-146.0.7500.60.tar.xz"
+source="https://commondatastorage.googleapis.com/chromium-browser-official/chromium-140.0.7339.80.tar.xz"
 sha256="SKIP"
 
 build() {
-	cd "chromium-146.0.7500.60"
+	cd "chromium-140.0.7339.80"
 	make -j"$JOBS" PREFIX=/usr
 }
 
 package() {
-	cd "chromium-146.0.7500.60"
+	cd "chromium-140.0.7339.80"
 	make PREFIX=/usr DESTDIR="$pkgdir" install
 }

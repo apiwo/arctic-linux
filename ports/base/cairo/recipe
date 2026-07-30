@@ -3,18 +3,18 @@
 # unless the package needs something the template cannot express - in which case
 # drop a `recipe.local` beside it and it will be preserved.
 name=cairo
-version=1.20.0
+version=1.18.4
 release=1
 desc="2D graphics library"
 url="https://cairographics.org/"
 license="LGPL-2.1-only MPL-1.1"
 depend="glibc pixman freetype fontconfig libpng glib"
 makedepend="meson ninja"
-source="https://cairographics.org/releases/cairo-1.20.0.tar.xz"
+source="https://cairographics.org/releases/cairo-1.18.4.tar.xz"
 sha256="SKIP"
 
 build() {
-	cd "cairo-1.20.0"
+	cd "cairo-1.18.4"
 	meson setup build \
 		--prefix=/usr \
 		--libdir=/usr/lib \
@@ -27,6 +27,6 @@ build() {
 }
 
 package() {
-	cd "cairo-1.20.0"
+	cd "cairo-1.18.4"
 	DESTDIR="$pkgdir" ninja -C build install
 }

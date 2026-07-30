@@ -3,18 +3,18 @@
 # unless the package needs something the template cannot express - in which case
 # drop a `recipe.local` beside it and it will be preserved.
 name=rofi
-version=1.7.10
+version=2.0.0
 release=1
 desc="Window switcher and application launcher"
 url="https://github.com/davatorium/rofi"
 license="MIT"
 depend="libx11 pango cairo librsvg libxkbcommon"
 makedepend="meson ninja"
-source="https://github.com/davatorium/rofi/releases/download/1.7.10/rofi-1.7.10.tar.gz"
+source="https://github.com/davatorium/rofi/releases/download/2.0.0/rofi-2.0.0.tar.gz"
 sha256="SKIP"
 
 build() {
-	cd "rofi-1.7.10"
+	cd "rofi-2.0.0"
 	meson setup build \
 		--prefix=/usr \
 		--libdir=/usr/lib \
@@ -27,6 +27,6 @@ build() {
 }
 
 package() {
-	cd "rofi-1.7.10"
+	cd "rofi-2.0.0"
 	DESTDIR="$pkgdir" ninja -C build install
 }

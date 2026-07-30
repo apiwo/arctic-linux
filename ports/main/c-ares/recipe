@@ -3,18 +3,18 @@
 # unless the package needs something the template cannot express - in which case
 # drop a `recipe.local` beside it and it will be preserved.
 name=c-ares
-version=1.36.0
+version=1.34.8
 release=1
 desc="Asynchronous DNS resolver"
 url="https://c-ares.org/"
 license="MIT"
 depend="glibc"
 makedepend="cmake ninja"
-source="https://github.com/c-ares/c-ares/releases/download/v1.36.0/c-ares-1.36.0.tar.gz"
+source="https://github.com/c-ares/c-ares/releases/download/v1.34.8/c-ares-1.34.8.tar.gz"
 sha256="SKIP"
 
 build() {
-	cmake -S "c-ares-1.36.0" -B build -G Ninja \
+	cmake -S "c-ares-1.34.8" -B build -G Ninja \
 		-DCMAKE_INSTALL_PREFIX=/usr \
 		-DCMAKE_INSTALL_LIBDIR=lib \
 		-DCMAKE_BUILD_TYPE=Release \

@@ -3,18 +3,18 @@
 # unless the package needs something the template cannot express - in which case
 # drop a `recipe.local` beside it and it will be preserved.
 name=libxi
-version=1.9
+version=1.8.3
 release=1
 desc="X Input extension library"
 url="https://x.org/"
 license="MIT"
 depend="glibc libx11 libxext"
 makedepend=""
-source="https://x.org/pub/individual/lib/libXi-1.9.tar.xz"
+source="https://x.org/pub/individual/lib/libXi-1.8.3.tar.xz"
 sha256="SKIP"
 
 build() {
-	cd "libXi-1.9"
+	cd "libXi-1.8.3"
 	./configure \
 		--prefix=/usr \
 		--sysconfdir=/etc \
@@ -26,6 +26,6 @@ build() {
 }
 
 package() {
-	cd "libXi-1.9"
+	cd "libXi-1.8.3"
 	make DESTDIR="$pkgdir" install
 }

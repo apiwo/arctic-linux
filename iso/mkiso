@@ -186,6 +186,22 @@ EOF
 	done
 fi
 
+# Pre-seed the sync database so 'alpm search' and 'alpm info' work on a fresh
+# boot without running 'alpm fetch' first. This has to happen here, before
+# mksquashfs packs $S - doing it later writes into a tree that has already been
+# compressed, which is exactly how it was broken.
+if [ -d "$B/repo" ]; then
+	mkdir -p "$S/var/lib/alpm/sync"
+	for r in main kernels source; do
+		idx="$B/repo/$r/x86_64/INDEX"
+		[ -f "$idx" ] || continue
+		grep -v '^#' "$idx" >"$S/var/lib/alpm/sync/$r.idx" 2>/dev/null || :
+		printf 'file:///run/arctic/medium/arctic/repo/%s\n' "$r" \
+			>"$S/var/lib/alpm/sync/$r.url"
+	done
+	ok "sync database seeded ($(cat "$S"/var/lib/alpm/sync/*.idx 2>/dev/null | wc -l) packages)"
+fi
+
 # The live image mounts itself, so its fstab only describes the pseudo mounts.
 cat >"$S/etc/fstab" <<'EOF'
 # Arctic Linux live image
@@ -516,15 +532,6 @@ if [ -d "$B/repo" ]; then
 	for r in main kernels source; do
 		[ -d "$B/repo/$r" ] || continue
 		cp -a "$B/repo/$r" "$WORK/iso/arctic/repo/"
-	done
-	# Pre-seed the sync database so 'alpm search' works on a fresh boot.
-	mkdir -p "$S/var/lib/alpm/sync"
-	for r in main kernels source; do
-		idx="$B/repo/$r/x86_64/INDEX"
-		[ -f "$idx" ] || continue
-		grep -v '^#' "$idx" >"$S/var/lib/alpm/sync/$r.idx" 2>/dev/null || :
-		printf 'file:///run/arctic/medium/arctic/repo/%s\n' "$r" \
-			>"$S/var/lib/alpm/sync/$r.url"
 	done
 	ok "repositories on the medium: $(du -sh "$WORK/iso/arctic/repo" | cut -f1)"
 else

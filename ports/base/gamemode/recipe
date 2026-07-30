@@ -3,18 +3,18 @@
 # unless the package needs something the template cannot express - in which case
 # drop a `recipe.local` beside it and it will be preserved.
 name=gamemode
-version=1.9
+version=1.8
 release=1
 desc="Optimise the system while a game runs"
 url="https://github.com/FeralInteractive/gamemode"
 license="BSD-3-Clause"
 depend="glibc dbus libinih"
 makedepend="meson ninja"
-source="https://github.com/FeralInteractive/gamemode/archive/refs/tags/1.9.tar.gz"
+source="https://github.com/FeralInteractive/gamemode/archive/refs/tags/1.8.tar.gz"
 sha256="SKIP"
 
 build() {
-	cd "1.9"
+	cd "1.8"
 	meson setup build \
 		--prefix=/usr \
 		--libdir=/usr/lib \
@@ -27,6 +27,6 @@ build() {
 }
 
 package() {
-	cd "1.9"
+	cd "1.8"
 	DESTDIR="$pkgdir" ninja -C build install
 }

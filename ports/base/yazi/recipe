@@ -3,18 +3,18 @@
 # unless the package needs something the template cannot express - in which case
 # drop a `recipe.local` beside it and it will be preserved.
 name=yazi
-version=26.1.0
+version=26.5.6
 release=1
 desc="Terminal file manager"
 url="https://yazi-rs.github.io/"
 license="MIT"
 depend="glibc ffmpeg libwebp"
 makedepend="rust cargo"
-source="https://github.com/sxyazi/yazi/archive/refs/tags/v26.1.0.tar.gz"
+source="https://github.com/sxyazi/yazi/archive/refs/tags/v26.5.6.tar.gz"
 sha256="SKIP"
 
 build() {
-	cd "yazi-26.1.0"
+	cd "yazi-26.5.6"
 	# Arctic builds Rust offline against a vendored tree so packages are
 	# reproducible and the build host needs no network.
 	export RUSTFLAGS="-C linker=clang -C link-arg=-fuse-ld=lld"
@@ -22,7 +22,7 @@ build() {
 }
 
 package() {
-	cd "yazi-26.1.0"
+	cd "yazi-26.5.6"
 	install -Dm755 "target/release/yazi" "$pkgdir/usr/bin/yazi"
 	for d in README.md README LICENSE; do
 		[ -f "$d" ] && install -Dm644 "$d" "$pkgdir/usr/share/doc/yazi/$d"

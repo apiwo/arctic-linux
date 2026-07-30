@@ -3,18 +3,18 @@
 # unless the package needs something the template cannot express - in which case
 # drop a `recipe.local` beside it and it will be preserved.
 name=ninja
-version=1.14.0
+version=1.13.2
 release=1
 desc="Small, fast build system"
 url="https://ninja-build.org/"
 license="Apache-2.0"
 depend="glibc"
 makedepend="cmake python"
-source="https://github.com/ninja-build/ninja/archive/refs/tags/v1.14.0.tar.gz"
+source="https://github.com/ninja-build/ninja/archive/refs/tags/v1.13.2.tar.gz"
 sha256="SKIP"
 
 build() {
-	cmake -S "ninja-1.14.0" -B build -G Ninja \
+	cmake -S "ninja-1.13.2" -B build -G Ninja \
 		-DCMAKE_INSTALL_PREFIX=/usr \
 		-DCMAKE_INSTALL_LIBDIR=lib \
 		-DCMAKE_BUILD_TYPE=Release \

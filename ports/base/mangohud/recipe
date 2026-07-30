@@ -3,18 +3,18 @@
 # unless the package needs something the template cannot express - in which case
 # drop a `recipe.local` beside it and it will be preserved.
 name=mangohud
-version=0.9.0
+version=0.8.4
 release=1
 desc="Vulkan and OpenGL overlay"
 url="https://github.com/flightlessmango/MangoHud"
 license="MIT"
 depend="vulkan-loader mesa dbus"
 makedepend="meson ninja"
-source="https://github.com/flightlessmango/MangoHud/releases/download/v0.9.0/MangoHud-v0.9.0-Source.tar.xz"
+source="https://github.com/flightlessmango/MangoHud/releases/download/v0.8.4/MangoHud-v0.8.4-Source.tar.xz"
 sha256="SKIP"
 
 build() {
-	cd "MangoHud-v0.9.0-Source"
+	cd "MangoHud-v0.8.4-Source"
 	meson setup build \
 		--prefix=/usr \
 		--libdir=/usr/lib \
@@ -27,6 +27,6 @@ build() {
 }
 
 package() {
-	cd "MangoHud-v0.9.0-Source"
+	cd "MangoHud-v0.8.4-Source"
 	DESTDIR="$pkgdir" ninja -C build install
 }

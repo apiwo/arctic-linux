@@ -3,22 +3,22 @@
 # unless the package needs something the template cannot express - in which case
 # drop a `recipe.local` beside it and it will be preserved.
 name=mdadm
-version=4.5
+version=4.4
 release=1
 desc="Software RAID administration"
 url="https://git.kernel.org/pub/scm/utils/mdadm/mdadm.git"
 license="GPL-2.0-or-later"
 depend="glibc util-linux-libs"
 makedepend=""
-source="https://kernel.org/pub/linux/utils/raid/mdadm/mdadm-4.5.tar.xz"
+source="https://kernel.org/pub/linux/utils/raid/mdadm/mdadm-4.4.tar.xz"
 sha256="SKIP"
 
 build() {
-	cd "mdadm-4.5"
+	cd "mdadm-4.4"
 	make -j"$JOBS" PREFIX=/usr
 }
 
 package() {
-	cd "mdadm-4.5"
+	cd "mdadm-4.4"
 	make PREFIX=/usr DESTDIR="$pkgdir" install
 }

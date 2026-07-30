@@ -3,22 +3,22 @@
 # unless the package needs something the template cannot express - in which case
 # drop a `recipe.local` beside it and it will be preserved.
 name=nvidia-settings
-version=590.48
+version=595.84
 release=1
 desc="NVIDIA control panel"
 url="https://github.com/NVIDIA/nvidia-settings"
 license="GPL-2.0-only"
 depend="nvidia-utils gcc-libs gtk3 libjansson"
 makedepend=""
-source="https://github.com/NVIDIA/nvidia-settings/archive/refs/tags/590.48.tar.gz"
+source="https://github.com/NVIDIA/nvidia-settings/archive/refs/tags/595.84.tar.gz"
 sha256="SKIP"
 
 build() {
-	cd "590.48"
+	cd "595.84"
 	make -j"$JOBS" PREFIX=/usr
 }
 
 package() {
-	cd "590.48"
+	cd "595.84"
 	make PREFIX=/usr DESTDIR="$pkgdir" install
 }

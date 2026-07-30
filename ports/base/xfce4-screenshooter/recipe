@@ -3,18 +3,18 @@
 # unless the package needs something the template cannot express - in which case
 # drop a `recipe.local` beside it and it will be preserved.
 name=xfce4-screenshooter
-version=1.11.2
+version=1.11.1
 release=1
 desc="Xfce screenshot tool"
 url="https://xfce.org/"
 license="GPL-2.0-or-later"
 depend="gtk3 libxfce4ui"
 makedepend=""
-source="https://archive.xfce.org/src/apps/xfce4-screenshooter/1.11/xfce4-screenshooter-1.11.2.tar.bz2"
+source="https://archive.xfce.org/src/apps/xfce4-screenshooter/1.11/xfce4-screenshooter-1.11.1.tar.bz2"
 sha256="SKIP"
 
 build() {
-	cd "xfce4-screenshooter-1.11.2"
+	cd "xfce4-screenshooter-1.11.1"
 	./configure \
 		--prefix=/usr \
 		--sysconfdir=/etc \
@@ -26,6 +26,6 @@ build() {
 }
 
 package() {
-	cd "xfce4-screenshooter-1.11.2"
+	cd "xfce4-screenshooter-1.11.1"
 	make DESTDIR="$pkgdir" install
 }

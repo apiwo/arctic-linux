@@ -3,18 +3,18 @@
 # unless the package needs something the template cannot express - in which case
 # drop a `recipe.local` beside it and it will be preserved.
 name=btop
-version=1.5.0
+version=1.4.7
 release=1
 desc="Resource monitor with a nicer view"
 url="https://github.com/aristocratos/btop"
 license="Apache-2.0"
 depend="glibc llvm"
 makedepend="cmake ninja"
-source="https://github.com/aristocratos/btop/archive/refs/tags/v1.5.0.tar.gz"
+source="https://github.com/aristocratos/btop/archive/refs/tags/v1.4.7.tar.gz"
 sha256="SKIP"
 
 build() {
-	cmake -S "btop-1.5.0" -B build -G Ninja \
+	cmake -S "btop-1.4.7" -B build -G Ninja \
 		-DCMAKE_INSTALL_PREFIX=/usr \
 		-DCMAKE_INSTALL_LIBDIR=lib \
 		-DCMAKE_BUILD_TYPE=Release \

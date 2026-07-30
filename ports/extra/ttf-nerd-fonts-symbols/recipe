@@ -3,14 +3,14 @@
 # unless the package needs something the template cannot express - in which case
 # drop a `recipe.local` beside it and it will be preserved.
 name=ttf-nerd-fonts-symbols
-version=3.5.0
+version=3.4.0
 release=1
 desc="Nerd Font icon glyphs"
 url="https://www.nerdfonts.com/"
 license="MIT"
 depend=""
 makedepend=""
-source="https://github.com/ryanoasis/nerd-fonts/releases/download/v3.5.0/NerdFontsSymbolsOnly.tar.xz"
+source="https://github.com/ryanoasis/nerd-fonts/releases/download/v3.4.0/NerdFontsSymbolsOnly.tar.xz"
 sha256="SKIP"
 
 build() {

@@ -3,14 +3,14 @@
 # unless the package needs something the template cannot express - in which case
 # drop a `recipe.local` beside it and it will be preserved.
 name=steam
-version=1.0.0.86
+version=1.0.0.87
 release=1
 desc="The Steam client"
 url="https://store.steampowered.com/"
 license="Valve-proprietary"
 depend="glibc mesa libx11 alsa-lib glibc-32 mesa-32 libx11-32"
 makedepend=""
-source="https://repo.steampowered.com/steam/archive/stable/steam_1.0.0.86.tar.gz"
+source="https://repo.steampowered.com/steam/archive/stable/steam_1.0.0.87.tar.gz"
 sha256="SKIP"
 
 # Repackaged upstream build. Arctic prefers to compile from source, but a few
@@ -18,7 +18,7 @@ sha256="SKIP"
 options="!strip"
 
 package() {
-	cd "steam_1.0.0.86"
+	cd "steam_1.0.0.87"
 	install -d "$pkgdir/opt/steam"
 	cp -a . "$pkgdir/opt/steam/"
 	install -d "$pkgdir/usr/bin"

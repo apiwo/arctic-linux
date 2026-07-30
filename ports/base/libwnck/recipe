@@ -3,18 +3,18 @@
 # unless the package needs something the template cannot express - in which case
 # drop a `recipe.local` beside it and it will be preserved.
 name=libwnck
-version=43.4
+version=43.3
 release=1
 desc="Window navigator construction kit"
 url="https://gitlab.gnome.org/GNOME/libwnck"
 license="LGPL-2.0-or-later"
 depend="gtk3 libx11 libxres"
 makedepend="meson ninja"
-source="https://download.gnome.org/sources/libwnck/43/libwnck-43.4.tar.xz"
+source="https://download.gnome.org/sources/libwnck/43/libwnck-43.3.tar.xz"
 sha256="SKIP"
 
 build() {
-	cd "libwnck-43.4"
+	cd "libwnck-43.3"
 	meson setup build \
 		--prefix=/usr \
 		--libdir=/usr/lib \
@@ -27,6 +27,6 @@ build() {
 }
 
 package() {
-	cd "libwnck-43.4"
+	cd "libwnck-43.3"
 	DESTDIR="$pkgdir" ninja -C build install
 }

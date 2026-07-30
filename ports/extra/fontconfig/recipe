@@ -3,18 +3,18 @@
 # unless the package needs something the template cannot express - in which case
 # drop a `recipe.local` beside it and it will be preserved.
 name=fontconfig
-version=2.18.1
+version=2.16.0
 release=1
 desc="Font configuration and matching"
 url="https://www.freedesktop.org/wiki/Software/fontconfig/"
 license="MIT"
 depend="glibc freetype expat"
 makedepend="meson ninja"
-source="https://www.freedesktop.org/software/fontconfig/release/fontconfig-2.18.1.tar.xz"
+source="https://www.freedesktop.org/software/fontconfig/release/fontconfig-2.16.0.tar.xz"
 sha256="SKIP"
 
 build() {
-	cd "fontconfig-2.18.1"
+	cd "fontconfig-2.16.0"
 	meson setup build \
 		--prefix=/usr \
 		--libdir=/usr/lib \
@@ -27,6 +27,6 @@ build() {
 }
 
 package() {
-	cd "fontconfig-2.18.1"
+	cd "fontconfig-2.16.0"
 	DESTDIR="$pkgdir" ninja -C build install
 }

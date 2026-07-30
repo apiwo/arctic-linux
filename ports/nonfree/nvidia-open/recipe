@@ -3,14 +3,14 @@
 # unless the package needs something the template cannot express - in which case
 # drop a `recipe.local` beside it and it will be preserved.
 name=nvidia-open
-version=590.48
+version=595.84
 release=1
 desc="NVIDIA open kernel modules for Turing and newer"
 url="https://github.com/NVIDIA/open-gpu-kernel-modules"
 license="MIT GPL-2.0-only"
 depend="glibc"
 makedepend="linux-headers"
-source="https://github.com/NVIDIA/open-gpu-kernel-modules/archive/refs/tags/590.48.tar.gz"
+source="https://github.com/NVIDIA/open-gpu-kernel-modules/archive/refs/tags/595.84.tar.gz"
 sha256="SKIP"
 
 # Built against every installed kernel. alpm re-runs this from the package's
@@ -20,7 +20,7 @@ sha256="SKIP"
 # drive it. /usr/bin/make on Arctic is bmake, so kernel modules ask for gmake
 # explicitly.
 build() {
-	cd "590.48"
+	cd "595.84"
 	for kdir in /usr/lib/modules/*/build; do
 		[ -d "$kdir" ] || continue
 		gmake -C "$kdir" M="$PWD" modules
@@ -28,7 +28,7 @@ build() {
 }
 
 package() {
-	cd "590.48"
+	cd "595.84"
 	for kver in $(ls /usr/lib/modules); do
 		install -d "$pkgdir/usr/lib/modules/$kver/extra"
 		for ko in *.ko; do

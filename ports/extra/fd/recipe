@@ -3,18 +3,18 @@
 # unless the package needs something the template cannot express - in which case
 # drop a `recipe.local` beside it and it will be preserved.
 name=fd
-version=11.0.0
+version=10.4.2
 release=1
 desc="A simpler, faster find"
 url="https://github.com/sharkdp/fd"
 license="MIT Apache-2.0"
 depend="glibc"
 makedepend="rust cargo"
-source="https://github.com/sharkdp/fd/archive/refs/tags/v11.0.0.tar.gz"
+source="https://github.com/sharkdp/fd/archive/refs/tags/v10.4.2.tar.gz"
 sha256="SKIP"
 
 build() {
-	cd "fd-11.0.0"
+	cd "fd-10.4.2"
 	# Arctic builds Rust offline against a vendored tree so packages are
 	# reproducible and the build host needs no network.
 	export RUSTFLAGS="-C linker=clang -C link-arg=-fuse-ld=lld"
@@ -22,7 +22,7 @@ build() {
 }
 
 package() {
-	cd "fd-11.0.0"
+	cd "fd-10.4.2"
 	install -Dm755 "target/release/fd" "$pkgdir/usr/bin/fd"
 	for d in README.md README LICENSE; do
 		[ -f "$d" ] && install -Dm644 "$d" "$pkgdir/usr/share/doc/fd/$d"

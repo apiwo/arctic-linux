@@ -3,18 +3,18 @@
 # unless the package needs something the template cannot express - in which case
 # drop a `recipe.local` beside it and it will be preserved.
 name=dhcpcd
-version=10.4.0
+version=10.3.2
 release=1
 desc="DHCP client"
 url="https://roy.marples.name/projects/dhcpcd"
 license="BSD-2-Clause"
 depend="glibc"
 makedepend=""
-source="https://github.com/NetworkConfiguration/dhcpcd/releases/download/v10.4.0/dhcpcd-10.4.0.tar.xz"
+source="https://github.com/NetworkConfiguration/dhcpcd/releases/download/v10.3.2/dhcpcd-10.3.2.tar.xz"
 sha256="SKIP"
 
 build() {
-	cd "dhcpcd-10.4.0"
+	cd "dhcpcd-10.3.2"
 	./configure \
 		--prefix=/usr \
 		--sysconfdir=/etc \
@@ -26,6 +26,6 @@ build() {
 }
 
 package() {
-	cd "dhcpcd-10.4.0"
+	cd "dhcpcd-10.3.2"
 	make DESTDIR="$pkgdir" install
 }

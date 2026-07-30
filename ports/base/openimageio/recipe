@@ -3,18 +3,18 @@
 # unless the package needs something the template cannot express - in which case
 # drop a `recipe.local` beside it and it will be preserved.
 name=openimageio
-version=3.1.5
+version=3.1.15.0
 release=1
 desc="Image I/O library"
 url="https://openimageio.readthedocs.io/"
 license="Apache-2.0"
 depend="openexr libjpeg-turbo libpng libtiff boost libwebp"
 makedepend="cmake ninja"
-source="https://github.com/AcademySoftwareFoundation/OpenImageIO/archive/refs/tags/v3.1.5.tar.gz"
+source="https://github.com/AcademySoftwareFoundation/OpenImageIO/archive/refs/tags/v3.1.15.0.tar.gz"
 sha256="SKIP"
 
 build() {
-	cmake -S "openimageio-3.1.5" -B build -G Ninja \
+	cmake -S "openimageio-3.1.15.0" -B build -G Ninja \
 		-DCMAKE_INSTALL_PREFIX=/usr \
 		-DCMAKE_INSTALL_LIBDIR=lib \
 		-DCMAKE_BUILD_TYPE=Release \

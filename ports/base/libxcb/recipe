@@ -3,18 +3,18 @@
 # unless the package needs something the template cannot express - in which case
 # drop a `recipe.local` beside it and it will be preserved.
 name=libxcb
-version=1.18.0
+version=1.17.0
 release=1
 desc="X protocol C-language binding"
 url="https://x.org/"
 license="MIT"
 depend="glibc libxau libxdmcp"
 makedepend=""
-source="https://x.org/pub/individual/lib/libxcb-1.18.0.tar.xz"
+source="https://x.org/pub/individual/lib/libxcb-1.17.0.tar.xz"
 sha256="SKIP"
 
 build() {
-	cd "libxcb-1.18.0"
+	cd "libxcb-1.17.0"
 	./configure \
 		--prefix=/usr \
 		--sysconfdir=/etc \
@@ -26,6 +26,6 @@ build() {
 }
 
 package() {
-	cd "libxcb-1.18.0"
+	cd "libxcb-1.17.0"
 	make DESTDIR="$pkgdir" install
 }

@@ -3,20 +3,20 @@
 # unless the package needs something the template cannot express - in which case
 # drop a `recipe.local` beside it and it will be preserved.
 name=sof-firmware
-version=2026.01
+version=2025.12
 release=1
 desc="Sound Open Firmware, for modern Intel audio"
 url="https://github.com/thesofproject/sof-bin"
 license="BSD-3-Clause"
 depend=""
 makedepend=""
-source="https://github.com/thesofproject/sof-bin/releases/download/v2026.01/sof-bin-2026.01.tar.gz"
+source="https://github.com/thesofproject/sof-bin/releases/download/v2025.12/sof-bin-2025.12.tar.gz"
 sha256="SKIP"
 
 options="!strip"
 
 package() {
-	cd "sof-bin-2026.01"
+	cd "sof-bin-2025.12"
 	install -d "$pkgdir/usr/lib/firmware"
 	cp -a . "$pkgdir/usr/lib/firmware/"
 	find "$pkgdir/usr/lib/firmware" -name 'Makefile' -delete

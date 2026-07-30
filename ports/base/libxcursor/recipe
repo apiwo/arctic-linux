@@ -3,18 +3,18 @@
 # unless the package needs something the template cannot express - in which case
 # drop a `recipe.local` beside it and it will be preserved.
 name=libxcursor
-version=1.2.4
+version=1.2.3
 release=1
 desc="X cursor management"
 url="https://x.org/"
 license="MIT"
 depend="glibc libx11 libxrender libxfixes"
 makedepend=""
-source="https://x.org/pub/individual/lib/libXcursor-1.2.4.tar.xz"
+source="https://x.org/pub/individual/lib/libXcursor-1.2.3.tar.xz"
 sha256="SKIP"
 
 build() {
-	cd "libXcursor-1.2.4"
+	cd "libXcursor-1.2.3"
 	./configure \
 		--prefix=/usr \
 		--sysconfdir=/etc \
@@ -26,6 +26,6 @@ build() {
 }
 
 package() {
-	cd "libXcursor-1.2.4"
+	cd "libXcursor-1.2.3"
 	make DESTDIR="$pkgdir" install
 }

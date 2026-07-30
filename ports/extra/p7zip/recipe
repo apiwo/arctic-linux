@@ -3,22 +3,22 @@
 # unless the package needs something the template cannot express - in which case
 # drop a `recipe.local` beside it and it will be preserved.
 name=p7zip
-version=17.07
+version=17.06
 release=1
 desc="7-Zip for POSIX"
 url="https://github.com/p7zip-project/p7zip"
 license="LGPL-2.1-or-later"
 depend="glibc"
 makedepend=""
-source="https://github.com/p7zip-project/p7zip/archive/refs/tags/v17.07.tar.gz"
+source="https://github.com/p7zip-project/p7zip/archive/refs/tags/v17.06.tar.gz"
 sha256="SKIP"
 
 build() {
-	cd "p7zip-17.07"
+	cd "p7zip-17.06"
 	make -j"$JOBS" PREFIX=/usr
 }
 
 package() {
-	cd "p7zip-17.07"
+	cd "p7zip-17.06"
 	make PREFIX=/usr DESTDIR="$pkgdir" install
 }

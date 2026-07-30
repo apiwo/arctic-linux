@@ -3,18 +3,18 @@
 # unless the package needs something the template cannot express - in which case
 # drop a `recipe.local` beside it and it will be preserved.
 name=wget
-version=1.26.0
+version=1.25.0
 release=1
 desc="Network downloader"
 url="https://www.gnu.org/software/wget/"
 license="GPL-3.0-or-later"
 depend="glibc libressl zlib pcre2 libpsl"
 makedepend=""
-source="https://ftp.gnu.org/gnu/wget/wget-1.26.0.tar.gz"
+source="https://ftp.gnu.org/gnu/wget/wget-1.25.0.tar.gz"
 sha256="SKIP"
 
 build() {
-	cd "wget-1.26.0"
+	cd "wget-1.25.0"
 	./configure \
 		--prefix=/usr \
 		--sysconfdir=/etc \
@@ -26,6 +26,6 @@ build() {
 }
 
 package() {
-	cd "wget-1.26.0"
+	cd "wget-1.25.0"
 	make DESTDIR="$pkgdir" install
 }
