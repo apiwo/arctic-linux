@@ -9,14 +9,21 @@
 #   arctic-qemu serial          boot the ISO with output on this terminal
 #   arctic-qemu wipe            delete the test disk and UEFI variables
 #
-# The disk and the UEFI variable store live in the build tree, not in $HOME.
+# The test disk and UEFI variables live under ~/.cache/arctic-qemu, so this works
+# as an ordinary user even when the build tree belongs to root. Override with
+# ARCTIC_QEMU_STATE.
 # shellcheck shell=sh
 
 set -u
 
 B=${ARCTIC_BUILD:-/home/apiwo/arctic-build}
-DISK=$B/qemu/arctic-test.qcow2
-VARS=$B/qemu/OVMF_VARS.fd
+
+# State goes somewhere the invoking user can write. The build tree is owned by
+# whoever ran the build (often root), and /tmp collides between users - both of
+# which turn into a confusing "Permission denied" at the wrong moment.
+STATE=${ARCTIC_QEMU_STATE:-${XDG_CACHE_HOME:-$HOME/.cache}/arctic-qemu}
+DISK=$STATE/arctic-test.qcow2
+VARS=$STATE/OVMF_VARS.fd
 MEM=${ARCTIC_QEMU_MEM:-4096}
 CPUS=${ARCTIC_QEMU_CPUS:-4}
 
@@ -37,7 +44,11 @@ ISO=${ARCTIC_ISO:-$(ls -t "$B"/iso/Arctic-minimal-*.iso 2>/dev/null | head -1)}
 KVM=""
 [ -w /dev/kvm ] && KVM="-enable-kvm -cpu host"
 
-mkdir -p "$B/qemu"
+mkdir -p "$STATE" 2>/dev/null || {
+	echo "arctic-qemu: cannot write to $STATE" >&2
+	echo "  set ARCTIC_QEMU_STATE to a directory you own" >&2
+	exit 1
+}
 
 need_disk() {
 	[ -f "$DISK" ] && return 0
