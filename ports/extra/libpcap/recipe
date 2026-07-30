@@ -1,0 +1,31 @@
+# libpcap - Packet capture library
+# Generated from manifest.tsv by gen-ports.py. Edit the manifest, not this file,
+# unless the package needs something the template cannot express - in which case
+# drop a `recipe.local` beside it and it will be preserved.
+name=libpcap
+version=1.10.6
+release=1
+desc="Packet capture library"
+url="https://www.tcpdump.org/"
+license="BSD-3-Clause"
+depend="glibc"
+makedepend="flex-alt byacc"
+source="https://www.tcpdump.org/release/libpcap-1.10.6.tar.gz"
+sha256="SKIP"
+
+build() {
+	cd "libpcap-1.10.6"
+	./configure \
+		--prefix=/usr \
+		--sysconfdir=/etc \
+		--localstatedir=/var \
+		--libdir=/usr/lib \
+		--disable-static \
+		--disable-nls
+	make -j"$JOBS"
+}
+
+package() {
+	cd "libpcap-1.10.6"
+	make DESTDIR="$pkgdir" install
+}

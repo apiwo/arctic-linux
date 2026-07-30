@@ -1,0 +1,32 @@
+# somebar - Status bar for dwl
+# Generated from manifest.tsv by gen-ports.py. Edit the manifest, not this file,
+# unless the package needs something the template cannot express - in which case
+# drop a `recipe.local` beside it and it will be preserved.
+name=somebar
+version=0.2
+release=1
+desc="Status bar for dwl"
+url="https://git.sr.ht/~raphi/somebar"
+license="MIT"
+depend="wayland wlroots pango cairo"
+makedepend="meson ninja"
+source="https://git.sr.ht/~raphi/somebar/archive/0.2.tar.gz"
+sha256="SKIP"
+
+build() {
+	cd "0.2"
+	meson setup build \
+		--prefix=/usr \
+		--libdir=/usr/lib \
+		--sysconfdir=/etc \
+		--localstatedir=/var \
+		--buildtype=release \
+		--wrap-mode=nodownload \
+		-Db_lto=true
+	ninja -C build -j"$JOBS"
+}
+
+package() {
+	cd "0.2"
+	DESTDIR="$pkgdir" ninja -C build install
+}

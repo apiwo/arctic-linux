@@ -1,0 +1,32 @@
+# dav1d - AV1 decoder
+# Generated from manifest.tsv by gen-ports.py. Edit the manifest, not this file,
+# unless the package needs something the template cannot express - in which case
+# drop a `recipe.local` beside it and it will be preserved.
+name=dav1d
+version=1.6.0
+release=1
+desc="AV1 decoder"
+url="https://code.videolan.org/videolan/dav1d"
+license="BSD-2-Clause"
+depend="glibc"
+makedepend="meson ninja nasm"
+source="https://code.videolan.org/videolan/dav1d/-/archive/1.6.0/dav1d-1.6.0.tar.gz"
+sha256="SKIP"
+
+build() {
+	cd "dav1d-1.6.0"
+	meson setup build \
+		--prefix=/usr \
+		--libdir=/usr/lib \
+		--sysconfdir=/etc \
+		--localstatedir=/var \
+		--buildtype=release \
+		--wrap-mode=nodownload \
+		-Db_lto=true
+	ninja -C build -j"$JOBS"
+}
+
+package() {
+	cd "dav1d-1.6.0"
+	DESTDIR="$pkgdir" ninja -C build install
+}

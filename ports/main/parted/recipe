@@ -1,0 +1,31 @@
+# parted - Disk partition editor
+# Generated from manifest.tsv by gen-ports.py. Edit the manifest, not this file,
+# unless the package needs something the template cannot express - in which case
+# drop a `recipe.local` beside it and it will be preserved.
+name=parted
+version=3.7
+release=1
+desc="Disk partition editor"
+url="https://www.gnu.org/software/parted/"
+license="GPL-3.0-or-later"
+depend="glibc util-linux-libs"
+makedepend=""
+source="https://ftp.gnu.org/gnu/parted/parted-3.7.tar.xz"
+sha256="SKIP"
+
+build() {
+	cd "parted-3.7"
+	./configure \
+		--prefix=/usr \
+		--sysconfdir=/etc \
+		--localstatedir=/var \
+		--libdir=/usr/lib \
+		--disable-static \
+		--disable-nls
+	make -j"$JOBS"
+}
+
+package() {
+	cd "parted-3.7"
+	make DESTDIR="$pkgdir" install
+}

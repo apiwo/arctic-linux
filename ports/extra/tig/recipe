@@ -1,0 +1,31 @@
+# tig - Text-mode interface for git
+# Generated from manifest.tsv by gen-ports.py. Edit the manifest, not this file,
+# unless the package needs something the template cannot express - in which case
+# drop a `recipe.local` beside it and it will be preserved.
+name=tig
+version=2.5.12
+release=1
+desc="Text-mode interface for git"
+url="https://jonas.github.io/tig/"
+license="GPL-2.0-or-later"
+depend="glibc netbsd-curses git"
+makedepend=""
+source="https://github.com/jonas/tig/releases/download/tig-2.5.12/tig-2.5.12.tar.gz"
+sha256="SKIP"
+
+build() {
+	cd "tig-2.5.12"
+	./configure \
+		--prefix=/usr \
+		--sysconfdir=/etc \
+		--localstatedir=/var \
+		--libdir=/usr/lib \
+		--disable-static \
+		--disable-nls
+	make -j"$JOBS"
+}
+
+package() {
+	cd "tig-2.5.12"
+	make DESTDIR="$pkgdir" install
+}

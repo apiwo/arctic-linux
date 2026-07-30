@@ -1,0 +1,31 @@
+# curl - Transfer data over any protocol
+# Generated from manifest.tsv by gen-ports.py. Edit the manifest, not this file,
+# unless the package needs something the template cannot express - in which case
+# drop a `recipe.local` beside it and it will be preserved.
+name=curl
+version=8.19.0
+release=1
+desc="Transfer data over any protocol"
+url="https://curl.se/"
+license="curl"
+depend="glibc libressl zlib nghttp2 brotli zstd"
+makedepend=""
+source="https://curl.se/download/curl-8.19.0.tar.xz"
+sha256="SKIP"
+
+build() {
+	cd "curl-8.19.0"
+	./configure \
+		--prefix=/usr \
+		--sysconfdir=/etc \
+		--localstatedir=/var \
+		--libdir=/usr/lib \
+		--disable-static \
+		--disable-nls
+	make -j"$JOBS"
+}
+
+package() {
+	cd "curl-8.19.0"
+	make DESTDIR="$pkgdir" install
+}

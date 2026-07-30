@@ -1,0 +1,31 @@
+# ell - Embedded Linux library, used by iwd
+# Generated from manifest.tsv by gen-ports.py. Edit the manifest, not this file,
+# unless the package needs something the template cannot express - in which case
+# drop a `recipe.local` beside it and it will be preserved.
+name=ell
+version=0.79
+release=1
+desc="Embedded Linux library, used by iwd"
+url="https://git.kernel.org/pub/scm/libs/ell/ell.git"
+license="LGPL-2.1-or-later"
+depend="glibc"
+makedepend=""
+source="https://kernel.org/pub/linux/libs/ell/ell-0.79.tar.xz"
+sha256="SKIP"
+
+build() {
+	cd "ell-0.79"
+	./configure \
+		--prefix=/usr \
+		--sysconfdir=/etc \
+		--localstatedir=/var \
+		--libdir=/usr/lib \
+		--disable-static \
+		--disable-nls
+	make -j"$JOBS"
+}
+
+package() {
+	cd "ell-0.79"
+	make DESTDIR="$pkgdir" install
+}

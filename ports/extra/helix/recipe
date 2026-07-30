@@ -1,0 +1,31 @@
+# helix - A post-modern modal text editor
+# Generated from manifest.tsv by gen-ports.py. Edit the manifest, not this file,
+# unless the package needs something the template cannot express - in which case
+# drop a `recipe.local` beside it and it will be preserved.
+name=helix
+version=26.01
+release=1
+desc="A post-modern modal text editor"
+url="https://helix-editor.com/"
+license="MPL-2.0"
+depend="glibc"
+makedepend="rust cargo"
+source="https://github.com/helix-editor/helix/archive/refs/tags/26.01.tar.gz"
+sha256="SKIP"
+
+build() {
+	cd "26.01"
+	# Arctic builds Rust offline against a vendored tree so packages are
+	# reproducible and the build host needs no network.
+	export RUSTFLAGS="-C linker=clang -C link-arg=-fuse-ld=lld"
+	cargo build --release --locked --offline
+}
+
+package() {
+	cd "26.01"
+	install -Dm755 "target/release/helix" "$pkgdir/usr/bin/helix"
+	for d in README.md README LICENSE; do
+		[ -f "$d" ] && install -Dm644 "$d" "$pkgdir/usr/share/doc/helix/$d"
+	done
+	true
+}

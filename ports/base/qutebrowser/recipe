@@ -1,0 +1,24 @@
+# qutebrowser - Keyboard-driven browser
+# Generated from manifest.tsv by gen-ports.py. Edit the manifest, not this file,
+# unless the package needs something the template cannot express - in which case
+# drop a `recipe.local` beside it and it will be preserved.
+name=qutebrowser
+version=3.6.0
+release=1
+desc="Keyboard-driven browser"
+url="https://qutebrowser.org/"
+license="GPL-3.0-or-later"
+depend="python qt6-base qt6-webengine"
+makedepend="python"
+source="https://github.com/qutebrowser/qutebrowser/releases/download/v3.6.0/qutebrowser-3.6.0.tar.gz"
+sha256="SKIP"
+
+build() {
+	cd "qutebrowser-3.6.0"
+	python -m build --wheel --no-isolation
+}
+
+package() {
+	cd "qutebrowser-3.6.0"
+	python -m installer --destdir="$pkgdir" dist/*.whl
+}

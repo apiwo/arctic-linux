@@ -1,0 +1,32 @@
+# xorg-xwayland - X server running on Wayland
+# Generated from manifest.tsv by gen-ports.py. Edit the manifest, not this file,
+# unless the package needs something the template cannot express - in which case
+# drop a `recipe.local` beside it and it will be preserved.
+name=xorg-xwayland
+version=24.1.9
+release=1
+desc="X server running on Wayland"
+url="https://x.org/"
+license="MIT"
+depend="glibc mesa wayland libdrm pixman libxkbcommon"
+makedepend="meson ninja"
+source="https://x.org/pub/individual/xserver/xwayland-24.1.9.tar.xz"
+sha256="SKIP"
+
+build() {
+	cd "xwayland-24.1.9"
+	meson setup build \
+		--prefix=/usr \
+		--libdir=/usr/lib \
+		--sysconfdir=/etc \
+		--localstatedir=/var \
+		--buildtype=release \
+		--wrap-mode=nodownload \
+		-Db_lto=true
+	ninja -C build -j"$JOBS"
+}
+
+package() {
+	cd "xwayland-24.1.9"
+	DESTDIR="$pkgdir" ninja -C build install
+}

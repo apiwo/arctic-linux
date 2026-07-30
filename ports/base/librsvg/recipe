@@ -1,0 +1,31 @@
+# librsvg - SVG rendering library
+# Generated from manifest.tsv by gen-ports.py. Edit the manifest, not this file,
+# unless the package needs something the template cannot express - in which case
+# drop a `recipe.local` beside it and it will be preserved.
+name=librsvg
+version=2.61.0
+release=1
+desc="SVG rendering library"
+url="https://wiki.gnome.org/Projects/LibRsvg"
+license="LGPL-2.1-or-later"
+depend="cairo pango gdk-pixbuf libxml2"
+makedepend="rust cargo"
+source="https://download.gnome.org/sources/librsvg/2.61/librsvg-2.61.0.tar.xz"
+sha256="SKIP"
+
+build() {
+	cd "librsvg-2.61.0"
+	# Arctic builds Rust offline against a vendored tree so packages are
+	# reproducible and the build host needs no network.
+	export RUSTFLAGS="-C linker=clang -C link-arg=-fuse-ld=lld"
+	cargo build --release --locked --offline
+}
+
+package() {
+	cd "librsvg-2.61.0"
+	install -Dm755 "target/release/librsvg" "$pkgdir/usr/bin/librsvg"
+	for d in README.md README LICENSE; do
+		[ -f "$d" ] && install -Dm644 "$d" "$pkgdir/usr/share/doc/librsvg/$d"
+	done
+	true
+}

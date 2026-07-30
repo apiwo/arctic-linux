@@ -1,0 +1,24 @@
+# alsa-ucm-conf - ALSA use case manager configuration
+# Generated from manifest.tsv by gen-ports.py. Edit the manifest, not this file,
+# unless the package needs something the template cannot express - in which case
+# drop a `recipe.local` beside it and it will be preserved.
+name=alsa-ucm-conf
+version=1.2.15
+release=1
+desc="ALSA use case manager configuration"
+url="https://alsa-project.org/"
+license="BSD-3-Clause"
+depend=""
+makedepend=""
+source="https://www.alsa-project.org/files/pub/lib/alsa-ucm-conf-1.2.15.tar.bz2"
+sha256="SKIP"
+
+build() {
+	cd "alsa-ucm-conf-1.2.15"
+	make -j"$JOBS" PREFIX=/usr
+}
+
+package() {
+	cd "alsa-ucm-conf-1.2.15"
+	make PREFIX=/usr DESTDIR="$pkgdir" install
+}

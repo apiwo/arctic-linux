@@ -1,0 +1,32 @@
+# gtk3 - GTK 3 toolkit
+# Generated from manifest.tsv by gen-ports.py. Edit the manifest, not this file,
+# unless the package needs something the template cannot express - in which case
+# drop a `recipe.local` beside it and it will be preserved.
+name=gtk3
+version=3.24.51
+release=1
+desc="GTK 3 toolkit"
+url="https://gtk.org/"
+license="LGPL-2.1-or-later"
+depend="glib cairo pango gdk-pixbuf wayland libx11 at-spi2-core"
+makedepend="meson ninja"
+source="https://download.gnome.org/sources/gtk+/3.24/gtk+-3.24.51.tar.xz"
+sha256="SKIP"
+
+build() {
+	cd "gtk+-3.24.51"
+	meson setup build \
+		--prefix=/usr \
+		--libdir=/usr/lib \
+		--sysconfdir=/etc \
+		--localstatedir=/var \
+		--buildtype=release \
+		--wrap-mode=nodownload \
+		-Db_lto=true
+	ninja -C build -j"$JOBS"
+}
+
+package() {
+	cd "gtk+-3.24.51"
+	DESTDIR="$pkgdir" ninja -C build install
+}

@@ -1,0 +1,27 @@
+# intel-compute-runtime - Intel OpenCL and Level Zero runtime
+# Generated from manifest.tsv by gen-ports.py. Edit the manifest, not this file,
+# unless the package needs something the template cannot express - in which case
+# drop a `recipe.local` beside it and it will be preserved.
+name=intel-compute-runtime
+version=26.02
+release=1
+desc="Intel OpenCL and Level Zero runtime"
+url="https://github.com/intel/compute-runtime"
+license="MIT"
+depend="mesa level-zero"
+makedepend="cmake ninja"
+source="https://github.com/intel/compute-runtime/archive/refs/tags/26.02.tar.gz"
+sha256="SKIP"
+
+build() {
+	cmake -S "26.02" -B build -G Ninja \
+		-DCMAKE_INSTALL_PREFIX=/usr \
+		-DCMAKE_INSTALL_LIBDIR=lib \
+		-DCMAKE_BUILD_TYPE=Release \
+		-DBUILD_SHARED_LIBS=ON
+	ninja -C build -j"$JOBS"
+}
+
+package() {
+	DESTDIR="$pkgdir" ninja -C build install
+}

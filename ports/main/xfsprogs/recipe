@@ -1,0 +1,31 @@
+# xfsprogs - XFS filesystem tools
+# Generated from manifest.tsv by gen-ports.py. Edit the manifest, not this file,
+# unless the package needs something the template cannot express - in which case
+# drop a `recipe.local` beside it and it will be preserved.
+name=xfsprogs
+version=6.19.0
+release=1
+desc="XFS filesystem tools"
+url="https://xfs.wiki.kernel.org/"
+license="GPL-2.0-only LGPL-2.1-only"
+depend="glibc util-linux-libs inih"
+makedepend=""
+source="https://kernel.org/pub/linux/utils/fs/xfs/xfsprogs/xfsprogs-6.19.0.tar.xz"
+sha256="SKIP"
+
+build() {
+	cd "xfsprogs-6.19.0"
+	./configure \
+		--prefix=/usr \
+		--sysconfdir=/etc \
+		--localstatedir=/var \
+		--libdir=/usr/lib \
+		--disable-static \
+		--disable-nls
+	make -j"$JOBS"
+}
+
+package() {
+	cd "xfsprogs-6.19.0"
+	make DESTDIR="$pkgdir" install
+}

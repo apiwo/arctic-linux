@@ -1,0 +1,24 @@
+# Arctic-lts-kernel - Arctic kernel on the long-term support series
+# Generated from manifest.tsv by gen-ports.py. Edit the manifest, not this file,
+# unless the package needs something the template cannot express - in which case
+# drop a `recipe.local` beside it and it will be preserved.
+name=Arctic-lts-kernel
+version=6.12.60
+release=1
+desc="Arctic kernel on the long-term support series"
+url="https://kernel.org/"
+license="GPL-2.0-only"
+depend="glibc"
+makedepend="clang lld bmake"
+source="https://cdn.kernel.org/pub/linux/kernel/v6.x/linux-6.12.60.tar.xz"
+sha256="SKIP"
+
+build() {
+	cd "linux-6.12.60"
+	make -j"$JOBS" PREFIX=/usr
+}
+
+package() {
+	cd "linux-6.12.60"
+	make PREFIX=/usr DESTDIR="$pkgdir" install
+}

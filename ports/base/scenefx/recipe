@@ -1,0 +1,32 @@
+# scenefx - Effects library for wlroots compositors
+# Generated from manifest.tsv by gen-ports.py. Edit the manifest, not this file,
+# unless the package needs something the template cannot express - in which case
+# drop a `recipe.local` beside it and it will be preserved.
+name=scenefx
+version=0.3
+release=1
+desc="Effects library for wlroots compositors"
+url="https://github.com/wlrfx/scenefx"
+license="MIT"
+depend="wlroots wayland pixman"
+makedepend="meson ninja"
+source="https://github.com/wlrfx/scenefx/archive/refs/tags/0.3.tar.gz"
+sha256="SKIP"
+
+build() {
+	cd "0.3"
+	meson setup build \
+		--prefix=/usr \
+		--libdir=/usr/lib \
+		--sysconfdir=/etc \
+		--localstatedir=/var \
+		--buildtype=release \
+		--wrap-mode=nodownload \
+		-Db_lto=true
+	ninja -C build -j"$JOBS"
+}
+
+package() {
+	cd "0.3"
+	DESTDIR="$pkgdir" ninja -C build install
+}

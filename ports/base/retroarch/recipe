@@ -1,0 +1,31 @@
+# retroarch - Frontend for emulators and game engines
+# Generated from manifest.tsv by gen-ports.py. Edit the manifest, not this file,
+# unless the package needs something the template cannot express - in which case
+# drop a `recipe.local` beside it and it will be preserved.
+name=retroarch
+version=1.22.0
+release=1
+desc="Frontend for emulators and game engines"
+url="https://retroarch.com/"
+license="GPL-3.0-only"
+depend="mesa alsa-lib libxkbcommon wayland ffmpeg vulkan-loader"
+makedepend=""
+source="https://github.com/libretro/RetroArch/archive/refs/tags/v1.22.0.tar.gz"
+sha256="SKIP"
+
+build() {
+	cd "retroarch-1.22.0"
+	./configure \
+		--prefix=/usr \
+		--sysconfdir=/etc \
+		--localstatedir=/var \
+		--libdir=/usr/lib \
+		--disable-static \
+		--disable-nls
+	make -j"$JOBS"
+}
+
+package() {
+	cd "retroarch-1.22.0"
+	make DESTDIR="$pkgdir" install
+}

@@ -1,0 +1,32 @@
+# inih - Simple INI file parser
+# Generated from manifest.tsv by gen-ports.py. Edit the manifest, not this file,
+# unless the package needs something the template cannot express - in which case
+# drop a `recipe.local` beside it and it will be preserved.
+name=inih
+version=60
+release=1
+desc="Simple INI file parser"
+url="https://github.com/benhoyt/inih"
+license="BSD-3-Clause"
+depend="glibc"
+makedepend="meson ninja"
+source="https://github.com/benhoyt/inih/archive/refs/tags/r60.tar.gz"
+sha256="SKIP"
+
+build() {
+	cd "r60"
+	meson setup build \
+		--prefix=/usr \
+		--libdir=/usr/lib \
+		--sysconfdir=/etc \
+		--localstatedir=/var \
+		--buildtype=release \
+		--wrap-mode=nodownload \
+		-Db_lto=true
+	ninja -C build -j"$JOBS"
+}
+
+package() {
+	cd "r60"
+	DESTDIR="$pkgdir" ninja -C build install
+}

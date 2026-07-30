@@ -1,0 +1,220 @@
+#!/bin/sh
+# libalpm.sh - shared runtime for the Arctic Linux Package Manager
+# POSIX sh only. Must run under busybox ash with no GNU utilities present.
+# shellcheck shell=sh disable=SC2039
+
+ALPM_VERSION="1.0.0"
+ALPM_FORMAT="2"
+
+: "${ALPM_ROOT:=/}"
+: "${ALPM_CONF:=/etc/alpm/alpm.conf}"
+: "${ALPM_REPOD:=/etc/alpm/repos.d}"
+: "${ALPM_DB:=/var/lib/alpm}"
+: "${ALPM_CACHE:=/var/cache/alpm}"
+: "${ALPM_LOG:=/var/log/alpm.log}"
+: "${ALPM_JOBS:=$(nproc 2>/dev/null || echo 1)}"
+
+# ---------------------------------------------------------------- presentation
+
+# Arctic palette, lifted from the logo gradient: violet -> ice -> teal.
+if [ -t 1 ] && [ "${ALPM_COLOR:-auto}" != "never" ]; then
+	C_R=$(printf '\033[0m')      ; C_B=$(printf '\033[1m')
+	C_DIM=$(printf '\033[2m')    ; C_IT=$(printf '\033[3m')
+	A_VIO=$(printf '\033[38;5;99m')  ; A_IND=$(printf '\033[38;5;69m')
+	A_ICE=$(printf '\033[38;5;81m')  ; A_TEAL=$(printf '\033[38;5;44m')
+	A_MINT=$(printf '\033[38;5;49m') ; A_SNOW=$(printf '\033[38;5;231m')
+	A_GREY=$(printf '\033[38;5;245m'); A_RED=$(printf '\033[38;5;203m')
+	A_AMB=$(printf '\033[38;5;215m')
+else
+	C_R= ; C_B= ; C_DIM= ; C_IT=
+	A_VIO= ; A_IND= ; A_ICE= ; A_TEAL= ; A_MINT= ; A_SNOW= ; A_GREY= ; A_RED= ; A_AMB=
+fi
+
+msg()   { printf '%s::%s %s%s%s\n' "$A_TEAL$C_B" "$C_R$C_B" "$*" "$C_R" ""; }
+msg2()  { printf '  %s->%s %s\n' "$A_ICE$C_B" "$C_R" "$*"; }
+info()  { printf '  %s*%s  %s\n' "$A_IND" "$C_R" "$*"; }
+warn()  { printf '%s::%s %s%s\n' "$A_AMB$C_B" "$C_B" "$*" "$C_R" >&2; }
+err()   { printf '%serror:%s %s\n' "$A_RED$C_B" "$C_R" "$*" >&2; }
+die()   { err "$*"; exit 1; }
+ok()    { printf '  %sok%s  %s\n' "$A_MINT$C_B" "$C_R" "$*"; }
+
+# Every privileged entry point funnels through here. The wording is deliberate:
+# it never names a specific privilege tool.
+need_root() {
+	[ "$(id -u)" = "0" ] || die "Must be run as root."
+}
+
+alpm_log() {
+	[ -w "$(dirname "$ALPM_LOG")" ] 2>/dev/null || return 0
+	printf '[%s] %s\n' "$(date '+%Y-%m-%d %H:%M:%S')" "$*" >>"$ALPM_LOG" 2>/dev/null || :
+}
+
+# A progress bar that degrades gracefully on a dumb tty.
+bar() {
+	cur=$1 tot=$2 label=$3
+	[ -t 1 ] || return 0
+	[ "$tot" -gt 0 ] 2>/dev/null || return 0
+	width=$(( ${COLUMNS:-80} - 34 )); [ "$width" -lt 10 ] && width=10
+	fill=$(( cur * width / tot ))
+	pct=$(( cur * 100 / tot ))
+	b=""; i=0
+	while [ "$i" -lt "$fill" ]; do b="$b#"; i=$((i+1)); done
+	while [ "$i" -lt "$width" ]; do b="$b-"; i=$((i+1)); done
+	printf '\r  %s%-22.22s%s %s[%s]%s %3d%%' \
+		"$A_SNOW" "$label" "$C_R" "$A_TEAL" "$b" "$C_R" "$pct"
+	[ "$cur" -ge "$tot" ] && printf '\n'
+}
+
+# --------------------------------------------------------------------- helpers
+
+have() { command -v "$1" >/dev/null 2>&1; }
+
+sha256() {
+	if have sha256sum; then sha256sum "$1" | cut -d' ' -f1
+	elif have sha256; then sha256 -q "$1"
+	elif have openssl; then openssl dgst -sha256 "$1" | sed 's/.*= //'
+	else echo "nohash"; fi
+}
+
+# Downloader abstraction. Arctic ships busybox wget on the ISO and curl in base.
+dl() {
+	url=$1 out=$2
+	if have curl; then
+		curl -fL --retry 3 --retry-delay 2 -# -o "$out.part" "$url" || return 1
+	elif have wget; then
+		wget -q -O "$out.part" "$url" || return 1
+	else
+		err "no downloader available (need curl or wget)"; return 1
+	fi
+	mv "$out.part" "$out"
+}
+
+# Silent variant for index files.
+dlq() {
+	url=$1 out=$2
+	if have curl; then curl -fsSL -o "$out.part" "$url" || return 1
+	elif have wget; then wget -q -O "$out.part" "$url" || return 1
+	else return 1; fi
+	mv "$out.part" "$out"
+}
+
+# .alpmz is a plain tar.xz, so bsdtar or busybox tar both work.
+untar() {
+	archive=$1 dest=$2
+	mkdir -p "$dest"
+	if have bsdtar; then bsdtar -xpf "$archive" -C "$dest"
+	else tar -xpf "$archive" -C "$dest"; fi
+}
+
+tarlist() {
+	if have bsdtar; then bsdtar -tf "$1"; else tar -tf "$1"; fi
+}
+
+# ------------------------------------------------------------------- meta i/o
+
+# Read one key out of a .PKGINFO-style key = value file.
+meta() {
+	local file key
+	file=$1 key=$2
+	[ -f "$file" ] || return 1
+	sed -n "s/^[ 	]*$key[ 	]*=[ 	]*//p" "$file" | head -1
+}
+
+metaall() {
+	local file key
+	file=$1 key=$2
+	[ -f "$file" ] || return 1
+	sed -n "s/^[ 	]*$key[ 	]*=[ 	]*//p" "$file"
+}
+
+# ------------------------------------------------------------------ repo state
+
+alpm_load_conf() {
+	[ -f "$ALPM_CONF" ] && . "$ALPM_CONF"
+	:
+}
+
+# Emits "name<TAB>url" for every configured repo, in priority order.
+alpm_repos() {
+	[ -d "$ALPM_REPOD" ] || return 0
+	for f in "$ALPM_REPOD"/*.repo; do
+		[ -f "$f" ] || continue
+		n=$(meta "$f" name); u=$(meta "$f" url); e=$(meta "$f" enabled)
+		[ -n "$n" ] || n=$(basename "$f" .repo)
+		[ "$e" = "no" ] && continue
+		[ -n "$u" ] && printf '%s\t%s\n' "$n" "$u"
+	done
+}
+
+alpm_repo_url() {
+	alpm_repos | while IFS='	' read -r n u; do
+		[ "$n" = "$1" ] && { printf '%s\n' "$u"; break; }
+	done
+}
+
+# Index line format (tab separated, one package per line):
+#   name  version  release  arch  size  isize  sha256  deps  desc
+idx_lookup() {
+	local want f line
+	want=$1
+	for f in "$ALPM_DB"/sync/*.idx; do
+		[ -f "$f" ] || continue
+		line=$(awk -F'\t' -v p="$want" '$1==p{print; exit}' "$f") || :
+		if [ -n "$line" ]; then
+			printf '%s\t%s\n' "$(basename "$f" .idx)" "$line"
+			return 0
+		fi
+	done
+	return 1
+}
+
+idx_field() { printf '%s' "$1" | cut -f"$2"; }
+
+is_installed() { [ -d "$ALPM_DB/local/$1" ]; }
+
+installed_version() {
+	[ -f "$ALPM_DB/local/$1/PKGINFO" ] || return 1
+	v=$(meta "$ALPM_DB/local/$1/PKGINFO" version)
+	r=$(meta "$ALPM_DB/local/$1/PKGINFO" release)
+	[ -n "$r" ] && printf '%s-%s\n' "$v" "$r" || printf '%s\n' "$v"
+}
+
+is_held() { [ -f "$ALPM_DB/hold/$1" ]; }
+
+# Compare two version strings. Returns 0 if $1 is newer than $2.
+vgt() {
+	[ "$1" = "$2" ] && return 1
+	newest=$(printf '%s\n%s\n' "$1" "$2" | sort -V 2>/dev/null | tail -1) || {
+		# sort -V is absent on some busybox builds; fall back to string compare.
+		[ "$1" \> "$2" ] && return 0 || return 1
+	}
+	[ "$newest" = "$1" ]
+}
+
+alpm_init_db() {
+	for d in local sync hold snapshots; do
+		mkdir -p "$ALPM_DB/$d"
+	done
+	mkdir -p "$ALPM_CACHE/pkg" "$ALPM_CACHE/src" "$ALPM_CACHE/build"
+	mkdir -p "$ALPM_ROOT/usr/lib/alpm/staged" 2>/dev/null || :
+}
+
+human() {
+	b=${1:-0}
+	if [ "$b" -ge 1073741824 ] 2>/dev/null; then
+		printf '%s.%s GiB\n' $((b/1073741824)) $(( (b%1073741824)*10/1073741824 ))
+	elif [ "$b" -ge 1048576 ] 2>/dev/null; then
+		printf '%s.%s MiB\n' $((b/1048576)) $(( (b%1048576)*10/1048576 ))
+	elif [ "$b" -ge 1024 ] 2>/dev/null; then
+		printf '%s KiB\n' $((b/1024))
+	else
+		printf '%s B\n' "$b"
+	fi
+}
+
+confirm() {
+	[ "${ALPM_YES:-0}" = "1" ] && return 0
+	printf '%s::%s %s %s[Y/n]%s ' "$A_TEAL$C_B" "$C_R$C_B" "$1$C_R" "$A_GREY" "$C_R"
+	read -r a || return 1
+	case "$a" in n|N|no|NO|No) return 1 ;; *) return 0 ;; esac
+}

@@ -1,0 +1,1216 @@
+#!/bin/sh
+# arctic-strap - install Arctic Linux onto a mounted target
+#
+#   arctic-strap /mnt              full system install (opens the config menu)
+#   arctic-strap boot /mnt/boot    install the bootloader for the chosen kernel
+#   arctic-strap -c file /mnt      run unattended from a saved answer file
+#
+# You mount the target yourself, exactly as you would expect:
+#   mount /dev/nvme0n1p1 /mnt
+#   arctic-strap /mnt
+#
+# shellcheck shell=sh disable=SC2039,SC2059,SC2086
+
+set -u
+
+LIB=/usr/lib/arctic
+for d in "$LIB" "$(dirname "$0")/lib" ./lib; do
+	[ -f "$d/tui.sh" ] && { . "$d/tui.sh"; TUILIB=$d; break; }
+done
+[ -n "${c_teal:-}" ] || { echo "arctic-strap: cannot find tui.sh" >&2; exit 1; }
+
+for d in /usr/lib/alpm "$(dirname "$0")/../alpm" ./alpm; do
+	[ -f "$d/libalpm.sh" ] && { . "$d/libalpm.sh"; break; }
+done
+
+VERSION="1.0.0"
+CONF=/tmp/arctic-strap.conf
+LOGF=/tmp/arctic-strap.log
+
+# ------------------------------------------------------------------- defaults
+TARGET=""
+A_PROFILE="minimal"
+A_DESKTOP="none"
+A_KERNEL="Arctic-base-kernel"
+A_HOSTNAME="arctic"
+A_USER=""
+A_USERPASS=""
+A_ROOTPASS=""
+A_SHELL="/bin/zsh"
+A_LOCALE="en_US.UTF-8"
+A_LANG="en_US.UTF-8"
+A_KEYMAP="us"
+A_TZ="UTC"
+A_NET="dhcp"
+A_WIFI_SSID=""
+A_WIFI_PSK=""
+A_SWAP="none"
+A_SWAPSIZE="4G"
+A_SWAPDEV=""
+A_GPU="auto"
+A_MICROCODE="auto"
+A_AUDIO="yes"
+A_BLUETOOTH="no"
+A_SSH="no"
+A_FIREWALL="yes"
+A_NTP="yes"
+A_TRIM="auto"
+A_EXTRA=""
+A_MIRROR=""
+A_FSTAB="yes"
+
+bail() { tui_done 2>/dev/null; printf '\033[38;5;203merror:\033[0m %s\n' "$*" >&2; exit 1; }
+logit() { printf '[%s] %s\n' "$(date '+%H:%M:%S')" "$*" >>"$LOGF"; }
+
+# ------------------------------------------------------------------ detection
+
+detect_gpu() {
+	if [ -d /sys/bus/pci/devices ]; then
+		v=$(lspci 2>/dev/null | grep -iE 'vga|3d|display')
+		case "$v" in
+		*NVIDIA*|*nVidia*) echo nvidia ;;
+		*AMD*|*ATI*|*"Advanced Micro"*) echo amd ;;
+		*Intel*) echo intel ;;
+		*) echo generic ;;
+		esac
+	else
+		echo generic
+	fi
+}
+
+detect_microcode() {
+	case "$(grep -m1 '^vendor_id' /proc/cpuinfo 2>/dev/null)" in
+	*GenuineIntel*) echo intel-ucode ;;
+	*AuthenticAMD*) echo amd-ucode ;;
+	*) echo none ;;
+	esac
+}
+
+detect_firmware() {
+	[ -d /sys/firmware/efi ] && echo efi || echo bios
+}
+
+detect_rotational() {
+	# Returns "ssd" when the target device does not spin.
+	d=$(df "$TARGET" 2>/dev/null | awk 'NR==2{print $1}' | sed 's|/dev/||; s|p\?[0-9]*$||')
+	[ -n "$d" ] || { echo unknown; return; }
+	r=$(cat "/sys/block/$d/queue/rotational" 2>/dev/null)
+	[ "$r" = "0" ] && echo ssd || echo hdd
+}
+
+detect_existing_install() {
+	[ -f "$1/etc/arctic-release" ]
+}
+
+list_timezones() {
+	if [ -d /usr/share/zoneinfo ]; then
+		( cd /usr/share/zoneinfo && find . -type f 2>/dev/null | \
+			sed 's|^\./||' | grep -E '^[A-Z][a-z]+/' | sort | head -400 )
+	else
+		printf 'UTC\nEurope/London\nAmerica/New_York\nAmerica/Chicago\n'
+		printf 'America/Denver\nAmerica/Los_Angeles\nEurope/Berlin\nAsia/Tokyo\n'
+	fi
+}
+
+# ------------------------------------------------------------ network handling
+
+net_interfaces() {
+	for i in /sys/class/net/*; do
+		n=$(basename "$i")
+		[ "$n" = "lo" ] && continue
+		printf '%s\n' "$n"
+	done
+}
+
+net_is_wireless() { [ -d "/sys/class/net/$1/wireless" ]; }
+
+net_online() {
+	# Two shots at a well-known host; busybox ping has no -W on old builds.
+	ping -c1 -w3 1.1.1.1 >/dev/null 2>&1 && return 0
+	ping -c1 -w3 9.9.9.9 >/dev/null 2>&1
+}
+
+screen_network() {
+	while :; do
+		st="offline"
+		net_online && st="online"
+		tui_menu "Network configuration" "status: $st" \
+			"dhcp|Wired (DHCP)|Bring up an ethernet link automatically" \
+			"wifi|Wireless (iwctl)|Scan and join a wireless network" \
+			"static|Static address|Set the address, gateway and DNS by hand" \
+			"skip|Continue offline|Install from the ISO only, no repositories" \
+			"test|Test the connection|Check whether the network is reachable now" \
+		|| return 1
+		case "$TUI_CHOICE" in
+		dhcp)
+			ifs=$(net_interfaces | while read -r i; do net_is_wireless "$i" || echo "$i"; done)
+			[ -n "$ifs" ] || { tui_msgbox "Network" "No wired interface was found."; continue; }
+			set -- $ifs
+			iface=$1
+			A_NET=dhcp
+			tui_msgbox "Network" "Requesting an address on $iface."
+			( ip link set "$iface" up 2>/dev/null
+			  udhcpc -i "$iface" -n -q >/dev/null 2>&1 || dhcpcd "$iface" >/dev/null 2>&1 ) &
+			wait
+			if net_online; then
+				tui_msgbox "Network" "Online via $iface."
+				return 0
+			fi
+			tui_msgbox "Network" "Could not get an address on $iface. Try wireless or static."
+			;;
+		wifi)
+			screen_wifi && return 0
+			;;
+		static)
+			tui_input "Network" "Interface name" "$(net_interfaces | head -1)" || continue
+			iface=$TUI_VALUE
+			tui_input "Network" "Address with prefix, e.g. 192.168.1.50/24" "" || continue
+			addr=$TUI_VALUE
+			tui_input "Network" "Gateway" "" || continue
+			gw=$TUI_VALUE
+			tui_input "Network" "DNS server" "1.1.1.1" || continue
+			dns=$TUI_VALUE
+			ip addr add "$addr" dev "$iface" 2>/dev/null
+			ip link set "$iface" up 2>/dev/null
+			ip route add default via "$gw" 2>/dev/null
+			printf 'nameserver %s\n' "$dns" >/etc/resolv.conf
+			A_NET="static:$iface:$addr:$gw:$dns"
+			net_online && { tui_msgbox "Network" "Online."; return 0; }
+			tui_msgbox "Network" "Still offline. Check the values and try again."
+			;;
+		skip)
+			A_NET=offline
+			return 0 ;;
+		test)
+			if net_online; then tui_msgbox "Network" "The network is up."
+			else tui_msgbox "Network" "No route to the internet yet."; fi ;;
+		esac
+	done
+}
+
+screen_wifi() {
+	wifs=$(net_interfaces | while read -r i; do net_is_wireless "$i" && echo "$i"; done)
+	[ -n "$wifs" ] || { tui_msgbox "Wireless" "No wireless interface was found."; return 1; }
+	set -- $wifs
+	wdev=$1
+
+	have iwctl || { tui_msgbox "Wireless" \
+		"iwctl is not on this image. Use a wired connection instead."; return 1; }
+
+	# iwd needs to be running before iwctl can talk to it.
+	pgrep iwd >/dev/null 2>&1 || { iwd >/dev/null 2>&1 & sleep 2; }
+
+	tui_clear; tui_header "Wireless" "$wdev"
+	tui_at 4 4; printf '%sScanning...%s' "$c_ice" "$t_reset"
+	iwctl station "$wdev" scan >/dev/null 2>&1
+	sleep 3
+	nets=$(iwctl station "$wdev" get-networks 2>/dev/null | \
+		sed 's/\x1b\[[0-9;]*m//g' | awk 'NR>4 && NF>1 {print $1}' | grep -v '^-' | head -14)
+
+	if [ -z "$nets" ]; then
+		tui_msgbox "Wireless" "No networks were found. Move closer or use a cable."
+		return 1
+	fi
+	items=""
+	for n in $nets; do items="$items $n|$n|join this network"; done
+	# shellcheck disable=SC2086
+	tui_menu "Choose a wireless network" "$wdev" $items || return 1
+	ssid=$TUI_CHOICE
+	tui_input "Wireless" "Passphrase for $ssid" "" hidden || return 1
+	psk=$TUI_VALUE
+
+	tui_clear; tui_header "Wireless" "connecting"
+	tui_at 4 4; printf '%sJoining %s...%s' "$c_ice" "$ssid" "$t_reset"
+	iwctl --passphrase "$psk" station "$wdev" connect "$ssid" >/dev/null 2>&1
+	sleep 4
+	udhcpc -i "$wdev" -n -q >/dev/null 2>&1 || dhcpcd "$wdev" >/dev/null 2>&1
+	if net_online; then
+		A_NET="wifi"; A_WIFI_SSID=$ssid; A_WIFI_PSK=$psk
+		tui_msgbox "Wireless" "Connected to $ssid."
+		return 0
+	fi
+	tui_msgbox "Wireless" "Could not join $ssid. Check the passphrase."
+	return 1
+}
+
+# ------------------------------------------------------------------- screens
+
+screen_desktop() {
+	tui_menu "Graphical environment" "step 2 of 9" \
+		"none|Nothing|Console only. Add anything you like later with alpm." \
+		"kde|KDE Plasma|Full Wayland desktop with SDDM" \
+		"hyprland|Hyprland|Wayland compositor, tiling, animated" \
+		"niri|niri|Scrollable-tiling Wayland compositor" \
+		"dwl|dwl|Suckless dynamic Wayland compositor" \
+		"xfce|Xfce|Light traditional desktop on X11" \
+		"dwm|dwm|Suckless dynamic window manager on X11" \
+		"dms|dms|Dynamic minimal session, Arctic's own tiny shell" \
+	|| return 1
+	A_DESKTOP=$TUI_CHOICE
+	case "$A_DESKTOP" in
+	kde|xfce) A_DM_DEFAULT=sddm ;;
+	dwm) A_DM_DEFAULT=xdm ;;
+	*) A_DM_DEFAULT=sddm ;;
+	esac
+	[ "$A_DESKTOP" = none ] && return 0
+	tui_menu "Login manager" "for $A_DESKTOP" \
+		"sddm|SDDM|Qt greeter, themed for Arctic, Wayland ready" \
+		"xdm|XDM|Tiny classic X display manager" \
+		"greetd|greetd|Minimal console greeter, tuidm front end" \
+		"none|None|Log in on the console and start it yourself" \
+	|| return 1
+	A_DM=$TUI_CHOICE
+	return 0
+}
+
+screen_kernel() {
+	tui_menu "Kernel" "step 3 of 9" \
+		"Arctic-base-kernel|Arctic-base-kernel|Full hardware support. The default." \
+		"Arctic-libre-kernel|Arctic-libre-kernel|No blob loading, fully free" \
+		"Arctic-small-kernel|Arctic-small-kernel|Monolithic and tiny, no modules, fast boot" \
+	|| return 1
+	A_KERNEL=$TUI_CHOICE
+	return 0
+}
+
+screen_users() {
+	tui_input "User account" "Username for the everyday account" "" || return 1
+	[ -n "$TUI_VALUE" ] || { tui_msgbox "User" "A username is required."; return 1; }
+	case "$TUI_VALUE" in
+	root) tui_msgbox "User" "Pick something other than root."; return 1 ;;
+	*[!a-z0-9_-]*) tui_msgbox "User" \
+		"Use lowercase letters, digits, dash and underscore only."; return 1 ;;
+	esac
+	A_USER=$TUI_VALUE
+	tui_password "User account" "Password for $A_USER" || return 1
+	A_USERPASS=$TUI_VALUE
+	tui_menu "Shell for $A_USER" "zsh is the Arctic default" \
+		"/bin/zsh|zsh|The Arctic default, configured out of the box" \
+		"/bin/sh|busybox ash|Small and quick" \
+		"/bin/mksh|mksh|The MirBSD Korn shell" \
+	|| return 1
+	A_SHELL=$TUI_CHOICE
+	return 0
+}
+
+screen_rootpass() {
+	if tui_yesno "Root account" \
+		"Set a root password? Answer no to lock root and use doas only." yes; then
+		tui_password "Root account" "Password for root" || return 1
+		A_ROOTPASS=$TUI_VALUE
+	else
+		A_ROOTPASS="!locked"
+	fi
+	return 0
+}
+
+screen_locale() {
+	tui_menu "Locale" "step 6 of 9" \
+		"en_US.UTF-8|en_US.UTF-8|English, United States" \
+		"en_GB.UTF-8|en_GB.UTF-8|English, United Kingdom" \
+		"de_DE.UTF-8|de_DE.UTF-8|German" \
+		"fr_FR.UTF-8|fr_FR.UTF-8|French" \
+		"es_ES.UTF-8|es_ES.UTF-8|Spanish" \
+		"pt_BR.UTF-8|pt_BR.UTF-8|Portuguese, Brazil" \
+		"ru_RU.UTF-8|ru_RU.UTF-8|Russian" \
+		"ja_JP.UTF-8|ja_JP.UTF-8|Japanese" \
+		"zh_CN.UTF-8|zh_CN.UTF-8|Chinese, simplified" \
+		"other|Other...|Type a locale name yourself" \
+	|| return 1
+	if [ "$TUI_CHOICE" = other ]; then
+		tui_input "Locale" "Locale name" "en_US.UTF-8" || return 1
+		A_LOCALE=$TUI_VALUE
+	else
+		A_LOCALE=$TUI_CHOICE
+	fi
+	A_LANG=$A_LOCALE
+	tui_menu "Console keymap" "keyboard layout" \
+		"us|us|United States" "uk|uk|United Kingdom" "de|de|German" \
+		"fr|fr|French" "es|es|Spanish" "dvorak|dvorak|Dvorak" \
+		"colemak|colemak|Colemak" "other|Other...|Type it yourself" \
+	|| return 1
+	if [ "$TUI_CHOICE" = other ]; then
+		tui_input "Keymap" "Keymap name" "us" || return 1
+		A_KEYMAP=$TUI_VALUE
+	else
+		A_KEYMAP=$TUI_CHOICE
+	fi
+	return 0
+}
+
+screen_timezone() {
+	# Region first, then city, so the list stays navigable.
+	regions=$(list_timezones | cut -d/ -f1 | sort -u | head -12)
+	items=""
+	for r in $regions; do items="$items $r|$r|"; done
+	items="$items UTC|UTC|Coordinated Universal Time"
+	# shellcheck disable=SC2086
+	tui_menu "Time zone - region" "step 7 of 9" $items || return 1
+	if [ "$TUI_CHOICE" = UTC ]; then A_TZ=UTC; return 0; fi
+	region=$TUI_CHOICE
+	cities=$(list_timezones | grep "^$region/" | cut -d/ -f2- | sort | head -30)
+	items=""
+	for c in $cities; do items="$items $region/$c|$c|"; done
+	# shellcheck disable=SC2086
+	tui_menu "Time zone - $region" "pick a city" $items || return 1
+	A_TZ=$TUI_CHOICE
+	tui_yesno "Clock" "Keep the clock in sync over the network (NTP)?" yes \
+		&& A_NTP=yes || A_NTP=no
+	return 0
+}
+
+screen_swap() {
+	tui_menu "Swap" "step 8 of 9" \
+		"file|Swap file|A file on the root filesystem, easy to resize later" \
+		"partition|Swap partition|Use an existing partition" \
+		"zram|zram|Compressed swap in RAM, no disk writes" \
+		"none|No swap|Skip swap entirely" \
+	|| return 1
+	A_SWAP=$TUI_CHOICE
+	case "$A_SWAP" in
+	file|zram)
+		mem=$(awk '/MemTotal/{printf "%d", $2/1024/1024}' /proc/meminfo 2>/dev/null)
+		sug="${mem:-4}G"
+		tui_input "Swap" "Size for the swap $A_SWAP" "$sug" || return 1
+		A_SWAPSIZE=$TUI_VALUE ;;
+	partition)
+		parts=$(blkid -o device 2>/dev/null | head -12)
+		[ -n "$parts" ] || parts=$(ls /dev/sd?[0-9]* /dev/nvme?n?p[0-9]* /dev/vd?[0-9]* 2>/dev/null)
+		items=""
+		for p in $parts; do
+			t=$(blkid -s TYPE -o value "$p" 2>/dev/null)
+			sz=$(blockdev --getsize64 "$p" 2>/dev/null)
+			items="$items $p|$p|${t:-unknown} $(human ${sz:-0} 2>/dev/null)"
+		done
+		[ -n "$items" ] || { tui_msgbox "Swap" "No partitions were found."; return 1; }
+		# shellcheck disable=SC2086
+		tui_menu "Swap partition" "this will be formatted" $items || return 1
+		A_SWAPDEV=$TUI_CHOICE ;;
+	esac
+	return 0
+}
+
+screen_hardware() {
+	g=$(detect_gpu)
+	tui_menu "Graphics driver" "detected: $g" \
+		"auto|Automatic ($g)|Install what this machine actually has" \
+		"nvidia|NVIDIA proprietary|From the nonfree repo" \
+		"nouveau|Nouveau|Free NVIDIA driver, from alt-nonfree" \
+		"amd|AMD|Mesa RADV, amdgpu firmware" \
+		"intel|Intel|Mesa ANV, intel media driver" \
+		"generic|Generic|Modesetting and llvmpipe only" \
+	|| return 1
+	A_GPU=$TUI_CHOICE
+
+	tui_checklist "Extra system options" "space toggles" \
+		"audio|Audio|pipewire, wireplumber and the ALSA bridge|on" \
+		"bluetooth|Bluetooth|bluez and its tools|off" \
+		"ssh|SSH server|OpenSSH, started at boot|off" \
+		"firewall|Firewall|nftables with a sane default policy|on" \
+		"trim|SSD trim|Weekly fstrim on solid state disks|on" \
+		"printing|Printing|cups and drivers|off" \
+		"devtools|Developer tools|clang, lld, cmake, ninja, git, python|off" \
+		"vscode|Visual Studio Code|The editor, from the extra repo|off" \
+		"multilib|32-bit support|multilib libraries, for Steam and Wine|off" \
+	|| return 1
+	A_AUDIO=no; A_BLUETOOTH=no; A_SSH=no; A_FIREWALL=no; A_TRIM=no; A_EXTRA=""
+	for s in $TUI_SELECTED; do
+		case "$s" in
+		audio) A_AUDIO=yes ;;
+		bluetooth) A_BLUETOOTH=yes ;;
+		ssh) A_SSH=yes ;;
+		firewall) A_FIREWALL=yes ;;
+		trim) A_TRIM=yes ;;
+		printing) A_EXTRA="$A_EXTRA cups" ;;
+		devtools) A_EXTRA="$A_EXTRA clang lld cmake ninja git python bmake" ;;
+		vscode) A_EXTRA="$A_EXTRA vscode" ;;
+		multilib) A_EXTRA="$A_EXTRA glibc-32 mesa-32" ;;
+		esac
+	done
+	return 0
+}
+
+screen_hostname() {
+	tui_input "Hostname" "Name for this machine on the network" "arctic" || return 1
+	A_HOSTNAME=$TUI_VALUE
+	return 0
+}
+
+# ------------------------------------------------------------------- review
+
+screen_review() {
+	while :; do
+		tui_size; tui_clear
+		tui_header "Review" "nothing has been written yet"
+		left=4
+		r=4
+		row() {
+			tui_at "$r" "$left"
+			printf '%s%-20s%s %s%s%s' "$c_grey" "$1" "$t_reset" "$c_snow" "$2" "$t_reset"
+			r=$((r+1))
+		}
+		tui_at "$r" "$left"
+		printf '%sArctic Linux will be installed with these settings%s' "$c_ice$t_bold" "$t_reset"
+		r=$((r+2))
+		row "Target"        "$TARGET"
+		row "Hostname"      "$A_HOSTNAME"
+		row "Kernel"        "$A_KERNEL"
+		row "Desktop"       "$A_DESKTOP${A_DM:+ + $A_DM}"
+		row "User"          "${A_USER:-none} ($A_SHELL)"
+		row "Root"          "$([ "$A_ROOTPASS" = '!locked' ] && echo 'locked, doas only' || echo 'password set')"
+		row "Locale"        "$A_LOCALE  keymap $A_KEYMAP"
+		row "Time zone"     "$A_TZ$([ "$A_NTP" = yes ] && echo ' (NTP on)')"
+		row "Network"       "$A_NET${A_WIFI_SSID:+ ($A_WIFI_SSID)}"
+		row "Swap"          "$A_SWAP $([ "$A_SWAP" = partition ] && echo "$A_SWAPDEV" || echo "$A_SWAPSIZE")"
+		row "Graphics"      "$A_GPU"
+		row "Microcode"     "$(detect_microcode)"
+		row "Firmware"      "$(detect_firmware)"
+		row "Options"       "$(printf 'audio=%s bt=%s ssh=%s fw=%s' "$A_AUDIO" "$A_BLUETOOTH" "$A_SSH" "$A_FIREWALL")"
+		[ -n "$A_EXTRA" ] && row "Extra packages" "$A_EXTRA"
+		r=$((r+1))
+		tui_at "$r" "$left"
+		printf '%sThe target filesystem will be written to. Existing files stay unless%s' "$c_amb" "$t_reset"
+		tui_at $((r+1)) "$left"
+		printf '%sthey collide with a package.%s' "$c_amb" "$t_reset"
+
+		tui_footer "enter install   b back to the menu   esc quit"
+		k=$(tui_key)
+		case "$k" in
+		enter) return 0 ;;
+		b|B|esc) return 1 ;;
+		ctrlc) tui_done; exit 130 ;;
+		esac
+	done
+}
+
+save_conf() {
+	cat >"$CONF" <<EOF
+# arctic-strap answers, written $(date '+%Y-%m-%d %H:%M:%S')
+TARGET='$TARGET'
+A_KERNEL='$A_KERNEL'
+A_DESKTOP='$A_DESKTOP'
+A_DM='${A_DM:-none}'
+A_HOSTNAME='$A_HOSTNAME'
+A_USER='$A_USER'
+A_SHELL='$A_SHELL'
+A_LOCALE='$A_LOCALE'
+A_LANG='$A_LANG'
+A_KEYMAP='$A_KEYMAP'
+A_TZ='$A_TZ'
+A_NTP='$A_NTP'
+A_NET='$A_NET'
+A_WIFI_SSID='$A_WIFI_SSID'
+A_SWAP='$A_SWAP'
+A_SWAPSIZE='$A_SWAPSIZE'
+A_SWAPDEV='$A_SWAPDEV'
+A_GPU='$A_GPU'
+A_AUDIO='$A_AUDIO'
+A_BLUETOOTH='$A_BLUETOOTH'
+A_SSH='$A_SSH'
+A_FIREWALL='$A_FIREWALL'
+A_TRIM='$A_TRIM'
+A_EXTRA='$A_EXTRA'
+EOF
+	chmod 600 "$CONF"
+}
+
+# ------------------------------------------------------------- the config menu
+
+config_menu() {
+	done_net=""; done_de=""; done_k=""; done_u=""; done_r=""
+	done_l=""; done_t=""; done_s=""; done_h=""; done_hw=""
+	mark() { [ -n "$1" ] && printf 'done' || printf 'not set'; }
+	while :; do
+		tui_menu "Setup" "target $TARGET" \
+			"net|1. Network|$(mark "$done_net")  wired, wireless or offline" \
+			"de|2. Desktop|$(mark "$done_de")  ${A_DESKTOP}" \
+			"kern|3. Kernel|$(mark "$done_k")  ${A_KERNEL}" \
+			"user|4. User account|$(mark "$done_u")  ${A_USER:-none}" \
+			"root|5. Root password|$(mark "$done_r")" \
+			"loc|6. Locale and keymap|$(mark "$done_l")  ${A_LOCALE} / ${A_KEYMAP}" \
+			"tz|7. Time zone|$(mark "$done_t")  ${A_TZ}" \
+			"swap|8. Swap|$(mark "$done_s")  ${A_SWAP}" \
+			"host|9. Hostname|$(mark "$done_h")  ${A_HOSTNAME}" \
+			"hw|10. Drivers and extras|$(mark "$done_hw")  ${A_GPU}" \
+			"go|Install now|Review the settings and write to $TARGET" \
+			"quit|Quit|Leave without changing anything" \
+		|| return 1
+		case "$TUI_CHOICE" in
+		net)  screen_network   && done_net=1 ;;
+		de)   screen_desktop   && done_de=1 ;;
+		kern) screen_kernel    && done_k=1 ;;
+		user) screen_users     && done_u=1 ;;
+		root) screen_rootpass  && done_r=1 ;;
+		loc)  screen_locale    && done_l=1 ;;
+		tz)   screen_timezone  && done_t=1 ;;
+		swap) screen_swap      && done_s=1 ;;
+		host) screen_hostname  && done_h=1 ;;
+		hw)   screen_hardware  && done_hw=1 ;;
+		go)
+			if [ -z "$A_USER" ]; then
+				tui_msgbox "Setup" "Create a user account first (step 4)."
+				continue
+			fi
+			if [ -z "$done_r" ]; then
+				tui_msgbox "Setup" "Decide on the root password first (step 5)."
+				continue
+			fi
+			screen_review && return 0 ;;
+		quit)
+			tui_yesno "Quit" "Leave arctic-strap? Nothing has been written." no \
+				&& return 1 ;;
+		esac
+	done
+}
+
+# ------------------------------------------------------------------ the install
+
+# Package sets, per repo. main is what every Arctic system needs.
+PKGS_MAIN="glibc busybox toybox zsh doas libarchive mandoc onetrueawk bmake byacc \
+alpm arctic-base arctic-init iana-etc tzdata ca-certificates"
+PKGS_NET="iwd dhcpcd openssl curl"
+PKGS_EXTRA_BASE="foot vim less htop fastfetch pciutils usbutils"
+
+step() {
+	TUI_GAUGE_NOTE="$2"
+	tui_gauge "$1"
+	logit "$1"
+}
+
+run() {
+	logit "+ $*"
+	if "$@" >>"$LOGF" 2>&1; then
+		return 0
+	fi
+	rc=$?
+	logit "! failed ($rc): $*"
+	return $rc
+}
+
+target_alpm() {
+	# alpm honours --root, so the whole install is one package transaction.
+	ALPM_ROOT="$TARGET" ALPM_YES=1 alpm "$@"
+}
+
+do_install() {
+	: >"$LOGF"
+	total=22
+	tui_gauge_init "$total"
+
+	step "Checking the target" "$TARGET"
+	[ -d "$TARGET" ] || bail "$TARGET is not a directory"
+	mountpoint -q "$TARGET" 2>/dev/null || \
+		logit "warning: $TARGET is not a mount point"
+	av=$(df -k "$TARGET" | awk 'NR==2{print $4}')
+	[ "${av:-0}" -gt 1048576 ] || bail "$TARGET has less than 1 GiB free"
+
+	step "Creating the directory tree" "filesystem layout"
+	for d in boot dev etc home proc root run srv sys tmp var opt \
+		usr/bin usr/lib usr/share usr/include usr/local \
+		var/log var/cache var/lib var/tmp etc/alpm/repos.d \
+		var/lib/alpm/local var/lib/alpm/sync
+	do
+		mkdir -p "$TARGET/$d"
+	done
+	chmod 1777 "$TARGET/tmp" "$TARGET/var/tmp"
+	chmod 700 "$TARGET/root"
+	# Arctic is a merged-/usr system; /bin, /sbin and /lib are symlinks.
+	for l in bin sbin lib lib64; do
+		[ -e "$TARGET/$l" ] || ln -s "usr/$l" "$TARGET/$l" 2>/dev/null || :
+	done
+	mkdir -p "$TARGET/usr/sbin" "$TARGET/usr/lib64"
+
+	step "Copying the package database" "repositories"
+	for f in /etc/alpm/alpm.conf; do
+		[ -f "$f" ] && { mkdir -p "$TARGET/etc/alpm"; cp -f "$f" "$TARGET/etc/alpm/"; }
+	done
+	cp -f /etc/alpm/repos.d/*.repo "$TARGET/etc/alpm/repos.d/" 2>/dev/null || :
+	cp -a /var/lib/alpm/sync/. "$TARGET/var/lib/alpm/sync/" 2>/dev/null || :
+
+	step "Installing the base system" "$PKGS_MAIN"
+	if [ "$A_NET" = offline ]; then
+		# Everything we need is already on the ISO's own package cache.
+		mkdir -p "$TARGET/var/cache/alpm/pkg"
+		cp -f /var/cache/alpm/pkg/*.alpmz "$TARGET/var/cache/alpm/pkg/" 2>/dev/null || :
+	fi
+	target_alpm ins $PKGS_MAIN || bail "the base system failed to install - see $LOGF"
+
+	step "Installing the kernel" "$A_KERNEL"
+	# -nomod keeps the kernel out of the bootloader until 'arctic-strap boot' runs.
+	target_alpm ins -nomod "$A_KERNEL" || bail "could not install $A_KERNEL"
+	uc=$(detect_microcode)
+	[ "$uc" != none ] && target_alpm ins "$uc" || :
+
+	step "Installing firmware" "linux-firmware"
+	case "$A_KERNEL" in
+	Arctic-libre-kernel) logit "libre kernel: skipping nonfree firmware" ;;
+	*) target_alpm ins linux-firmware || warn_soft "firmware not installed" ;;
+	esac
+
+	step "Installing network tools" "$PKGS_NET"
+	target_alpm ins $PKGS_NET || :
+
+	step "Installing base utilities" "$PKGS_EXTRA_BASE"
+	target_alpm ins $PKGS_EXTRA_BASE || :
+
+	step "Installing graphics drivers" "$A_GPU"
+	g=$A_GPU
+	[ "$g" = auto ] && g=$(detect_gpu)
+	case "$g" in
+	nvidia) target_alpm ins nvidia-drivers nvidia-utils || : ;;
+	nouveau) target_alpm ins mesa xf86-video-nouveau || : ;;
+	amd) target_alpm ins mesa vulkan-radeon libva-mesa-driver || : ;;
+	intel) target_alpm ins mesa vulkan-intel intel-media-driver || : ;;
+	*) target_alpm ins mesa || : ;;
+	esac
+
+	step "Installing the desktop" "$A_DESKTOP"
+	case "$A_DESKTOP" in
+	kde)      target_alpm ins plasma-meta konsole dolphin || : ;;
+	hyprland) target_alpm ins hyprland waybar wofi xdg-desktop-portal-hyprland || : ;;
+	niri)     target_alpm ins niri waybar fuzzel || : ;;
+	dwl)      target_alpm ins dwl somebar || : ;;
+	xfce)     target_alpm ins xfce4-meta xorg-server || : ;;
+	dwm)      target_alpm ins dwm st dmenu xorg-server || : ;;
+	dms)      target_alpm ins dms || : ;;
+	none)     logit "no desktop requested" ;;
+	esac
+	case "${A_DM:-none}" in
+	sddm)   target_alpm ins sddm sddm-arctic-theme || : ;;
+	xdm)    target_alpm ins xdm || : ;;
+	greetd) target_alpm ins greetd tuigreet || : ;;
+	esac
+
+	step "Installing extra packages" "${A_EXTRA:-none}"
+	[ -n "$A_EXTRA" ] && target_alpm ins $A_EXTRA || :
+	[ "$A_AUDIO" = yes ] && target_alpm ins pipewire wireplumber pipewire-alsa || :
+	[ "$A_BLUETOOTH" = yes ] && target_alpm ins bluez bluez-utils || :
+	[ "$A_SSH" = yes ] && target_alpm ins openssh || :
+	[ "$A_FIREWALL" = yes ] && target_alpm ins nftables || :
+
+	step "Writing fstab" "/etc/fstab"
+	write_fstab
+
+	step "Setting up swap" "$A_SWAP"
+	setup_swap
+
+	step "Configuring locale" "$A_LOCALE"
+	printf '%s UTF-8\n' "$A_LOCALE" >"$TARGET/etc/locale.gen"
+	printf 'LANG=%s\nLC_COLLATE=C\n' "$A_LANG" >"$TARGET/etc/locale.conf"
+	printf 'KEYMAP=%s\nFONT=arctic\n' "$A_KEYMAP" >"$TARGET/etc/vconsole.conf"
+	chroot_run locale-gen 2>/dev/null || logit "locale-gen unavailable, skipped"
+
+	step "Setting the time zone" "$A_TZ"
+	if [ -f "$TARGET/usr/share/zoneinfo/$A_TZ" ]; then
+		ln -sf "/usr/share/zoneinfo/$A_TZ" "$TARGET/etc/localtime"
+	else
+		logit "zoneinfo for $A_TZ missing on the target"
+	fi
+	printf '%s\n' "$A_TZ" >"$TARGET/etc/timezone"
+
+	step "Setting the hostname" "$A_HOSTNAME"
+	printf '%s\n' "$A_HOSTNAME" >"$TARGET/etc/hostname"
+	cat >"$TARGET/etc/hosts" <<EOF
+127.0.0.1	localhost
+::1		localhost
+127.0.1.1	$A_HOSTNAME.localdomain	$A_HOSTNAME
+EOF
+
+	step "Creating the user account" "$A_USER"
+	create_users
+
+	step "Configuring doas" "/etc/doas.conf"
+	cat >"$TARGET/etc/doas.conf" <<EOF
+# Arctic Linux - doas rules
+# Members of the wheel group may act as root after entering their password.
+permit persist :wheel
+# Let anyone in wheel sync repositories without a prompt; it changes nothing.
+permit nopass :wheel cmd alpm args fetch all
+EOF
+	chmod 0400 "$TARGET/etc/doas.conf"
+
+	step "Configuring the network" "$A_NET"
+	configure_network
+
+	step "Enabling services" "init"
+	enable_services
+
+	step "Writing the Arctic release file" "/etc/arctic-release"
+	write_release
+
+	step "Generating the initramfs" "$A_KERNEL"
+	chroot_run arctic-mkinitramfs || logit "initramfs generation skipped"
+
+	step "Finishing up" "cleaning the cache"
+	rm -rf "$TARGET/var/cache/alpm/build"/* 2>/dev/null || :
+	# The first boot of a finished install shows the Arctic greeting.
+	: >"$TARGET/var/lib/arctic/firstboot" 2>/dev/null || {
+		mkdir -p "$TARGET/var/lib/arctic"; : >"$TARGET/var/lib/arctic/firstboot"; }
+	sync
+
+	tui_gauge "Done" 100
+	sleep 1
+}
+
+warn_soft() { logit "warning: $*"; }
+
+chroot_run() {
+	[ -x "$TARGET/usr/bin/env" ] || [ -x "$TARGET/bin/sh" ] || return 1
+	mount --bind /dev "$TARGET/dev" 2>/dev/null || :
+	mount --bind /proc "$TARGET/proc" 2>/dev/null || :
+	mount --bind /sys "$TARGET/sys" 2>/dev/null || :
+	chroot "$TARGET" /bin/sh -lc "$*" >>"$LOGF" 2>&1
+	rc=$?
+	umount "$TARGET/dev" "$TARGET/proc" "$TARGET/sys" 2>/dev/null || :
+	return $rc
+}
+
+write_fstab() {
+	f="$TARGET/etc/fstab"
+	{
+		printf '# Arctic Linux - /etc/fstab\n'
+		printf '# <device>\t<mount>\t<type>\t<options>\t<dump>\t<pass>\n'
+		# Root: read it back from the mount table so we record what is real.
+		rootdev=$(awk -v t="$TARGET" '$2==t{print $1}' /proc/mounts | tail -1)
+		roottype=$(awk -v t="$TARGET" '$2==t{print $3}' /proc/mounts | tail -1)
+		if [ -n "$rootdev" ]; then
+			uuid=$(blkid -s UUID -o value "$rootdev" 2>/dev/null)
+			dev=${uuid:+UUID=$uuid}; dev=${dev:-$rootdev}
+			opts="rw,relatime"
+			[ "$(detect_rotational)" = ssd ] && opts="rw,noatime"
+			printf '%s\t/\t%s\t%s\t0\t1\n' "$dev" "${roottype:-ext4}" "$opts"
+		fi
+		# Anything mounted under the target, boot included.
+		awk -v t="$TARGET" 'index($2, t"/")==1 {print $1, substr($2, length(t)+1), $3}' \
+			/proc/mounts | while read -r d m ty; do
+			uuid=$(blkid -s UUID -o value "$d" 2>/dev/null)
+			dd=${uuid:+UUID=$uuid}; dd=${dd:-$d}
+			case "$ty" in
+			vfat) printf '%s\t%s\tvfat\trw,relatime,fmask=0077,dmask=0077,utf8=1\t0\t2\n' "$dd" "$m" ;;
+			*)    printf '%s\t%s\t%s\trw,relatime\t0\t2\n' "$dd" "$m" "$ty" ;;
+			esac
+		done
+		printf 'tmpfs\t/tmp\ttmpfs\trw,nosuid,nodev,size=50%%\t0\t0\n'
+		printf 'proc\t/proc\tproc\trw,nosuid,nodev,noexec\t0\t0\n'
+		printf 'sysfs\t/sys\tsysfs\trw,nosuid,nodev,noexec\t0\t0\n'
+		printf 'devpts\t/dev/pts\tdevpts\trw,nosuid,noexec,gid=5,mode=620\t0\t0\n'
+	} >"$f"
+}
+
+setup_swap() {
+	case "$A_SWAP" in
+	none) return 0 ;;
+	zram)
+		mkdir -p "$TARGET/etc/arctic"
+		printf 'ZRAM_SIZE=%s\nZRAM_ALGO=zstd\n' "$A_SWAPSIZE" >"$TARGET/etc/arctic/zram.conf"
+		printf 'zram\n' >>"$TARGET/etc/modules-load.d/arctic.conf" 2>/dev/null || {
+			mkdir -p "$TARGET/etc/modules-load.d"
+			printf 'zram\n' >"$TARGET/etc/modules-load.d/arctic.conf"; }
+		return 0 ;;
+	partition)
+		[ -n "$A_SWAPDEV" ] || return 0
+		run mkswap -L arctic-swap "$A_SWAPDEV" || return 0
+		uuid=$(blkid -s UUID -o value "$A_SWAPDEV" 2>/dev/null)
+		printf '%s\tnone\tswap\tsw,pri=10\t0\t0\n' "${uuid:+UUID=$uuid}${uuid:-$A_SWAPDEV}" \
+			>>"$TARGET/etc/fstab"
+		return 0 ;;
+	file)
+		sz=$(printf '%s' "$A_SWAPSIZE" | sed 's/[Gg]$//')
+		mb=$(( ${sz:-4} * 1024 ))
+		logit "creating a ${mb}MiB swap file"
+		# fallocate leaves holes on some filesystems, so write it out.
+		if ! run fallocate -l "${mb}M" "$TARGET/swapfile"; then
+			run dd if=/dev/zero of="$TARGET/swapfile" bs=1M count="$mb"
+		fi
+		chmod 600 "$TARGET/swapfile"
+		run mkswap "$TARGET/swapfile" || return 0
+		printf '/swapfile\tnone\tswap\tsw,pri=10\t0\t0\n' >>"$TARGET/etc/fstab"
+		return 0 ;;
+	esac
+}
+
+create_users() {
+	# Groups first. Arctic uses wheel for administrative access.
+	for g in wheel audio video input storage network render kvm; do
+		chroot_run "grep -q '^$g:' /etc/group || addgroup -S $g" || :
+	done
+	if [ -n "$A_USER" ]; then
+		chroot_run "adduser -D -s $A_SHELL -h /home/$A_USER $A_USER" || \
+			chroot_run "useradd -m -s $A_SHELL $A_USER" || :
+		for g in wheel audio video input storage network render; do
+			chroot_run "addgroup $A_USER $g 2>/dev/null || usermod -aG $g $A_USER" || :
+		done
+		if [ -n "$A_USERPASS" ]; then
+			printf '%s:%s\n' "$A_USER" "$A_USERPASS" | \
+				chroot "$TARGET" chpasswd >>"$LOGF" 2>&1 || \
+				logit "could not set the password for $A_USER"
+		fi
+		# Drop the Arctic shell configuration into the new home.
+		for f in .zshrc .zshenv .zprofile; do
+			[ -f "$TARGET/etc/skel/$f" ] && \
+				cp -f "$TARGET/etc/skel/$f" "$TARGET/home/$A_USER/$f"
+		done
+		chroot_run "chown -R $A_USER:$A_USER /home/$A_USER" || :
+	fi
+	if [ "$A_ROOTPASS" = "!locked" ]; then
+		chroot_run "passwd -l root" || :
+		logit "root account locked"
+	elif [ -n "$A_ROOTPASS" ]; then
+		printf 'root:%s\n' "$A_ROOTPASS" | \
+			chroot "$TARGET" chpasswd >>"$LOGF" 2>&1 || logit "could not set the root password"
+	fi
+}
+
+configure_network() {
+	mkdir -p "$TARGET/etc/arctic"
+	case "$A_NET" in
+	wifi)
+		mkdir -p "$TARGET/var/lib/iwd"
+		if [ -n "$A_WIFI_SSID" ]; then
+			# iwd keeps one file per network; write it so the link comes back up.
+			printf '[Security]\nPassphrase=%s\n' "$A_WIFI_PSK" \
+				>"$TARGET/var/lib/iwd/$A_WIFI_SSID.psk"
+			chmod 600 "$TARGET/var/lib/iwd/$A_WIFI_SSID.psk"
+		fi
+		printf 'NET_MODE=wifi\nNET_SSID=%s\n' "$A_WIFI_SSID" >"$TARGET/etc/arctic/network.conf"
+		;;
+	static:*)
+		iface=$(printf '%s' "$A_NET" | cut -d: -f2)
+		addr=$(printf '%s' "$A_NET" | cut -d: -f3)
+		gw=$(printf '%s' "$A_NET" | cut -d: -f4)
+		dns=$(printf '%s' "$A_NET" | cut -d: -f5)
+		cat >"$TARGET/etc/arctic/network.conf" <<EOF
+NET_MODE=static
+NET_IFACE=$iface
+NET_ADDR=$addr
+NET_GATEWAY=$gw
+NET_DNS=$dns
+EOF
+		printf 'nameserver %s\n' "$dns" >"$TARGET/etc/resolv.conf"
+		;;
+	*)
+		printf 'NET_MODE=dhcp\n' >"$TARGET/etc/arctic/network.conf"
+		[ -f "$TARGET/etc/resolv.conf" ] || \
+			printf 'nameserver 1.1.1.1\nnameserver 9.9.9.9\n' >"$TARGET/etc/resolv.conf"
+		;;
+	esac
+}
+
+enable_services() {
+	svc() {
+		mkdir -p "$TARGET/etc/arctic/services"
+		: >"$TARGET/etc/arctic/services/$1"
+		logit "enabled service $1"
+	}
+	svc udev
+	svc network
+	[ "$A_NET" = wifi ] && svc iwd
+	[ "$A_NTP" = yes ] && svc ntpd
+	[ "$A_SSH" = yes ] && svc sshd
+	[ "$A_FIREWALL" = yes ] && svc nftables
+	[ "$A_BLUETOOTH" = yes ] && svc bluetoothd
+	[ "$A_TRIM" = yes ] && [ "$(detect_rotational)" = ssd ] && svc fstrim
+	case "${A_DM:-none}" in
+	sddm) svc sddm ;;
+	xdm) svc xdm ;;
+	greetd) svc greetd ;;
+	esac
+	[ "$A_AUDIO" = yes ] && svc pipewire
+	:
+}
+
+write_release() {
+	cat >"$TARGET/etc/arctic-release" <<EOF
+NAME="Arctic Linux"
+PRETTY_NAME="Arctic Linux"
+ID=arctic
+BUILD_ID=$(date '+%Y.%m.%d')
+KERNEL=$A_KERNEL
+INSTALLED=$(date '+%Y-%m-%d %H:%M:%S')
+INSTALLER=arctic-strap $VERSION
+LIBC=glibc
+TOOLCHAIN=llvm
+USERLAND=bsd
+INIT=busybox
+HOME_URL="https://github.com/apiwo/arctic-linux"
+EOF
+	ln -sf /etc/arctic-release "$TARGET/etc/os-release" 2>/dev/null || \
+		cp "$TARGET/etc/arctic-release" "$TARGET/etc/os-release"
+	printf 'Arctic Linux \\r (\\l)\n\n' >"$TARGET/etc/issue"
+}
+
+# --------------------------------------------------------------- boot subcommand
+
+boot_install() {
+	BOOTDIR=${1:?usage: arctic-strap boot /mnt/boot}
+	need_root
+	[ -d "$BOOTDIR" ] || bail "$BOOTDIR does not exist - mount the boot partition first"
+
+	# The kernel choice is remembered from the main run.
+	[ -f "$CONF" ] && . "$CONF"
+	K=${A_KERNEL:-Arctic-base-kernel}
+
+	# Work out the root of the install from the boot directory.
+	ROOTDIR=$(printf '%s' "$BOOTDIR" | sed 's|/boot/*$||')
+	[ -n "$ROOTDIR" ] || ROOTDIR=/mnt
+	[ -d "$ROOTDIR" ] || bail "cannot locate the installed system near $BOOTDIR"
+
+	tui_init
+	tui_header "Bootloader" "$BOOTDIR"
+	fw=$(detect_firmware)
+
+	tui_menu "Boot method" "detected: $fw" \
+		"efi|EFI / UEFI|Limine, registered as 'Arctic linux'" \
+		"bios|BIOS (legacy)|Limine in the MBR, or GRUB if you prefer" \
+	|| { tui_done; exit 1; }
+	method=$TUI_CHOICE
+
+	loader=limine
+	if [ "$method" = bios ]; then
+		tui_menu "BIOS bootloader" "legacy boot" \
+			"limine|Limine BIOS|The Arctic default, small and quick" \
+			"grub|GRUB|Use this if you multi-boot something awkward" \
+		|| { tui_done; exit 1; }
+		loader=$TUI_CHOICE
+	fi
+
+	tui_gauge_init 6
+	step "Locating the kernel" "$K"
+	kver=$(ls "$ROOTDIR"/lib/modules 2>/dev/null | head -1)
+	vmlinuz=$(ls "$ROOTDIR"/boot/vmlinuz-* 2>/dev/null | head -1)
+	[ -n "$vmlinuz" ] || vmlinuz=$(ls "$BOOTDIR"/vmlinuz-* 2>/dev/null | head -1)
+	[ -n "$vmlinuz" ] || bail "no kernel image found - install $K first"
+
+	step "Activating $K" "alpm commit"
+	ALPM_ROOT="$ROOTDIR" ALPM_YES=1 alpm commit "$K" >>"$LOGF" 2>&1 || \
+		logit "alpm commit reported a problem"
+
+	step "Copying the kernel into place" "$BOOTDIR"
+	kname=$(basename "$vmlinuz")
+	[ "$(dirname "$vmlinuz")" = "$BOOTDIR" ] || cp -f "$vmlinuz" "$BOOTDIR/$kname"
+	for extra in "$ROOTDIR"/boot/initramfs-* "$ROOTDIR"/boot/*-ucode.img; do
+		[ -f "$extra" ] && cp -f "$extra" "$BOOTDIR/" || :
+	done
+
+	step "Finding the root device" "fstab"
+	rootspec=$(awk '$2=="/"{print $1; exit}' "$ROOTDIR/etc/fstab" 2>/dev/null)
+	[ -n "$rootspec" ] || {
+		rd=$(awk -v t="$ROOTDIR" '$2==t{print $1}' /proc/mounts | tail -1)
+		u=$(blkid -s UUID -o value "$rd" 2>/dev/null)
+		rootspec=${u:+UUID=$u}; rootspec=${rootspec:-$rd}
+	}
+	initrd=$(ls "$BOOTDIR"/initramfs-* 2>/dev/null | head -1)
+	ucode=$(ls "$BOOTDIR"/*-ucode.img 2>/dev/null | head -1)
+
+	step "Writing the Limine configuration" "Arctic linux"
+	write_limine_conf "$BOOTDIR" "$kname" "$rootspec" "$initrd" "$ucode"
+
+	step "Installing the bootloader" "$loader / $method"
+	case "$method:$loader" in
+	efi:*)   install_limine_efi "$BOOTDIR" ;;
+	bios:limine) install_limine_bios "$BOOTDIR" ;;
+	bios:grub)   install_grub "$BOOTDIR" "$ROOTDIR" ;;
+	esac
+
+	tui_gauge "Bootloader installed" 100
+	sleep 1
+	tui_done
+	finished_banner
+}
+
+write_limine_conf() {
+	bd=$1 kname=$2 rootspec=$3 initrd=$4 ucode=$5
+	mods=""
+	[ -n "$ucode" ]  && mods="$mods
+    module_path: boot():/$(basename "$ucode")"
+	[ -n "$initrd" ] && mods="$mods
+    module_path: boot():/$(basename "$initrd")"
+
+	# Limine 9+ configuration syntax.
+	cat >"$bd/limine.conf" <<EOF
+# Arctic Linux - Limine configuration
+timeout: 3
+default_entry: 1
+interface_branding: Arctic Linux
+term_palette: 1e1e2e;f38ba8;a6e3a1;f9e2af;89b4fa;cba6f7;94e2d5;bac2de
+term_background: 1a1b26
+graphics: yes
+wallpaper: boot():/arctic-splash.png
+wallpaper_style: centered
+backdrop: 5f5bc6
+
+/Arctic linux
+    protocol: linux
+    kernel_path: boot():/$kname
+    kernel_cmdline: root=$rootspec rw quiet loglevel=3 arctic.splash$mods
+
+/Arctic linux (verbose)
+    protocol: linux
+    kernel_path: boot():/$kname
+    kernel_cmdline: root=$rootspec rw loglevel=7$mods
+
+/Arctic linux (recovery shell)
+    protocol: linux
+    kernel_path: boot():/$kname
+    kernel_cmdline: root=$rootspec rw single init=/bin/sh$mods
+EOF
+	# Older Limine reads limine.cfg; ship both so either version boots.
+	sed 's|^/Arctic|:Arctic|; s|^    \([a-z_]*\): |    \1=|' "$bd/limine.conf" \
+		>"$bd/limine.cfg" 2>/dev/null || :
+	[ -f /usr/share/arctic/limine/splash.png ] && \
+		cp -f /usr/share/arctic/limine/splash.png "$bd/arctic-splash.png" || :
+}
+
+install_limine_efi() {
+	bd=$1
+	mkdir -p "$bd/EFI/BOOT" "$bd/EFI/arctic"
+	src=""
+	for c in /usr/share/limine /usr/lib/limine "$TUILIB/../limine"; do
+		[ -f "$c/BOOTX64.EFI" ] && { src=$c; break; }
+	done
+	[ -n "$src" ] || bail "limine EFI binaries are missing (install the limine package)"
+	cp -f "$src/BOOTX64.EFI" "$bd/EFI/BOOT/BOOTX64.EFI"
+	cp -f "$src/BOOTX64.EFI" "$bd/EFI/arctic/arcticx64.efi"
+	[ -f "$src/BOOTIA32.EFI" ] && cp -f "$src/BOOTIA32.EFI" "$bd/EFI/BOOT/BOOTIA32.EFI"
+
+	# Register an NVRAM entry named exactly "Arctic linux".
+	if have efibootmgr; then
+		esp=$(awk -v b="$bd" '$2==b{print $1}' /proc/mounts | tail -1)
+		if [ -n "$esp" ]; then
+			disk=$(printf '%s' "$esp" | sed 's|p\?[0-9]*$||')
+			part=$(printf '%s' "$esp" | sed 's|.*[^0-9]||')
+			efibootmgr --quiet --create --disk "$disk" --part "$part" \
+				--loader '\EFI\arctic\arcticx64.efi' --label 'Arctic linux' \
+				>>"$LOGF" 2>&1 || logit "efibootmgr could not add the entry"
+		fi
+	else
+		logit "efibootmgr absent; relying on the fallback path EFI/BOOT/BOOTX64.EFI"
+	fi
+}
+
+install_limine_bios() {
+	bd=$1
+	src=""
+	for c in /usr/share/limine /usr/lib/limine; do
+		[ -f "$c/limine-bios.sys" ] && { src=$c; break; }
+	done
+	[ -n "$src" ] || bail "limine BIOS files are missing (install the limine package)"
+	cp -f "$src/limine-bios.sys" "$bd/limine-bios.sys"
+	dev=$(awk -v b="$bd" '$2==b{print $1}' /proc/mounts | tail -1)
+	disk=$(printf '%s' "$dev" | sed 's|p\?[0-9]*$||')
+	[ -n "$disk" ] || bail "cannot work out which disk to write the MBR to"
+	have limine || bail "the limine tool is not installed"
+	run limine bios-install "$disk" || bail "writing the Limine MBR to $disk failed"
+}
+
+install_grub() {
+	bd=$1 rd=$2
+	have grub-install || bail "GRUB is not installed - alpm ins grub"
+	dev=$(awk -v b="$bd" '$2==b{print $1}' /proc/mounts | tail -1)
+	disk=$(printf '%s' "$dev" | sed 's|p\?[0-9]*$||')
+	run grub-install --target=i386-pc --boot-directory="$bd" "$disk" || \
+		bail "grub-install failed"
+	mkdir -p "$bd/grub"
+	cat >"$bd/grub/grub.cfg" <<EOF
+set timeout=3
+set default=0
+insmod all_video
+menuentry "Arctic linux" {
+	linux /$(basename "$(ls "$bd"/vmlinuz-* | head -1)") root=$(awk '$2=="/"{print $1; exit}' "$rd/etc/fstab") rw quiet
+$( [ -f "$(ls "$bd"/initramfs-* 2>/dev/null | head -1)" ] && \
+	printf '\tinitrd /%s\n' "$(basename "$(ls "$bd"/initramfs-* | head -1)")" )
+}
+menuentry "Arctic linux (recovery shell)" {
+	linux /$(basename "$(ls "$bd"/vmlinuz-* | head -1)") root=$(awk '$2=="/"{print $1; exit}' "$rd/etc/fstab") rw single init=/bin/sh
+}
+EOF
+}
+
+finished_banner() {
+	cat <<EOF
+
+$(printf '%s' "$c_teal$t_bold")  Arctic Linux is installed.$(printf '%s' "$t_reset")
+
+  Next, if you want to change anything inside the new system:
+
+      $(printf '%s' "$c_snow")arctic-chroot$(printf '%s' "$t_reset")
+
+  Otherwise:
+
+      $(printf '%s' "$c_snow")reboot$(printf '%s' "$t_reset")
+
+EOF
+}
+
+# ----------------------------------------------------------------------- main
+
+need_root 2>/dev/null || { echo "Must be run as root." >&2; exit 1; }
+
+case "${1:-}" in
+boot)
+	shift
+	boot_install "${1:-/mnt/boot}"
+	exit 0 ;;
+-c|--config)
+	shift
+	cf=${1:?usage: arctic-strap -c <file> <target>}
+	shift
+	# shellcheck disable=SC1090
+	. "$cf"
+	TARGET=${1:-${TARGET:-}}
+	[ -n "$TARGET" ] || bail "no target given"
+	tui_init
+	do_install
+	tui_done
+	finished_banner
+	exit 0 ;;
+-h|--help|help)
+	sed -n '2,14p' "$0" | sed 's/^# \?//'
+	exit 0 ;;
+--version)
+	printf 'arctic-strap %s\n' "$VERSION"; exit 0 ;;
+"")
+	echo "usage: arctic-strap /mnt" >&2
+	echo "       arctic-strap boot /mnt/boot" >&2
+	exit 1 ;;
+esac
+
+TARGET=$1
+case "$TARGET" in
+/*) ;;
+*) TARGET="$(pwd)/$TARGET" ;;
+esac
+TARGET=$(printf '%s' "$TARGET" | sed 's|/*$||')
+[ -d "$TARGET" ] || bail "$TARGET does not exist. Mount the target first, for example:
+  mount /dev/nvme0n1p1 /mnt"
+
+if detect_existing_install "$TARGET"; then
+	printf '\n\033[38;5;215mThere is already an Arctic install on %s.\033[0m\n' "$TARGET"
+	printf 'Continuing will overwrite files that belong to packages.\n\n'
+	printf 'Continue? [y/N] '
+	read -r a
+	case "$a" in y|Y|yes) ;; *) echo "nothing was changed."; exit 0 ;; esac
+fi
+
+A_DM=""
+A_TZ=$(cat /etc/timezone 2>/dev/null || echo UTC)
+A_GPU=auto
+
+tui_init
+tui_splash "system installer $VERSION"
+sleep 1
+
+if config_menu; then
+	save_conf
+	do_install
+	tui_done
+	printf '\n'
+	printf '  %sArctic Linux has been written to %s.%s\n\n' "$c_teal$t_bold" "$TARGET" "$t_reset"
+	printf '  Now mount the boot partition and install the bootloader:\n\n'
+	printf '      %smount /dev/nvme0n1p2 %s/boot%s\n' "$c_snow" "$TARGET" "$t_reset"
+	printf '      %sarctic-strap boot %s/boot%s\n\n' "$c_snow" "$TARGET" "$t_reset"
+	printf '  The full log is at %s.\n\n' "$LOGF"
+else
+	tui_done
+	printf 'nothing was changed.\n'
+fi

@@ -1,0 +1,31 @@
+# libwebp - WebP codec
+# Generated from manifest.tsv by gen-ports.py. Edit the manifest, not this file,
+# unless the package needs something the template cannot express - in which case
+# drop a `recipe.local` beside it and it will be preserved.
+name=libwebp
+version=1.6.0
+release=1
+desc="WebP codec"
+url="https://developers.google.com/speed/webp"
+license="BSD-3-Clause"
+depend="glibc libpng libjpeg-turbo libtiff"
+makedepend=""
+source="https://storage.googleapis.com/downloads.webmproject.org/releases/webp/libwebp-1.6.0.tar.gz"
+sha256="SKIP"
+
+build() {
+	cd "libwebp-1.6.0"
+	./configure \
+		--prefix=/usr \
+		--sysconfdir=/etc \
+		--localstatedir=/var \
+		--libdir=/usr/lib \
+		--disable-static \
+		--disable-nls
+	make -j"$JOBS"
+}
+
+package() {
+	cd "libwebp-1.6.0"
+	make DESTDIR="$pkgdir" install
+}

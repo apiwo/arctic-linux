@@ -1,0 +1,24 @@
+# conmon - OCI container monitor
+# Generated from manifest.tsv by gen-ports.py. Edit the manifest, not this file,
+# unless the package needs something the template cannot express - in which case
+# drop a `recipe.local` beside it and it will be preserved.
+name=conmon
+version=2.1.13
+release=1
+desc="OCI container monitor"
+url="https://github.com/containers/conmon"
+license="Apache-2.0"
+depend="glibc glib"
+makedepend=""
+source="https://github.com/containers/conmon/archive/refs/tags/v2.1.13.tar.gz"
+sha256="SKIP"
+
+build() {
+	cd "conmon-2.1.13"
+	make -j"$JOBS" PREFIX=/usr
+}
+
+package() {
+	cd "conmon-2.1.13"
+	make PREFIX=/usr DESTDIR="$pkgdir" install
+}

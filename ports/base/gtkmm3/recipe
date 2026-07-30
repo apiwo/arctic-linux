@@ -1,0 +1,32 @@
+# gtkmm3 - C++ bindings for GTK 3
+# Generated from manifest.tsv by gen-ports.py. Edit the manifest, not this file,
+# unless the package needs something the template cannot express - in which case
+# drop a `recipe.local` beside it and it will be preserved.
+name=gtkmm3
+version=3.24.10
+release=1
+desc="C++ bindings for GTK 3"
+url="https://gtkmm.gnome.org/"
+license="LGPL-2.1-or-later"
+depend="gtk3 glibmm"
+makedepend="meson ninja"
+source="https://download.gnome.org/sources/gtkmm/3.24/gtkmm-3.24.10.tar.xz"
+sha256="SKIP"
+
+build() {
+	cd "gtkmm-3.24.10"
+	meson setup build \
+		--prefix=/usr \
+		--libdir=/usr/lib \
+		--sysconfdir=/etc \
+		--localstatedir=/var \
+		--buildtype=release \
+		--wrap-mode=nodownload \
+		-Db_lto=true
+	ninja -C build -j"$JOBS"
+}
+
+package() {
+	cd "gtkmm-3.24.10"
+	DESTDIR="$pkgdir" ninja -C build install
+}

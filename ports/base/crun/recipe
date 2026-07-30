@@ -1,0 +1,31 @@
+# crun - Fast OCI runtime in C
+# Generated from manifest.tsv by gen-ports.py. Edit the manifest, not this file,
+# unless the package needs something the template cannot express - in which case
+# drop a `recipe.local` beside it and it will be preserved.
+name=crun
+version=1.25
+release=1
+desc="Fast OCI runtime in C"
+url="https://github.com/containers/crun"
+license="LGPL-2.1-or-later"
+depend="glibc libseccomp libcap yajl"
+makedepend=""
+source="https://github.com/containers/crun/releases/download/1.25/crun-1.25.tar.gz"
+sha256="SKIP"
+
+build() {
+	cd "crun-1.25"
+	./configure \
+		--prefix=/usr \
+		--sysconfdir=/etc \
+		--localstatedir=/var \
+		--libdir=/usr/lib \
+		--disable-static \
+		--disable-nls
+	make -j"$JOBS"
+}
+
+package() {
+	cd "crun-1.25"
+	make DESTDIR="$pkgdir" install
+}

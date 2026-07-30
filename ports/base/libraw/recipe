@@ -1,0 +1,31 @@
+# libraw - Raw image decoder
+# Generated from manifest.tsv by gen-ports.py. Edit the manifest, not this file,
+# unless the package needs something the template cannot express - in which case
+# drop a `recipe.local` beside it and it will be preserved.
+name=libraw
+version=0.21.4
+release=1
+desc="Raw image decoder"
+url="https://www.libraw.org/"
+license="LGPL-2.1-only CDDL-1.0"
+depend="glibc libjpeg-turbo lcms2"
+makedepend=""
+source="https://www.libraw.org/data/LibRaw-0.21.4.tar.gz"
+sha256="SKIP"
+
+build() {
+	cd "LibRaw-0.21.4"
+	./configure \
+		--prefix=/usr \
+		--sysconfdir=/etc \
+		--localstatedir=/var \
+		--libdir=/usr/lib \
+		--disable-static \
+		--disable-nls
+	make -j"$JOBS"
+}
+
+package() {
+	cd "LibRaw-0.21.4"
+	make DESTDIR="$pkgdir" install
+}

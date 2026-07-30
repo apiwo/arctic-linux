@@ -1,0 +1,26 @@
+# amdgpu-pro-vulkan - AMD proprietary Vulkan driver
+# Generated from manifest.tsv by gen-ports.py. Edit the manifest, not this file,
+# unless the package needs something the template cannot express - in which case
+# drop a `recipe.local` beside it and it will be preserved.
+name=amdgpu-pro-vulkan
+version=26.10
+release=1
+desc="AMD proprietary Vulkan driver"
+url="https://www.amd.com/en/support"
+license="AMD-proprietary"
+depend="mesa vulkan-loader"
+makedepend=""
+source="https://repo.radeon.com/amdgpu/26.10/ubuntu/pool/proprietary/amdvlk_26.10_amd64.deb"
+sha256="SKIP"
+
+# Repackaged upstream build. Arctic prefers to compile from source, but a few
+# things ship only as binaries; those live here with the licence stated plainly.
+options="!strip"
+
+package() {
+	cd "amdvlk_26.10_amd64.deb"
+	install -d "$pkgdir/opt/amdgpu-pro-vulkan"
+	cp -a . "$pkgdir/opt/amdgpu-pro-vulkan/"
+	install -d "$pkgdir/usr/bin"
+	ln -sf "/opt/amdgpu-pro-vulkan/amdgpu-pro-vulkan" "$pkgdir/usr/bin/amdgpu-pro-vulkan"
+}

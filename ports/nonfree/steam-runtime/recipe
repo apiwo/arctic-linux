@@ -1,0 +1,26 @@
+# steam-runtime - The Steam runtime libraries
+# Generated from manifest.tsv by gen-ports.py. Edit the manifest, not this file,
+# unless the package needs something the template cannot express - in which case
+# drop a `recipe.local` beside it and it will be preserved.
+name=steam-runtime
+version=0.20260101
+release=1
+desc="The Steam runtime libraries"
+url="https://store.steampowered.com/"
+license="Valve-proprietary"
+depend="steam"
+makedepend=""
+source="https://repo.steampowered.com/steamrt-images-scout/snapshots/0.20260101/steam-runtime.tar.xz"
+sha256="SKIP"
+
+# Repackaged upstream build. Arctic prefers to compile from source, but a few
+# things ship only as binaries; those live here with the licence stated plainly.
+options="!strip"
+
+package() {
+	cd "steam-runtime"
+	install -d "$pkgdir/opt/steam-runtime"
+	cp -a . "$pkgdir/opt/steam-runtime/"
+	install -d "$pkgdir/usr/bin"
+	ln -sf "/opt/steam-runtime/steam-runtime" "$pkgdir/usr/bin/steam-runtime"
+}

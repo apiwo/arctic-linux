@@ -1,0 +1,9 @@
+# Arctic Linux - alt-nonfree repository
+# Free replacements for what is in nonfree: nouveau, b43-open, mesa-only stacks.
+name = alt-nonfree
+url = https://repo.arcticlinux.org/alt-nonfree
+enabled = yes
+priority = 45
+mirror = https://repo.arcticlinux.org/alt-nonfree
+mirror = https://mirror.eu.arcticlinux.org/alt-nonfree
+mirror = https://mirror.us.arcticlinux.org/alt-nonfree

@@ -1,0 +1,115 @@
+#!/bin/sh
+# alpm-repo - build a repository INDEX from a directory of .alpmz packages
+#
+#   alpm-repo gen  <dir> [arch]   write <dir>/<arch>/INDEX
+#   alpm-repo add  <dir> <pkg>... file packages into the repo and reindex
+#   alpm-repo show <dir>          summarise a repo
+#
+# The INDEX is a tab separated table, one package per line:
+#   name  version  release  arch  dlsize  isize  sha256  deps  desc
+# shellcheck shell=sh disable=SC2039
+
+set -eu
+
+for p in /usr/lib/alpm/libalpm.sh ./libalpm.sh "$(dirname "$0")/libalpm.sh"; do
+	[ -f "$p" ] && { . "$p"; break; }
+done
+[ -n "${ALPM_VERSION:-}" ] || { echo "alpm-repo: cannot locate libalpm.sh" >&2; exit 1; }
+
+extract_pkginfo() {
+	if have bsdtar; then bsdtar -xOf "$1" .PKGINFO 2>/dev/null
+	else tar -xOf "$1" ./.PKGINFO 2>/dev/null || tar -xOf "$1" .PKGINFO 2>/dev/null; fi
+}
+
+gen() {
+	dir=${1:?usage: alpm-repo gen <dir> [arch]}
+	arch=${2:-x86_64}
+	d="$dir/$arch"
+	[ -d "$d" ] || die "no such directory: $d"
+	idx="$d/INDEX"
+	tmp="$idx.new"
+
+	msg "Indexing $d"
+	{
+		printf '# Arctic Linux repository index\n'
+		printf '# format\t%s\n' "$ALPM_FORMAT"
+		printf '# generated\t%s\n' "$(date '+%Y-%m-%d %H:%M:%S')"
+		printf '# fields\tname version release arch dlsize isize sha256 deps desc\n'
+	} >"$tmp"
+
+	n=0
+	for f in "$d"/*.alpmz; do
+		[ -f "$f" ] || continue
+		pi=$(extract_pkginfo "$f") || { warn "$(basename "$f"): no .PKGINFO, skipped"; continue; }
+		echo "$pi" >"$tmp.pi"
+		nm=$(meta "$tmp.pi" name)
+		[ -n "$nm" ] || { warn "$(basename "$f"): unnamed, skipped"; continue; }
+		ver=$(meta "$tmp.pi" version)
+		rel=$(meta "$tmp.pi" release); : "${rel:=1}"
+		ar=$(meta "$tmp.pi" arch);     : "${ar:=$arch}"
+		isz=$(meta "$tmp.pi" isize);   : "${isz:=0}"
+		dsc=$(meta "$tmp.pi" desc);    : "${dsc:=$nm}"
+		dep=$(metaall "$tmp.pi" depend | tr '\n' ' ' | sed 's/ *$//')
+		[ -n "$dep" ] || dep="-"
+		dsz=$(wc -c <"$f" | tr -d ' ')
+		sum=$(sha256 "$f")
+		printf '%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\n' \
+			"$nm" "$ver" "$rel" "$ar" "$dsz" "$isz" "$sum" "$dep" "$dsc" >>"$tmp"
+		n=$((n+1))
+		printf '  %s+%s %s-%s-%s\n' "$A_MINT" "$C_R" "$nm" "$ver" "$rel"
+	done
+	rm -f "$tmp.pi"
+	mv "$tmp" "$idx"
+
+	# A detached checksum so clients can spot a truncated or tampered index.
+	sha256 "$idx" >"$idx.sha256"
+	ok "$n package(s) indexed -> $idx"
+}
+
+add() {
+	dir=${1:?usage: alpm-repo add <dir> <pkg.alpmz>...}
+	shift
+	for f in "$@"; do
+		[ -f "$f" ] || die "no such package: $f"
+		pi=$(extract_pkginfo "$f") || die "$f is not a valid .alpmz"
+		echo "$pi" >/tmp/.alpmrepo.$$
+		a=$(meta /tmp/.alpmrepo.$$ arch); : "${a:=x86_64}"
+		mkdir -p "$dir/$a"
+		cp -f "$f" "$dir/$a/"
+		msg2 "filed $(basename "$f") into $dir/$a"
+		rm -f /tmp/.alpmrepo.$$
+	done
+	for a in "$dir"/*/; do
+		[ -d "$a" ] && gen "$dir" "$(basename "$a")"
+	done
+}
+
+show() {
+	dir=${1:?usage: alpm-repo show <dir>}
+	for a in "$dir"/*/; do
+		[ -d "$a" ] || continue
+		arch=$(basename "$a")
+		idx="$a/INDEX"
+		[ -f "$idx" ] || { warn "$arch has no INDEX"; continue; }
+		c=$(grep -cv '^#' "$idx" || echo 0)
+		sz=$(du -sh "$a" | cut -f1)
+		printf '\n  %s%s%s  %s packages, %s\n' "$A_TEAL$C_B" "$arch" "$C_R" "$c" "$sz"
+		grep -v '^#' "$idx" | awk -F'\t' -v c="$A_GREY" -v r="$C_R" \
+			'{printf "    %-26s %s%s-%s%s\n", $1, c, $2, $3, r}'
+	done
+	printf '\n'
+}
+
+case "${1:-}" in
+gen|index)  shift; gen "$@" ;;
+add|file)   shift; add "$@" ;;
+show|list)  shift; show "$@" ;;
+*) cat <<EOF
+alpm-repo $ALPM_VERSION - Arctic repository indexer
+
+  alpm-repo gen  <dir> [arch]      regenerate <dir>/<arch>/INDEX
+  alpm-repo add  <dir> <pkg>...    file .alpmz packages in and reindex
+  alpm-repo show <dir>             summarise a repository
+EOF
+ ;;
+esac

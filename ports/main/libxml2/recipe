@@ -1,0 +1,31 @@
+# libxml2 - XML parsing library
+# Generated from manifest.tsv by gen-ports.py. Edit the manifest, not this file,
+# unless the package needs something the template cannot express - in which case
+# drop a `recipe.local` beside it and it will be preserved.
+name=libxml2
+version=2.15.2
+release=1
+desc="XML parsing library"
+url="https://gitlab.gnome.org/GNOME/libxml2"
+license="MIT"
+depend="glibc zlib xz libressl"
+makedepend=""
+source="https://download.gnome.org/sources/libxml2/2.15/libxml2-2.15.2.tar.xz"
+sha256="SKIP"
+
+build() {
+	cd "libxml2-2.15.2"
+	./configure \
+		--prefix=/usr \
+		--sysconfdir=/etc \
+		--localstatedir=/var \
+		--libdir=/usr/lib \
+		--disable-static \
+		--disable-nls
+	make -j"$JOBS"
+}
+
+package() {
+	cd "libxml2-2.15.2"
+	make DESTDIR="$pkgdir" install
+}

@@ -1,0 +1,32 @@
+# libpciaccess - PCI access library
+# Generated from manifest.tsv by gen-ports.py. Edit the manifest, not this file,
+# unless the package needs something the template cannot express - in which case
+# drop a `recipe.local` beside it and it will be preserved.
+name=libpciaccess
+version=0.18.1
+release=1
+desc="PCI access library"
+url="https://x.org/"
+license="MIT"
+depend="glibc"
+makedepend="meson ninja"
+source="https://x.org/pub/individual/lib/libpciaccess-0.18.1.tar.xz"
+sha256="SKIP"
+
+build() {
+	cd "libpciaccess-0.18.1"
+	meson setup build \
+		--prefix=/usr \
+		--libdir=/usr/lib \
+		--sysconfdir=/etc \
+		--localstatedir=/var \
+		--buildtype=release \
+		--wrap-mode=nodownload \
+		-Db_lto=true
+	ninja -C build -j"$JOBS"
+}
+
+package() {
+	cd "libpciaccess-0.18.1"
+	DESTDIR="$pkgdir" ninja -C build install
+}

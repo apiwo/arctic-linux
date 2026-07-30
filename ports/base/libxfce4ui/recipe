@@ -1,0 +1,31 @@
+# libxfce4ui - Xfce widget library
+# Generated from manifest.tsv by gen-ports.py. Edit the manifest, not this file,
+# unless the package needs something the template cannot express - in which case
+# drop a `recipe.local` beside it and it will be preserved.
+name=libxfce4ui
+version=4.22.0
+release=1
+desc="Xfce widget library"
+url="https://xfce.org/"
+license="LGPL-2.0-or-later"
+depend="gtk3 libxfce4util xfconf"
+makedepend=""
+source="https://archive.xfce.org/src/xfce/libxfce4ui/4.22/libxfce4ui-4.22.0.tar.bz2"
+sha256="SKIP"
+
+build() {
+	cd "libxfce4ui-4.22.0"
+	./configure \
+		--prefix=/usr \
+		--sysconfdir=/etc \
+		--localstatedir=/var \
+		--libdir=/usr/lib \
+		--disable-static \
+		--disable-nls
+	make -j"$JOBS"
+}
+
+package() {
+	cd "libxfce4ui-4.22.0"
+	make DESTDIR="$pkgdir" install
+}

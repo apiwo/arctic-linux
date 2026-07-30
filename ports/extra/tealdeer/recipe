@@ -1,0 +1,31 @@
+# tealdeer - Fast tldr client, for when man is too much
+# Generated from manifest.tsv by gen-ports.py. Edit the manifest, not this file,
+# unless the package needs something the template cannot express - in which case
+# drop a `recipe.local` beside it and it will be preserved.
+name=tealdeer
+version=1.8.0
+release=1
+desc="Fast tldr client, for when man is too much"
+url="https://github.com/tealdeer-rs/tealdeer"
+license="MIT Apache-2.0"
+depend="glibc libressl"
+makedepend="rust cargo"
+source="https://github.com/tealdeer-rs/tealdeer/archive/refs/tags/v1.8.0.tar.gz"
+sha256="SKIP"
+
+build() {
+	cd "tealdeer-1.8.0"
+	# Arctic builds Rust offline against a vendored tree so packages are
+	# reproducible and the build host needs no network.
+	export RUSTFLAGS="-C linker=clang -C link-arg=-fuse-ld=lld"
+	cargo build --release --locked --offline
+}
+
+package() {
+	cd "tealdeer-1.8.0"
+	install -Dm755 "target/release/tealdeer" "$pkgdir/usr/bin/tealdeer"
+	for d in README.md README LICENSE; do
+		[ -f "$d" ] && install -Dm644 "$d" "$pkgdir/usr/share/doc/tealdeer/$d"
+	done
+	true
+}

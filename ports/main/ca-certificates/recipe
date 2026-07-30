@@ -1,0 +1,24 @@
+# ca-certificates - Trusted certificate authority bundle
+# Generated from manifest.tsv by gen-ports.py. Edit the manifest, not this file,
+# unless the package needs something the template cannot express - in which case
+# drop a `recipe.local` beside it and it will be preserved.
+name=ca-certificates
+version=20260601
+release=1
+desc="Trusted certificate authority bundle"
+url="https://curl.se/docs/caextract.html"
+license="MPL-2.0"
+depend="glibc"
+makedepend=""
+source="https://curl.se/ca/cacert.pem"
+sha256="SKIP"
+
+build() {
+	cd "cacert.pem"
+	make -j"$JOBS" PREFIX=/usr
+}
+
+package() {
+	cd "cacert.pem"
+	make PREFIX=/usr DESTDIR="$pkgdir" install
+}

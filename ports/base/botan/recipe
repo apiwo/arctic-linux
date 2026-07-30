@@ -1,0 +1,24 @@
+# botan - C++ cryptography library
+# Generated from manifest.tsv by gen-ports.py. Edit the manifest, not this file,
+# unless the package needs something the template cannot express - in which case
+# drop a `recipe.local` beside it and it will be preserved.
+name=botan
+version=3.10.0
+release=1
+desc="C++ cryptography library"
+url="https://botan.randombit.net/"
+license="BSD-2-Clause"
+depend="glibc zlib bzip2 libressl"
+makedepend="python"
+source="https://botan.randombit.net/releases/Botan-3.10.0.tar.xz"
+sha256="SKIP"
+
+build() {
+	cd "Botan-3.10.0"
+	python -m build --wheel --no-isolation
+}
+
+package() {
+	cd "Botan-3.10.0"
+	python -m installer --destdir="$pkgdir" dist/*.whl
+}

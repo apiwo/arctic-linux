@@ -1,0 +1,31 @@
+# lightdm - Cross-desktop display manager
+# Generated from manifest.tsv by gen-ports.py. Edit the manifest, not this file,
+# unless the package needs something the template cannot express - in which case
+# drop a `recipe.local` beside it and it will be preserved.
+name=lightdm
+version=1.32.0
+release=1
+desc="Cross-desktop display manager"
+url="https://github.com/canonical/lightdm"
+license="GPL-3.0-only LGPL-3.0-only"
+depend="glib libxcb libxcrypt"
+makedepend=""
+source="https://github.com/canonical/lightdm/releases/download/1.32.0/lightdm-1.32.0.tar.xz"
+sha256="SKIP"
+
+build() {
+	cd "lightdm-1.32.0"
+	./configure \
+		--prefix=/usr \
+		--sysconfdir=/etc \
+		--localstatedir=/var \
+		--libdir=/usr/lib \
+		--disable-static \
+		--disable-nls
+	make -j"$JOBS"
+}
+
+package() {
+	cd "lightdm-1.32.0"
+	make DESTDIR="$pkgdir" install
+}

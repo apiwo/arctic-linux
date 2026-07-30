@@ -1,0 +1,44 @@
+# sddm-arctic-theme - the login screen.
+name=sddm-arctic-theme
+version=1.0.0
+release=1
+desc="Arctic Linux theme for the SDDM login screen"
+url="https://github.com/apiwo/arctic-linux"
+license="BSD-2-Clause"
+depend="sddm qt6-declarative"
+source="branding.tar Main.qml theme.conf"
+sha256="SKIP SKIP SKIP"
+backup="etc/sddm.conf.d/arctic.conf"
+
+package() {
+	t="$pkgdir/usr/share/sddm/themes/arctic"
+	install -Dm644 Main.qml "$t/Main.qml"
+	install -Dm644 theme.conf "$t/theme.conf"
+	tar -xf branding.tar -C "$pkgdir/tmp-branding" 2>/dev/null || true
+	install -Dm644 sddm/background.png "$t/background.png"
+	install -Dm644 sddm/logo.png "$t/logo.png"
+	mkdir -p "$(dirname $t/metadata.desktop)"
+cat >"$t/metadata.desktop" <<-'DESK'
+		[SddmGreeterTheme]
+		Name=Arctic
+		Description=Arctic Linux login screen
+		Author=Arctic Linux
+		Theme-Id=arctic
+		Theme-API=2.0
+		QtVersion=6
+		MainScript=Main.qml
+		ConfigFile=theme.conf
+DESK
+chmod 644 "$t/metadata.desktop"
+	mkdir -p "$(dirname $pkgdir/etc/sddm.conf.d/arctic.conf)"
+cat >"$pkgdir/etc/sddm.conf.d/arctic.conf" <<-'CONF'
+		[Theme]
+		Current=arctic
+		[General]
+		DisplayServer=wayland
+		GreeterEnvironment=QT_WAYLAND_SHELL_INTEGRATION=layer-shell
+		[Wayland]
+		CompositorCommand=kwin_wayland --drm --no-lockscreen --no-global-shortcuts --locale1
+CONF
+chmod 644 "$pkgdir/etc/sddm.conf.d/arctic.conf"
+}

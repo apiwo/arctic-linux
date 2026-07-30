@@ -1,0 +1,44 @@
+# broadcom-wl - the Broadcom wireless driver, for the cards nothing else drives.
+name=broadcom-wl
+version=6.30.223.271
+release=1
+desc="Broadcom 802.11 proprietary wireless driver"
+url="https://www.broadcom.com/"
+license="Broadcom-proprietary"
+depend="glibc"
+makedepend="linux-headers"
+conflicts="b43-open"
+source="hybrid-v35_64-nodebug-pcoem-${version//./_}.tar.gz::https://docs.broadcom.com/docs-and-downloads/docs/linux_sta/hybrid-v35_64-nodebug-pcoem-${version//./_}.tar.gz"
+sha256="SKIP"
+options="!strip"
+
+build() {
+	for kdir in /usr/lib/modules/*/build; do
+		[ -d "$kdir" ] || continue
+		make -C "$kdir" M="$PWD" modules
+	done
+}
+
+package() {
+	for kver in $(ls /usr/lib/modules); do
+		install -Dm644 wl.ko "$pkgdir/usr/lib/modules/$kver/extra/wl.ko"
+	done
+	# The in-tree drivers must be out of the way or they claim the card first.
+	mkdir -p "$(dirname $pkgdir/etc/modprobe.d/broadcom-wl.conf)"
+cat >"$pkgdir/etc/modprobe.d/broadcom-wl.conf" <<-'CONF'
+		blacklist b43
+		blacklist b43legacy
+		blacklist ssb
+		blacklist bcm43xx
+		blacklist brcm80211
+		blacklist brcmfmac
+		blacklist brcmsmac
+		blacklist bcma
+CONF
+chmod 644 "$pkgdir/etc/modprobe.d/broadcom-wl.conf"
+	mkdir -p "$(dirname $pkgdir/etc/modules-load.d/broadcom-wl.conf)"
+cat >"$pkgdir/etc/modules-load.d/broadcom-wl.conf" <<-'CONF'
+		wl
+CONF
+chmod 644 "$pkgdir/etc/modules-load.d/broadcom-wl.conf"
+}

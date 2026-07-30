@@ -1,0 +1,31 @@
+# numactl - NUMA policy control
+# Generated from manifest.tsv by gen-ports.py. Edit the manifest, not this file,
+# unless the package needs something the template cannot express - in which case
+# drop a `recipe.local` beside it and it will be preserved.
+name=numactl
+version=2.0.19
+release=1
+desc="NUMA policy control"
+url="https://github.com/numactl/numactl"
+license="LGPL-2.1-only"
+depend="glibc"
+makedepend=""
+source="https://github.com/numactl/numactl/releases/download/v2.0.19/numactl-2.0.19.tar.gz"
+sha256="SKIP"
+
+build() {
+	cd "numactl-2.0.19"
+	./configure \
+		--prefix=/usr \
+		--sysconfdir=/etc \
+		--localstatedir=/var \
+		--libdir=/usr/lib \
+		--disable-static \
+		--disable-nls
+	make -j"$JOBS"
+}
+
+package() {
+	cd "numactl-2.0.19"
+	make DESTDIR="$pkgdir" install
+}

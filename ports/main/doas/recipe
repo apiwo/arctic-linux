@@ -1,0 +1,31 @@
+# doas - run a command as another user. Arctic ships no sudo.
+name=doas
+version=6.8.2
+release=1
+desc="Execute commands as another user (OpenBSD doas)"
+url="https://github.com/Duncaen/OpenDoas"
+license="ISC"
+depend="glibc"
+provides="sudo-replacement"
+source="opendoas-$version.tar.gz::https://github.com/Duncaen/OpenDoas/archive/refs/tags/v$version.tar.gz"
+sha256="SKIP"
+backup="etc/doas.conf"
+
+build() {
+	cd "OpenDoas-$version"
+	# No PAM: Arctic authenticates against shadow directly.
+	./configure --prefix=/usr --sysconfdir=/etc --without-pam
+	make -j"$JOBS"
+}
+
+package() {
+	cd "OpenDoas-$version"
+	make DESTDIR="$pkgdir" install
+	# Without the setuid bit doas cannot do its job.
+	chmod 4755 "$pkgdir/usr/bin/doas"
+	install -Dm400 /dev/stdin "$pkgdir/etc/doas.conf" <<-CONF
+		# Arctic Linux - doas rules
+		permit persist :wheel
+		permit nopass :wheel cmd alpm args fetch all
+	CONF
+}

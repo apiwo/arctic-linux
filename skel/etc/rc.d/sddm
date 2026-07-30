@@ -1,0 +1,8 @@
+#!/bin/sh
+NAME=sddm
+CMD=/usr/bin/sddm
+ARGS=""
+BACKGROUND=yes
+
+. /etc/arctic/svc.lib
+svc_main "$@"

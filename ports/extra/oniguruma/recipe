@@ -1,0 +1,31 @@
+# oniguruma - Regular expression library
+# Generated from manifest.tsv by gen-ports.py. Edit the manifest, not this file,
+# unless the package needs something the template cannot express - in which case
+# drop a `recipe.local` beside it and it will be preserved.
+name=oniguruma
+version=6.9.10
+release=1
+desc="Regular expression library"
+url="https://github.com/kkos/oniguruma"
+license="BSD-2-Clause"
+depend="glibc"
+makedepend=""
+source="https://github.com/kkos/oniguruma/releases/download/v6.9.10/onig-6.9.10.tar.gz"
+sha256="SKIP"
+
+build() {
+	cd "onig-6.9.10"
+	./configure \
+		--prefix=/usr \
+		--sysconfdir=/etc \
+		--localstatedir=/var \
+		--libdir=/usr/lib \
+		--disable-static \
+		--disable-nls
+	make -j"$JOBS"
+}
+
+package() {
+	cd "onig-6.9.10"
+	make DESTDIR="$pkgdir" install
+}

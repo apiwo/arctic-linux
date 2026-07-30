@@ -1,0 +1,31 @@
+# libxrandr - X Resize and Rotate extension
+# Generated from manifest.tsv by gen-ports.py. Edit the manifest, not this file,
+# unless the package needs something the template cannot express - in which case
+# drop a `recipe.local` beside it and it will be preserved.
+name=libxrandr
+version=1.5.5
+release=1
+desc="X Resize and Rotate extension"
+url="https://x.org/"
+license="MIT"
+depend="glibc libx11 libxrender libxext"
+makedepend=""
+source="https://x.org/pub/individual/lib/libXrandr-1.5.5.tar.xz"
+sha256="SKIP"
+
+build() {
+	cd "libXrandr-1.5.5"
+	./configure \
+		--prefix=/usr \
+		--sysconfdir=/etc \
+		--localstatedir=/var \
+		--libdir=/usr/lib \
+		--disable-static \
+		--disable-nls
+	make -j"$JOBS"
+}
+
+package() {
+	cd "libXrandr-1.5.5"
+	make DESTDIR="$pkgdir" install
+}

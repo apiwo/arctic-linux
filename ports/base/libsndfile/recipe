@@ -1,0 +1,27 @@
+# libsndfile - Audio file library
+# Generated from manifest.tsv by gen-ports.py. Edit the manifest, not this file,
+# unless the package needs something the template cannot express - in which case
+# drop a `recipe.local` beside it and it will be preserved.
+name=libsndfile
+version=1.2.2
+release=1
+desc="Audio file library"
+url="https://libsndfile.github.io/libsndfile/"
+license="LGPL-2.1-or-later"
+depend="glibc flac libvorbis opus libogg"
+makedepend="cmake ninja"
+source="https://github.com/libsndfile/libsndfile/releases/download/1.2.2/libsndfile-1.2.2.tar.xz"
+sha256="SKIP"
+
+build() {
+	cmake -S "libsndfile-1.2.2" -B build -G Ninja \
+		-DCMAKE_INSTALL_PREFIX=/usr \
+		-DCMAKE_INSTALL_LIBDIR=lib \
+		-DCMAKE_BUILD_TYPE=Release \
+		-DBUILD_SHARED_LIBS=ON
+	ninja -C build -j"$JOBS"
+}
+
+package() {
+	DESTDIR="$pkgdir" ninja -C build install
+}

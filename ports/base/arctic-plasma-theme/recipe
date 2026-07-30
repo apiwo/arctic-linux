@@ -1,0 +1,43 @@
+# arctic-plasma-theme - the Arctic look for Plasma, SDDM and the icon theme.
+name=arctic-plasma-theme
+version=1.0.0
+release=1
+desc="Arctic Linux theme, wallpapers and icons for KDE Plasma"
+url="https://github.com/apiwo/arctic-linux"
+license="BSD-2-Clause CC-BY-SA-4.0"
+depend="plasma-workspace"
+source="branding.tar"
+sha256="SKIP"
+
+package() {
+	install -d "$pkgdir/usr/share"
+	tar -xf branding.tar -C "$pkgdir/usr/share/arctic-theme"
+
+	# Icon theme, so the logo shows up wherever an app icon is wanted.
+	install -d "$pkgdir/usr/share/icons"
+	cp -a "$pkgdir/usr/share/arctic-theme/icons/hicolor" \
+		"$pkgdir/usr/share/icons/hicolor-arctic"
+
+	# Wallpaper, in the layout Plasma expects.
+	wp="$pkgdir/usr/share/wallpapers/Arctic/contents/images"
+	install -d "$wp"
+	for f in "$pkgdir"/usr/share/arctic-theme/wallpaper/arctic-*.png; do
+		n=$(basename "$f" .png); n=${n#arctic-}
+		install -Dm644 "$f" "$wp/$n.png"
+	done
+	mkdir -p "$(dirname $pkgdir/usr/share/wallpapers/Arctic/metadata.json)"
+cat >"$pkgdir/usr/share/wallpapers/Arctic/metadata.json" <<-'JSON'
+		{
+		  "KPlugin": {
+		    "Id": "Arctic",
+		    "Name": "Arctic",
+		    "License": "CC-BY-SA-4.0"
+		  }
+		}
+JSON
+chmod 644 "$pkgdir/usr/share/wallpapers/Arctic/metadata.json"
+
+	# The Plasma splash and the logo used by the application launcher.
+	install -Dm644 "$pkgdir/usr/share/arctic-theme/plasma/arctic-logo.svg" \
+		"$pkgdir/usr/share/icons/hicolor/scalable/apps/arctic.svg"
+}

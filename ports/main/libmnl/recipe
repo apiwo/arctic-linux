@@ -1,0 +1,31 @@
+# libmnl - Minimal netlink library
+# Generated from manifest.tsv by gen-ports.py. Edit the manifest, not this file,
+# unless the package needs something the template cannot express - in which case
+# drop a `recipe.local` beside it and it will be preserved.
+name=libmnl
+version=1.0.5
+release=1
+desc="Minimal netlink library"
+url="https://netfilter.org/projects/libmnl/"
+license="LGPL-2.1-or-later"
+depend="glibc"
+makedepend=""
+source="https://netfilter.org/projects/libmnl/files/libmnl-1.0.5.tar.bz2"
+sha256="SKIP"
+
+build() {
+	cd "libmnl-1.0.5"
+	./configure \
+		--prefix=/usr \
+		--sysconfdir=/etc \
+		--localstatedir=/var \
+		--libdir=/usr/lib \
+		--disable-static \
+		--disable-nls
+	make -j"$JOBS"
+}
+
+package() {
+	cd "libmnl-1.0.5"
+	make DESTDIR="$pkgdir" install
+}

@@ -1,0 +1,31 @@
+# btrfs-progs - Btrfs filesystem tools
+# Generated from manifest.tsv by gen-ports.py. Edit the manifest, not this file,
+# unless the package needs something the template cannot express - in which case
+# drop a `recipe.local` beside it and it will be preserved.
+name=btrfs-progs
+version=6.19
+release=1
+desc="Btrfs filesystem tools"
+url="https://btrfs.readthedocs.io/"
+license="GPL-2.0-only"
+depend="glibc zlib zstd lz4 util-linux-libs"
+makedepend=""
+source="https://kernel.org/pub/linux/kernel/people/kdave/btrfs-progs/btrfs-progs-v6.19.tar.xz"
+sha256="SKIP"
+
+build() {
+	cd "btrfs-progs-v6.19"
+	./configure \
+		--prefix=/usr \
+		--sysconfdir=/etc \
+		--localstatedir=/var \
+		--libdir=/usr/lib \
+		--disable-static \
+		--disable-nls
+	make -j"$JOBS"
+}
+
+package() {
+	cd "btrfs-progs-v6.19"
+	make DESTDIR="$pkgdir" install
+}

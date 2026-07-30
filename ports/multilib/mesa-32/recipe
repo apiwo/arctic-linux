@@ -1,0 +1,32 @@
+# mesa-32 - OpenGL and Vulkan, 32-bit
+# Generated from manifest.tsv by gen-ports.py. Edit the manifest, not this file,
+# unless the package needs something the template cannot express - in which case
+# drop a `recipe.local` beside it and it will be preserved.
+name=mesa-32
+version=26.0.2
+release=1
+desc="OpenGL and Vulkan, 32-bit"
+url="https://mesa3d.org/"
+license="MIT"
+depend="mesa glibc-32"
+makedepend="meson ninja"
+source="https://archive.mesa3d.org/mesa-26.0.2.tar.xz"
+sha256="SKIP"
+
+build() {
+	cd "mesa-26.0.2"
+	meson setup build \
+		--prefix=/usr \
+		--libdir=/usr/lib \
+		--sysconfdir=/etc \
+		--localstatedir=/var \
+		--buildtype=release \
+		--wrap-mode=nodownload \
+		-Db_lto=true
+	ninja -C build -j"$JOBS"
+}
+
+package() {
+	cd "mesa-26.0.2"
+	DESTDIR="$pkgdir" ninja -C build install
+}

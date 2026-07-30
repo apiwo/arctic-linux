@@ -1,0 +1,31 @@
+# strace - Trace system calls
+# Generated from manifest.tsv by gen-ports.py. Edit the manifest, not this file,
+# unless the package needs something the template cannot express - in which case
+# drop a `recipe.local` beside it and it will be preserved.
+name=strace
+version=6.19
+release=1
+desc="Trace system calls"
+url="https://strace.io/"
+license="LGPL-2.1-or-later"
+depend="glibc"
+makedepend=""
+source="https://github.com/strace/strace/releases/download/v6.19/strace-6.19.tar.xz"
+sha256="SKIP"
+
+build() {
+	cd "strace-6.19"
+	./configure \
+		--prefix=/usr \
+		--sysconfdir=/etc \
+		--localstatedir=/var \
+		--libdir=/usr/lib \
+		--disable-static \
+		--disable-nls
+	make -j"$JOBS"
+}
+
+package() {
+	cd "strace-6.19"
+	make DESTDIR="$pkgdir" install
+}

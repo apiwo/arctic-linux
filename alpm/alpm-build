@@ -1,0 +1,217 @@
+#!/bin/sh
+# alpm-build - turn an Arctic port recipe into an .alpmz binary package
+#
+# A recipe is a POSIX sh fragment. Required: name version release desc.
+# Optional: url license arch depend makedepend source sha256 options
+# Functions: prepare() build() check() package()
+#
+# Inside those functions you get:
+#   $srcdir   unpacked sources
+#   $pkgdir   staging root - install here, this becomes the package payload
+#   $JOBS     parallel job count
+#
+# shellcheck shell=sh disable=SC2039,SC2154
+
+set -eu
+
+for p in /usr/lib/alpm/libalpm.sh ./libalpm.sh "$(dirname "$0")/libalpm.sh"; do
+	[ -f "$p" ] && { . "$p"; break; }
+done
+[ -n "${ALPM_VERSION:-}" ] || { echo "alpm-build: cannot locate libalpm.sh" >&2; exit 1; }
+
+recipe=${1:-recipe}
+[ -f "$recipe" ] || die "no such recipe: $recipe"
+recipe=$(cd "$(dirname "$recipe")" && printf '%s/%s' "$(pwd)" "$(basename "$recipe")")
+
+: "${ALPM_BUILDROOT:=$ALPM_CACHE/build}"
+OUT="$ALPM_BUILDROOT/out"
+mkdir -p "$OUT"
+
+# ---------------------------------------------------------------- Arctic CFLAGS
+# Arctic is an LLVM distribution: clang/lld everywhere, libc++ over libstdc++,
+# and glibc as the only GNU component in the system.
+export CC="${CC:-clang}"
+export CXX="${CXX:-clang++}"
+export LD="${LD:-ld.lld}"
+export AR="${AR:-llvm-ar}"
+export NM="${NM:-llvm-nm}"
+export RANLIB="${RANLIB:-llvm-ranlib}"
+export STRIP="${STRIP:-llvm-strip}"
+export OBJCOPY="${OBJCOPY:-llvm-objcopy}"
+export OBJDUMP="${OBJDUMP:-llvm-objdump}"
+export CFLAGS="${CFLAGS:--O2 -pipe -fstack-protector-strong -fno-plt -D_FORTIFY_SOURCE=2}"
+export CXXFLAGS="${CXXFLAGS:-$CFLAGS}"
+export LDFLAGS="${LDFLAGS:--fuse-ld=lld -Wl,-O1,--as-needed,-z,relro,-z,now}"
+export MAKEFLAGS="-j${ALPM_JOBS}"
+JOBS=$ALPM_JOBS
+export JOBS
+
+# ARCTIC_NATIVE=1 tunes the build for this exact CPU. Source installs opt in.
+if [ "${ARCTIC_NATIVE:-0}" = "1" ]; then
+	CFLAGS="$CFLAGS -march=native -mtune=native"
+	CXXFLAGS="$CXXFLAGS -march=native -mtune=native"
+	export CFLAGS CXXFLAGS
+fi
+
+# --------------------------------------------------------------- load the recipe
+name=""; version=""; release=1; desc=""; url=""; license="unknown"
+arch="${ALPM_ARCH:-x86_64}"; depend=""; makedepend=""; source=""; sha256=""
+options=""; provides=""; conflicts=""; replaces=""; backup=""
+
+# shellcheck disable=SC1090
+. "$recipe"
+
+[ -n "$name" ]    || die "recipe has no name"
+[ -n "$version" ] || die "recipe has no version"
+[ -n "$desc" ]    || desc="$name"
+
+pkgbase="$name-$version-$release.$arch"
+srcdir="$ALPM_BUILDROOT/$name/src"
+pkgdir="$ALPM_BUILDROOT/$name/pkg"
+export srcdir pkgdir
+
+printf '\n'
+msg "Building $name $version-$release"
+info "compiler   $CC / $LD"
+info "flags      $CFLAGS"
+info "jobs       $JOBS"
+
+rm -rf "$pkgdir"
+mkdir -p "$srcdir" "$pkgdir"
+
+# ------------------------------------------------------------------ get sources
+if [ -n "$source" ]; then
+	msg2 "retrieving sources"
+	i=0
+	for s in $source; do
+		i=$((i+1))
+		case "$s" in
+		*::*) fn=${s%%::*}; su=${s#*::} ;;
+		*)    su=$s; fn=$(basename "$s") ;;
+		esac
+		cache="$ALPM_CACHE/src/$fn"
+		case "$su" in
+		http://*|https://*|ftp://*)
+			if [ ! -s "$cache" ]; then
+				info "fetch $fn"
+				dl "$su" "$cache" || die "cannot fetch $su"
+			else
+				info "cached $fn"
+			fi
+			;;
+		git+*)
+			gu=${su#git+}
+			if [ ! -d "$cache" ]; then
+				info "clone $fn"
+				git clone --depth 1 "$gu" "$cache" || die "clone failed: $gu"
+			fi
+			cp -a "$cache" "$srcdir/" ; continue ;;
+		*)
+			cache="$(dirname "$recipe")/$su"
+			[ -e "$cache" ] || die "local source missing: $su" ;;
+		esac
+
+		# Verify against the recipe's checksum list, position by position.
+		want=$(printf '%s\n' $sha256 | sed -n "${i}p")
+		if [ -n "$want" ] && [ "$want" != "SKIP" ]; then
+			got=$(sha256 "$cache")
+			[ "$got" = "$want" ] || die "checksum mismatch for $fn
+  expected $want
+  got      $got"
+		fi
+
+		case "$fn" in
+		*.tar.gz|*.tgz|*.tar.xz|*.tar.bz2|*.tar.zst|*.tar)
+			info "unpack $fn"
+			( cd "$srcdir" && untar "$cache" . ) ;;
+		*.zip)
+			( cd "$srcdir" && unzip -q "$cache" ) ;;
+		*)
+			cp -a "$cache" "$srcdir/" ;;
+		esac
+	done
+fi
+
+# ---------------------------------------------------------------- build phases
+cd "$srcdir"
+if command -v prepare >/dev/null 2>&1; then msg2 "prepare()"; prepare; fi
+cd "$srcdir"
+if command -v build >/dev/null 2>&1; then msg2 "build()"; build; fi
+cd "$srcdir"
+if command -v check >/dev/null 2>&1 && [ "${ALPM_CHECK:-0}" = "1" ]; then
+	msg2 "check()"; check || warn "tests failed"
+fi
+cd "$srcdir"
+command -v package >/dev/null 2>&1 || die "recipe has no package() function"
+msg2 "package()"
+package
+
+# --------------------------------------------------------------- tidy the payload
+msg2 "post-processing"
+case " $options " in
+*" !strip "*) ;;
+*)
+	find "$pkgdir" -type f -perm -u+x 2>/dev/null | while read -r f; do
+		case "$(head -c4 "$f" 2>/dev/null)" in
+		*ELF*) "$STRIP" --strip-unneeded "$f" 2>/dev/null || strip "$f" 2>/dev/null || : ;;
+		esac
+	done ;;
+esac
+
+# Arctic ships mandoc, so man pages are stored uncompressed and .la files go.
+find "$pkgdir" -name '*.la' -delete 2>/dev/null || :
+find "$pkgdir" -name 'perllocal.pod' -delete 2>/dev/null || :
+rm -rf "$pkgdir/usr/share/info" 2>/dev/null || :
+
+isize=$(du -sk "$pkgdir" 2>/dev/null | cut -f1)
+isize=$(( ${isize:-0} * 1024 ))
+
+# ------------------------------------------------------------------- metadata
+cat >"$pkgdir/.PKGINFO" <<EOF
+# generated by alpm-build $ALPM_VERSION on $(date '+%Y-%m-%d %H:%M:%S')
+format = $ALPM_FORMAT
+name = $name
+version = $version
+release = $release
+arch = $arch
+desc = $desc
+url = $url
+license = $license
+isize = $isize
+builddate = $(date '+%s')
+builder = alpm-build $ALPM_VERSION
+EOF
+for d in $depend;    do printf 'depend = %s\n' "$d" >>"$pkgdir/.PKGINFO"; done
+for d in $makedepend;do printf 'makedepend = %s\n' "$d" >>"$pkgdir/.PKGINFO"; done
+for d in $provides;  do printf 'provides = %s\n' "$d" >>"$pkgdir/.PKGINFO"; done
+for d in $conflicts; do printf 'conflicts = %s\n' "$d" >>"$pkgdir/.PKGINFO"; done
+for d in $replaces;  do printf 'replaces = %s\n' "$d" >>"$pkgdir/.PKGINFO"; done
+for d in $backup;    do printf 'backup = %s\n' "$d" >>"$pkgdir/.PKGINFO"; done
+
+# An .INSTALL next to the recipe becomes the package's hook script.
+if [ -f "$(dirname "$recipe")/install" ]; then
+	cp "$(dirname "$recipe")/install" "$pkgdir/.INSTALL"
+fi
+
+( cd "$pkgdir" && find . -type f -o -type l ) | sed 's|^\.||' | \
+	grep -v '^/\.\(PKGINFO\|INSTALL\|FILES\)$' | sort >"$pkgdir/.FILES"
+
+# ---------------------------------------------------------------------- archive
+msg2 "creating $pkgbase.alpmz"
+tarball="$OUT/$pkgbase.alpmz"
+rm -f "$tarball"
+if have bsdtar; then
+	( cd "$pkgdir" && bsdtar --xz -cf "$tarball" .PKGINFO .FILES \
+		$( [ -f .INSTALL ] && printf '.INSTALL' ) \
+		$(ls -A | grep -v '^\.\(PKGINFO\|FILES\|INSTALL\)$') )
+else
+	( cd "$pkgdir" && tar -cf - . | xz -T0 -9 >"$tarball" )
+fi
+
+dsize=$(wc -c <"$tarball")
+printf '\n'
+ok "$pkgbase.alpmz"
+printf '  %sdownload %-12s installed %-12s files %s%s\n\n' \
+	"$A_GREY" "$(human "$dsize")" "$(human "$isize")" \
+	"$(wc -l <"$pkgdir/.FILES" | tr -d ' ')" "$C_R"
+printf '%s\n' "$tarball"

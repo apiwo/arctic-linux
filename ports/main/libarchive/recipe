@@ -1,0 +1,26 @@
+# libarchive - bsdtar, and the library alpm uses to read .alpmz packages.
+name=libarchive
+version=3.8.9
+release=1
+desc="Multi-format archive library, provides bsdtar and bsdcpio"
+url="https://libarchive.org/"
+license="BSD-2-Clause"
+depend="glibc xz zstd"
+makedepend="cmake clang lld"
+source="libarchive-$version.tar.gz::https://github.com/libarchive/libarchive/archive/refs/tags/v$version.tar.gz"
+sha256="SKIP"
+
+build() {
+	cmake -S "libarchive-$version" -B build \
+		-DCMAKE_INSTALL_PREFIX=/usr \
+		-DCMAKE_INSTALL_LIBDIR=lib \
+		-DCMAKE_BUILD_TYPE=Release \
+		-DENABLE_TEST=OFF
+	cmake --build build -j"$JOBS"
+}
+
+package() {
+	DESTDIR="$pkgdir" cmake --install build
+	# alpm calls bsdtar by name.
+	ln -sf bsdtar "$pkgdir/usr/bin/tar" 2>/dev/null || true
+}

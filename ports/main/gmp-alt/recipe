@@ -1,0 +1,31 @@
+# gmp-alt - Arbitrary precision arithmetic, for nftables
+# Generated from manifest.tsv by gen-ports.py. Edit the manifest, not this file,
+# unless the package needs something the template cannot express - in which case
+# drop a `recipe.local` beside it and it will be preserved.
+name=gmp-alt
+version=6.3.0
+release=1
+desc="Arbitrary precision arithmetic, for nftables"
+url="https://gmplib.org/"
+license="LGPL-3.0-or-later"
+depend="glibc"
+makedepend=""
+source="https://gmplib.org/download/gmp/gmp-6.3.0.tar.xz"
+sha256="SKIP"
+
+build() {
+	cd "gmp-6.3.0"
+	./configure \
+		--prefix=/usr \
+		--sysconfdir=/etc \
+		--localstatedir=/var \
+		--libdir=/usr/lib \
+		--disable-static \
+		--disable-nls
+	make -j"$JOBS"
+}
+
+package() {
+	cd "gmp-6.3.0"
+	make DESTDIR="$pkgdir" install
+}

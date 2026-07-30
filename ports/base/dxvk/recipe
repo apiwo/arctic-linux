@@ -1,0 +1,32 @@
+# dxvk - Direct3D 9/10/11 over Vulkan
+# Generated from manifest.tsv by gen-ports.py. Edit the manifest, not this file,
+# unless the package needs something the template cannot express - in which case
+# drop a `recipe.local` beside it and it will be preserved.
+name=dxvk
+version=2.7.1
+release=1
+desc="Direct3D 9/10/11 over Vulkan"
+url="https://github.com/doitsujin/dxvk"
+license="Zlib"
+depend="vulkan-loader wine"
+makedepend="meson ninja"
+source="https://github.com/doitsujin/dxvk/releases/download/v2.7.1/dxvk-2.7.1.tar.gz"
+sha256="SKIP"
+
+build() {
+	cd "dxvk-2.7.1"
+	meson setup build \
+		--prefix=/usr \
+		--libdir=/usr/lib \
+		--sysconfdir=/etc \
+		--localstatedir=/var \
+		--buildtype=release \
+		--wrap-mode=nodownload \
+		-Db_lto=true
+	ninja -C build -j"$JOBS"
+}
+
+package() {
+	cd "dxvk-2.7.1"
+	DESTDIR="$pkgdir" ninja -C build install
+}

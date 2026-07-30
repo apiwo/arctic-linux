@@ -1,0 +1,31 @@
+# ffmpeg - Audio and video converter
+# Generated from manifest.tsv by gen-ports.py. Edit the manifest, not this file,
+# unless the package needs something the template cannot express - in which case
+# drop a `recipe.local` beside it and it will be preserved.
+name=ffmpeg
+version=8.0
+release=1
+desc="Audio and video converter"
+url="https://ffmpeg.org/"
+license="LGPL-2.1-or-later GPL-2.0-or-later"
+depend="glibc libvorbis opus libvpx x264 x265 dav1d aom libwebp libva libvdpau zlib alsa-lib"
+makedepend="nasm"
+source="https://ffmpeg.org/releases/ffmpeg-8.0.tar.xz"
+sha256="SKIP"
+
+build() {
+	cd "ffmpeg-8.0"
+	./configure \
+		--prefix=/usr \
+		--sysconfdir=/etc \
+		--localstatedir=/var \
+		--libdir=/usr/lib \
+		--disable-static \
+		--disable-nls
+	make -j"$JOBS"
+}
+
+package() {
+	cd "ffmpeg-8.0"
+	make DESTDIR="$pkgdir" install
+}

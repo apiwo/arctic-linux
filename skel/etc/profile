@@ -1,0 +1,28 @@
+# /etc/profile - login environment for every shell on Arctic Linux.
+
+export PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin
+export EDITOR=${EDITOR:-vi}
+export PAGER=${PAGER:-less}
+export LESS='-R -F -X -i'
+export TERMINAL=${TERMINAL:-foot}
+export BROWSER=${BROWSER:-firefox}
+
+# XDG base directories, so nothing scatters dotfiles through $HOME.
+export XDG_CONFIG_HOME="${XDG_CONFIG_HOME:-$HOME/.config}"
+export XDG_CACHE_HOME="${XDG_CACHE_HOME:-$HOME/.cache}"
+export XDG_DATA_HOME="${XDG_DATA_HOME:-$HOME/.local/share}"
+export XDG_STATE_HOME="${XDG_STATE_HOME:-$HOME/.local/state}"
+export XDG_RUNTIME_DIR="${XDG_RUNTIME_DIR:-/run/user/$(id -u)}"
+[ -d "$XDG_RUNTIME_DIR" ] || { mkdir -p "$XDG_RUNTIME_DIR" 2>/dev/null; chmod 700 "$XDG_RUNTIME_DIR" 2>/dev/null; }
+
+# Arctic is an LLVM system; make that the default for anything that asks.
+export CC=${CC:-clang}
+export CXX=${CXX:-clang++}
+
+[ -f /etc/locale.conf ] && . /etc/locale.conf && export LANG
+
+umask 022
+
+for f in /etc/profile.d/*.sh; do
+	[ -r "$f" ] && . "$f"
+done

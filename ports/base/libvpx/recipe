@@ -1,0 +1,31 @@
+# libvpx - VP8 and VP9 codec
+# Generated from manifest.tsv by gen-ports.py. Edit the manifest, not this file,
+# unless the package needs something the template cannot express - in which case
+# drop a `recipe.local` beside it and it will be preserved.
+name=libvpx
+version=1.15.2
+release=1
+desc="VP8 and VP9 codec"
+url="https://www.webmproject.org/"
+license="BSD-3-Clause"
+depend="glibc"
+makedepend="nasm"
+source="https://github.com/webmproject/libvpx/archive/refs/tags/v1.15.2.tar.gz"
+sha256="SKIP"
+
+build() {
+	cd "libvpx-1.15.2"
+	./configure \
+		--prefix=/usr \
+		--sysconfdir=/etc \
+		--localstatedir=/var \
+		--libdir=/usr/lib \
+		--disable-static \
+		--disable-nls
+	make -j"$JOBS"
+}
+
+package() {
+	cd "libvpx-1.15.2"
+	make DESTDIR="$pkgdir" install
+}

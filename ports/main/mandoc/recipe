@@ -1,0 +1,30 @@
+# mandoc - the manual reader, in place of man-db and groff.
+name=mandoc
+version=1.14.6
+release=1
+desc="Manual page formatter and reader from OpenBSD"
+url="https://mandoc.bsd.lv/"
+license="ISC"
+depend="glibc"
+provides="man"
+source="https://mandoc.bsd.lv/snapshots/mandoc-$version.tar.gz"
+sha256="SKIP"
+
+build() {
+	cd "mandoc-$version"
+	cat >configure.local <<-CFG
+		PREFIX=/usr
+		BINDIR=/usr/bin
+		SBINDIR=/usr/bin
+		MANDIR=/usr/share/man
+	CFG
+	./configure
+	make -j"$JOBS"
+}
+
+package() {
+	cd "mandoc-$version"
+	make DESTDIR="$pkgdir" install
+	ln -sf mandoc "$pkgdir/usr/bin/man"
+	ln -sf mandoc "$pkgdir/usr/bin/nroff"
+}

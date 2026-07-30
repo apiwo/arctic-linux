@@ -1,0 +1,31 @@
+# bluez - Bluetooth stack
+# Generated from manifest.tsv by gen-ports.py. Edit the manifest, not this file,
+# unless the package needs something the template cannot express - in which case
+# drop a `recipe.local` beside it and it will be preserved.
+name=bluez
+version=5.85
+release=1
+desc="Bluetooth stack"
+url="http://www.bluez.org/"
+license="GPL-2.0-or-later"
+depend="glibc dbus glib libical ell"
+makedepend=""
+source="https://kernel.org/pub/linux/bluetooth/bluez-5.85.tar.xz"
+sha256="SKIP"
+
+build() {
+	cd "bluez-5.85"
+	./configure \
+		--prefix=/usr \
+		--sysconfdir=/etc \
+		--localstatedir=/var \
+		--libdir=/usr/lib \
+		--disable-static \
+		--disable-nls
+	make -j"$JOBS"
+}
+
+package() {
+	cd "bluez-5.85"
+	make DESTDIR="$pkgdir" install
+}

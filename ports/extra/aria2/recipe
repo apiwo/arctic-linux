@@ -1,0 +1,31 @@
+# aria2 - Multi-protocol download utility
+# Generated from manifest.tsv by gen-ports.py. Edit the manifest, not this file,
+# unless the package needs something the template cannot express - in which case
+# drop a `recipe.local` beside it and it will be preserved.
+name=aria2
+version=1.37.0
+release=1
+desc="Multi-protocol download utility"
+url="https://aria2.github.io/"
+license="GPL-2.0-or-later"
+depend="glibc libressl zlib c-ares sqlite libxml2"
+makedepend=""
+source="https://github.com/aria2/aria2/releases/download/release-1.37.0/aria2-1.37.0.tar.xz"
+sha256="SKIP"
+
+build() {
+	cd "aria2-1.37.0"
+	./configure \
+		--prefix=/usr \
+		--sysconfdir=/etc \
+		--localstatedir=/var \
+		--libdir=/usr/lib \
+		--disable-static \
+		--disable-nls
+	make -j"$JOBS"
+}
+
+package() {
+	cd "aria2-1.37.0"
+	make DESTDIR="$pkgdir" install
+}

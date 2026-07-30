@@ -1,0 +1,31 @@
+# lzo - Real-time compression library
+# Generated from manifest.tsv by gen-ports.py. Edit the manifest, not this file,
+# unless the package needs something the template cannot express - in which case
+# drop a `recipe.local` beside it and it will be preserved.
+name=lzo
+version=2.10
+release=1
+desc="Real-time compression library"
+url="https://www.oberhumer.com/opensource/lzo/"
+license="GPL-2.0-or-later"
+depend="glibc"
+makedepend=""
+source="https://www.oberhumer.com/opensource/lzo/download/lzo-2.10.tar.gz"
+sha256="SKIP"
+
+build() {
+	cd "lzo-2.10"
+	./configure \
+		--prefix=/usr \
+		--sysconfdir=/etc \
+		--localstatedir=/var \
+		--libdir=/usr/lib \
+		--disable-static \
+		--disable-nls
+	make -j"$JOBS"
+}
+
+package() {
+	cd "lzo-2.10"
+	make DESTDIR="$pkgdir" install
+}

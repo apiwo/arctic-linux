@@ -1,0 +1,8 @@
+#!/bin/sh
+NAME=xdm
+CMD=/usr/bin/xdm
+ARGS="-nodaemon"
+BACKGROUND=yes
+
+. /etc/arctic/svc.lib
+svc_main "$@"

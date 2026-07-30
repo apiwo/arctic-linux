@@ -1,0 +1,31 @@
+# libxfixes - X Fixes extension
+# Generated from manifest.tsv by gen-ports.py. Edit the manifest, not this file,
+# unless the package needs something the template cannot express - in which case
+# drop a `recipe.local` beside it and it will be preserved.
+name=libxfixes
+version=6.0.2
+release=1
+desc="X Fixes extension"
+url="https://x.org/"
+license="MIT"
+depend="glibc libx11"
+makedepend=""
+source="https://x.org/pub/individual/lib/libXfixes-6.0.2.tar.xz"
+sha256="SKIP"
+
+build() {
+	cd "libXfixes-6.0.2"
+	./configure \
+		--prefix=/usr \
+		--sysconfdir=/etc \
+		--localstatedir=/var \
+		--libdir=/usr/lib \
+		--disable-static \
+		--disable-nls
+	make -j"$JOBS"
+}
+
+package() {
+	cd "libXfixes-6.0.2"
+	make DESTDIR="$pkgdir" install
+}

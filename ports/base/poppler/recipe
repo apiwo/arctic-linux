@@ -1,0 +1,27 @@
+# poppler - PDF rendering library
+# Generated from manifest.tsv by gen-ports.py. Edit the manifest, not this file,
+# unless the package needs something the template cannot express - in which case
+# drop a `recipe.local` beside it and it will be preserved.
+name=poppler
+version=26.01.0
+release=1
+desc="PDF rendering library"
+url="https://poppler.freedesktop.org/"
+license="GPL-2.0-or-later"
+depend="glibc cairo freetype libjpeg-turbo libpng libtiff openjpeg2 nspr fontconfig"
+makedepend="cmake ninja"
+source="https://poppler.freedesktop.org/poppler-26.01.0.tar.xz"
+sha256="SKIP"
+
+build() {
+	cmake -S "poppler-26.01.0" -B build -G Ninja \
+		-DCMAKE_INSTALL_PREFIX=/usr \
+		-DCMAKE_INSTALL_LIBDIR=lib \
+		-DCMAKE_BUILD_TYPE=Release \
+		-DBUILD_SHARED_LIBS=ON
+	ninja -C build -j"$JOBS"
+}
+
+package() {
+	DESTDIR="$pkgdir" ninja -C build install
+}

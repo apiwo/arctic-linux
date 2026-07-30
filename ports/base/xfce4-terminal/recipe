@@ -1,0 +1,31 @@
+# xfce4-terminal - The Xfce terminal
+# Generated from manifest.tsv by gen-ports.py. Edit the manifest, not this file,
+# unless the package needs something the template cannot express - in which case
+# drop a `recipe.local` beside it and it will be preserved.
+name=xfce4-terminal
+version=1.2.0
+release=1
+desc="The Xfce terminal"
+url="https://xfce.org/"
+license="GPL-2.0-or-later"
+depend="gtk3 libxfce4ui vte3"
+makedepend=""
+source="https://archive.xfce.org/src/apps/xfce4-terminal/1.2/xfce4-terminal-1.2.0.tar.bz2"
+sha256="SKIP"
+
+build() {
+	cd "xfce4-terminal-1.2.0"
+	./configure \
+		--prefix=/usr \
+		--sysconfdir=/etc \
+		--localstatedir=/var \
+		--libdir=/usr/lib \
+		--disable-static \
+		--disable-nls
+	make -j"$JOBS"
+}
+
+package() {
+	cd "xfce4-terminal-1.2.0"
+	make DESTDIR="$pkgdir" install
+}

@@ -1,0 +1,27 @@
+# rocm-opencl - AMD ROCm OpenCL runtime
+# Generated from manifest.tsv by gen-ports.py. Edit the manifest, not this file,
+# unless the package needs something the template cannot express - in which case
+# drop a `recipe.local` beside it and it will be preserved.
+name=rocm-opencl
+version=7.2.0
+release=1
+desc="AMD ROCm OpenCL runtime"
+url="https://rocm.docs.amd.com/"
+license="MIT"
+depend="mesa llvm"
+makedepend="cmake ninja"
+source="https://github.com/ROCm/ROCm/archive/refs/tags/rocm-7.2.0.tar.gz"
+sha256="SKIP"
+
+build() {
+	cmake -S "rocm-7.2.0" -B build -G Ninja \
+		-DCMAKE_INSTALL_PREFIX=/usr \
+		-DCMAKE_INSTALL_LIBDIR=lib \
+		-DCMAKE_BUILD_TYPE=Release \
+		-DBUILD_SHARED_LIBS=ON
+	ninja -C build -j"$JOBS"
+}
+
+package() {
+	DESTDIR="$pkgdir" ninja -C build install
+}

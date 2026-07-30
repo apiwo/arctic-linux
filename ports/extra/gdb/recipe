@@ -1,0 +1,31 @@
+# gdb - The GNU debugger, for when lldb will not do
+# Generated from manifest.tsv by gen-ports.py. Edit the manifest, not this file,
+# unless the package needs something the template cannot express - in which case
+# drop a `recipe.local` beside it and it will be preserved.
+name=gdb
+version=17.2
+release=1
+desc="The GNU debugger, for when lldb will not do"
+url="https://sourceware.org/gdb/"
+license="GPL-3.0-or-later"
+depend="glibc netbsd-curses python zlib xz"
+makedepend=""
+source="https://ftp.gnu.org/gnu/gdb/gdb-17.2.tar.xz"
+sha256="SKIP"
+
+build() {
+	cd "gdb-17.2"
+	./configure \
+		--prefix=/usr \
+		--sysconfdir=/etc \
+		--localstatedir=/var \
+		--libdir=/usr/lib \
+		--disable-static \
+		--disable-nls
+	make -j"$JOBS"
+}
+
+package() {
+	cd "gdb-17.2"
+	make DESTDIR="$pkgdir" install
+}

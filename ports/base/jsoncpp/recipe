@@ -1,0 +1,32 @@
+# jsoncpp - C++ JSON library
+# Generated from manifest.tsv by gen-ports.py. Edit the manifest, not this file,
+# unless the package needs something the template cannot express - in which case
+# drop a `recipe.local` beside it and it will be preserved.
+name=jsoncpp
+version=1.9.6
+release=1
+desc="C++ JSON library"
+url="https://github.com/open-source-parsers/jsoncpp"
+license="MIT"
+depend="glibc"
+makedepend="meson ninja"
+source="https://github.com/open-source-parsers/jsoncpp/archive/refs/tags/1.9.6.tar.gz"
+sha256="SKIP"
+
+build() {
+	cd "1.9.6"
+	meson setup build \
+		--prefix=/usr \
+		--libdir=/usr/lib \
+		--sysconfdir=/etc \
+		--localstatedir=/var \
+		--buildtype=release \
+		--wrap-mode=nodownload \
+		-Db_lto=true
+	ninja -C build -j"$JOBS"
+}
+
+package() {
+	cd "1.9.6"
+	DESTDIR="$pkgdir" ninja -C build install
+}

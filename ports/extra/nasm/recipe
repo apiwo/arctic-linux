@@ -1,0 +1,31 @@
+# nasm - Netwide assembler
+# Generated from manifest.tsv by gen-ports.py. Edit the manifest, not this file,
+# unless the package needs something the template cannot express - in which case
+# drop a `recipe.local` beside it and it will be preserved.
+name=nasm
+version=2.16.03
+release=1
+desc="Netwide assembler"
+url="https://nasm.us/"
+license="BSD-2-Clause"
+depend="glibc"
+makedepend=""
+source="https://www.nasm.us/pub/nasm/releasebuilds/2.16.03/nasm-2.16.03.tar.xz"
+sha256="SKIP"
+
+build() {
+	cd "nasm-2.16.03"
+	./configure \
+		--prefix=/usr \
+		--sysconfdir=/etc \
+		--localstatedir=/var \
+		--libdir=/usr/lib \
+		--disable-static \
+		--disable-nls
+	make -j"$JOBS"
+}
+
+package() {
+	cd "nasm-2.16.03"
+	make DESTDIR="$pkgdir" install
+}

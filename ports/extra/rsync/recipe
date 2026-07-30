@@ -1,0 +1,31 @@
+# rsync - Fast incremental file transfer
+# Generated from manifest.tsv by gen-ports.py. Edit the manifest, not this file,
+# unless the package needs something the template cannot express - in which case
+# drop a `recipe.local` beside it and it will be preserved.
+name=rsync
+version=3.5.0
+release=1
+desc="Fast incremental file transfer"
+url="https://rsync.samba.org/"
+license="GPL-3.0-or-later"
+depend="glibc zstd xz lz4 libressl"
+makedepend=""
+source="https://download.samba.org/pub/rsync/src/rsync-3.5.0.tar.gz"
+sha256="SKIP"
+
+build() {
+	cd "rsync-3.5.0"
+	./configure \
+		--prefix=/usr \
+		--sysconfdir=/etc \
+		--localstatedir=/var \
+		--libdir=/usr/lib \
+		--disable-static \
+		--disable-nls
+	make -j"$JOBS"
+}
+
+package() {
+	cd "rsync-3.5.0"
+	make DESTDIR="$pkgdir" install
+}

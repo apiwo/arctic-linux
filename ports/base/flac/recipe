@@ -1,0 +1,27 @@
+# flac - Free lossless audio codec
+# Generated from manifest.tsv by gen-ports.py. Edit the manifest, not this file,
+# unless the package needs something the template cannot express - in which case
+# drop a `recipe.local` beside it and it will be preserved.
+name=flac
+version=1.5.0
+release=1
+desc="Free lossless audio codec"
+url="https://xiph.org/flac/"
+license="BSD-3-Clause GPL-2.0-or-later"
+depend="glibc libogg"
+makedepend="cmake ninja"
+source="https://downloads.xiph.org/releases/flac/flac-1.5.0.tar.xz"
+sha256="SKIP"
+
+build() {
+	cmake -S "flac-1.5.0" -B build -G Ninja \
+		-DCMAKE_INSTALL_PREFIX=/usr \
+		-DCMAKE_INSTALL_LIBDIR=lib \
+		-DCMAKE_BUILD_TYPE=Release \
+		-DBUILD_SHARED_LIBS=ON
+	ninja -C build -j"$JOBS"
+}
+
+package() {
+	DESTDIR="$pkgdir" ninja -C build install
+}

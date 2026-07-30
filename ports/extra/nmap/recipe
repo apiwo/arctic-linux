@@ -1,0 +1,31 @@
+# nmap - Network exploration and security auditing
+# Generated from manifest.tsv by gen-ports.py. Edit the manifest, not this file,
+# unless the package needs something the template cannot express - in which case
+# drop a `recipe.local` beside it and it will be preserved.
+name=nmap
+version=7.99
+release=1
+desc="Network exploration and security auditing"
+url="https://nmap.org/"
+license="NPSL"
+depend="glibc libressl pcre2 libpcap lua"
+makedepend=""
+source="https://nmap.org/dist/nmap-7.99.tar.bz2"
+sha256="SKIP"
+
+build() {
+	cd "nmap-7.99"
+	./configure \
+		--prefix=/usr \
+		--sysconfdir=/etc \
+		--localstatedir=/var \
+		--libdir=/usr/lib \
+		--disable-static \
+		--disable-nls
+	make -j"$JOBS"
+}
+
+package() {
+	cd "nmap-7.99"
+	make DESTDIR="$pkgdir" install
+}

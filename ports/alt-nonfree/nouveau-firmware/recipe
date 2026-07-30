@@ -1,0 +1,24 @@
+# nouveau-firmware - Redistributable GSP firmware for nouveau
+# Generated from manifest.tsv by gen-ports.py. Edit the manifest, not this file,
+# unless the package needs something the template cannot express - in which case
+# drop a `recipe.local` beside it and it will be preserved.
+name=nouveau-firmware
+version=20260701
+release=1
+desc="Redistributable GSP firmware for nouveau"
+url="https://nouveau.freedesktop.org/"
+license="MIT"
+depend=""
+makedepend=""
+source="https://kernel.org/pub/linux/kernel/firmware/linux-firmware-20260701.tar.xz"
+sha256="SKIP"
+
+options="!strip"
+
+package() {
+	cd "linux-firmware-20260701"
+	install -d "$pkgdir/usr/lib/firmware"
+	cp -a . "$pkgdir/usr/lib/firmware/"
+	find "$pkgdir/usr/lib/firmware" -name 'Makefile' -delete
+	true
+}

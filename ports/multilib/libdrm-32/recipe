@@ -1,0 +1,32 @@
+# libdrm-32 - DRM library, 32-bit
+# Generated from manifest.tsv by gen-ports.py. Edit the manifest, not this file,
+# unless the package needs something the template cannot express - in which case
+# drop a `recipe.local` beside it and it will be preserved.
+name=libdrm-32
+version=2.4.130
+release=1
+desc="DRM library, 32-bit"
+url="https://dri.freedesktop.org/"
+license="MIT"
+depend="libdrm glibc-32"
+makedepend="meson ninja"
+source="https://dri.freedesktop.org/libdrm/libdrm-2.4.130.tar.xz"
+sha256="SKIP"
+
+build() {
+	cd "libdrm-2.4.130"
+	meson setup build \
+		--prefix=/usr \
+		--libdir=/usr/lib \
+		--sysconfdir=/etc \
+		--localstatedir=/var \
+		--buildtype=release \
+		--wrap-mode=nodownload \
+		-Db_lto=true
+	ninja -C build -j"$JOBS"
+}
+
+package() {
+	cd "libdrm-2.4.130"
+	DESTDIR="$pkgdir" ninja -C build install
+}

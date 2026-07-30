@@ -1,0 +1,24 @@
+# libre-firmware - Firmware with no binary blobs at all
+# Generated from manifest.tsv by gen-ports.py. Edit the manifest, not this file,
+# unless the package needs something the template cannot express - in which case
+# drop a `recipe.local` beside it and it will be preserved.
+name=libre-firmware
+version=20260701
+release=1
+desc="Firmware with no binary blobs at all"
+url="https://www.fsfla.org/ikiwiki/selibre/linux-libre/"
+license="GPL-2.0-only"
+depend=""
+makedepend=""
+source="https://linux-libre.fsfla.org/pub/linux-libre/lemote/gnewsense/pool/free-firmware-20260701.tar.xz"
+sha256="SKIP"
+
+options="!strip"
+
+package() {
+	cd "free-firmware-20260701"
+	install -d "$pkgdir/usr/lib/firmware"
+	cp -a . "$pkgdir/usr/lib/firmware/"
+	find "$pkgdir/usr/lib/firmware" -name 'Makefile' -delete
+	true
+}

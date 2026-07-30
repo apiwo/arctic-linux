@@ -1,0 +1,31 @@
+# zellij - Terminal workspace multiplexer
+# Generated from manifest.tsv by gen-ports.py. Edit the manifest, not this file,
+# unless the package needs something the template cannot express - in which case
+# drop a `recipe.local` beside it and it will be preserved.
+name=zellij
+version=0.44.0
+release=1
+desc="Terminal workspace multiplexer"
+url="https://zellij.dev/"
+license="MIT"
+depend="glibc"
+makedepend="rust cargo"
+source="https://github.com/zellij-org/zellij/archive/refs/tags/v0.44.0.tar.gz"
+sha256="SKIP"
+
+build() {
+	cd "zellij-0.44.0"
+	# Arctic builds Rust offline against a vendored tree so packages are
+	# reproducible and the build host needs no network.
+	export RUSTFLAGS="-C linker=clang -C link-arg=-fuse-ld=lld"
+	cargo build --release --locked --offline
+}
+
+package() {
+	cd "zellij-0.44.0"
+	install -Dm755 "target/release/zellij" "$pkgdir/usr/bin/zellij"
+	for d in README.md README LICENSE; do
+		[ -f "$d" ] && install -Dm644 "$d" "$pkgdir/usr/share/doc/zellij/$d"
+	done
+	true
+}

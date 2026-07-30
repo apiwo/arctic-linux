@@ -1,0 +1,31 @@
+# util-linux-libs - libblkid, libmount and libuuid only
+# Generated from manifest.tsv by gen-ports.py. Edit the manifest, not this file,
+# unless the package needs something the template cannot express - in which case
+# drop a `recipe.local` beside it and it will be preserved.
+name=util-linux-libs
+version=2.42.1
+release=1
+desc="libblkid, libmount and libuuid only"
+url="https://github.com/util-linux/util-linux"
+license="LGPL-2.1-or-later"
+depend="glibc"
+makedepend=""
+source="https://kernel.org/pub/linux/utils/util-linux/v2.42/util-linux-2.42.1.tar.xz"
+sha256="SKIP"
+
+build() {
+	cd "util-linux-2.42.1"
+	./configure \
+		--prefix=/usr \
+		--sysconfdir=/etc \
+		--localstatedir=/var \
+		--libdir=/usr/lib \
+		--disable-static \
+		--disable-nls
+	make -j"$JOBS"
+}
+
+package() {
+	cd "util-linux-2.42.1"
+	make DESTDIR="$pkgdir" install
+}

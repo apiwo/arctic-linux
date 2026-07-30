@@ -1,0 +1,8 @@
+#!/bin/sh
+NAME=iwd
+CMD=/usr/bin/iwd
+ARGS=""
+BACKGROUND=yes
+
+. /etc/arctic/svc.lib
+svc_main "$@"

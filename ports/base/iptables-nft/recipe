@@ -1,0 +1,31 @@
+# iptables-nft - iptables compatibility over nftables
+# Generated from manifest.tsv by gen-ports.py. Edit the manifest, not this file,
+# unless the package needs something the template cannot express - in which case
+# drop a `recipe.local` beside it and it will be preserved.
+name=iptables-nft
+version=1.8.11
+release=1
+desc="iptables compatibility over nftables"
+url="https://netfilter.org/projects/iptables/"
+license="GPL-2.0-only"
+depend="glibc libmnl libnftnl"
+makedepend=""
+source="https://netfilter.org/projects/iptables/files/iptables-1.8.11.tar.xz"
+sha256="SKIP"
+
+build() {
+	cd "iptables-1.8.11"
+	./configure \
+		--prefix=/usr \
+		--sysconfdir=/etc \
+		--localstatedir=/var \
+		--libdir=/usr/lib \
+		--disable-static \
+		--disable-nls
+	make -j"$JOBS"
+}
+
+package() {
+	cd "iptables-1.8.11"
+	make DESTDIR="$pkgdir" install
+}

@@ -1,0 +1,31 @@
+# icu - Unicode and globalisation support
+# Generated from manifest.tsv by gen-ports.py. Edit the manifest, not this file,
+# unless the package needs something the template cannot express - in which case
+# drop a `recipe.local` beside it and it will be preserved.
+name=icu
+version=78.1
+release=1
+desc="Unicode and globalisation support"
+url="https://icu.unicode.org/"
+license="ICU"
+depend="glibc"
+makedepend=""
+source="https://github.com/unicode-org/icu/releases/download/release-78-1/icu4c-78_1-src.tgz"
+sha256="SKIP"
+
+build() {
+	cd "icu4c-78_1-src"
+	./configure \
+		--prefix=/usr \
+		--sysconfdir=/etc \
+		--localstatedir=/var \
+		--libdir=/usr/lib \
+		--disable-static \
+		--disable-nls
+	make -j"$JOBS"
+}
+
+package() {
+	cd "icu4c-78_1-src"
+	make DESTDIR="$pkgdir" install
+}

@@ -1,0 +1,26 @@
+# syncthing - Continuous file synchronisation
+# Generated from manifest.tsv by gen-ports.py. Edit the manifest, not this file,
+# unless the package needs something the template cannot express - in which case
+# drop a `recipe.local` beside it and it will be preserved.
+name=syncthing
+version=2.1.0
+release=1
+desc="Continuous file synchronisation"
+url="https://syncthing.net/"
+license="MPL-2.0"
+depend="glibc"
+makedepend="go"
+source="https://github.com/syncthing/syncthing/archive/refs/tags/v2.1.0.tar.gz"
+sha256="SKIP"
+
+build() {
+	cd "syncthing-2.1.0"
+	export CGO_CPPFLAGS="$CPPFLAGS" CGO_CFLAGS="$CFLAGS" CGO_LDFLAGS="$LDFLAGS"
+	export GOFLAGS="-buildmode=pie -trimpath -mod=readonly -modcacherw"
+	go build -o "syncthing" .
+}
+
+package() {
+	cd "syncthing-2.1.0"
+	install -Dm755 "syncthing" "$pkgdir/usr/bin/syncthing"
+}

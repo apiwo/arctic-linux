@@ -1,0 +1,21 @@
+# libgl-32 - 32-bit OpenGL, for Steam and Wine
+# Generated from manifest.tsv by gen-ports.py. Edit the manifest, not this file,
+# unless the package needs something the template cannot express - in which case
+# drop a `recipe.local` beside it and it will be preserved.
+name=libgl-32
+version=26.0.2
+release=1
+desc="32-bit OpenGL, for Steam and Wine"
+url="https://mesa3d.org/"
+license="MIT"
+depend="mesa-32"
+makedepend=""
+source=""
+sha256=""
+
+# A meta package: the dependency list is the whole payload. Installing it pulls
+# in a working setup and nothing else.
+package() {
+	install -d "$pkgdir/usr/share/arctic/meta"
+	printf '%s\n' "mesa-32" >"$pkgdir/usr/share/arctic/meta/libgl-32"
+}

@@ -1,0 +1,24 @@
+# pigz - Parallel gzip
+# Generated from manifest.tsv by gen-ports.py. Edit the manifest, not this file,
+# unless the package needs something the template cannot express - in which case
+# drop a `recipe.local` beside it and it will be preserved.
+name=pigz
+version=2.9
+release=1
+desc="Parallel gzip"
+url="https://zlib.net/pigz/"
+license="Zlib"
+depend="glibc zlib"
+makedepend=""
+source="https://zlib.net/pigz/pigz-2.9.tar.gz"
+sha256="SKIP"
+
+build() {
+	cd "pigz-2.9"
+	make -j"$JOBS" PREFIX=/usr
+}
+
+package() {
+	cd "pigz-2.9"
+	make PREFIX=/usr DESTDIR="$pkgdir" install
+}

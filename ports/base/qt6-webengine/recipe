@@ -1,0 +1,27 @@
+# qt6-webengine - Chromium-based web engine for Qt
+# Generated from manifest.tsv by gen-ports.py. Edit the manifest, not this file,
+# unless the package needs something the template cannot express - in which case
+# drop a `recipe.local` beside it and it will be preserved.
+name=qt6-webengine
+version=6.10.1
+release=1
+desc="Chromium-based web engine for Qt"
+url="https://qt.io/"
+license="LGPL-3.0-only"
+depend="qt6-base qt6-declarative nss ffmpeg icu"
+makedepend="cmake ninja nodejs python"
+source="https://download.qt.io/official_releases/qt/6.10/6.10.1/submodules/qtwebengine-everywhere-src-6.10.1.tar.xz"
+sha256="SKIP"
+
+build() {
+	cmake -S "qtwebengine-everywhere-src-6.10.1" -B build -G Ninja \
+		-DCMAKE_INSTALL_PREFIX=/usr \
+		-DCMAKE_INSTALL_LIBDIR=lib \
+		-DCMAKE_BUILD_TYPE=Release \
+		-DBUILD_SHARED_LIBS=ON
+	ninja -C build -j"$JOBS"
+}
+
+package() {
+	DESTDIR="$pkgdir" ninja -C build install
+}

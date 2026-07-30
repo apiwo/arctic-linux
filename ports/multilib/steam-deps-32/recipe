@@ -1,0 +1,21 @@
+# steam-deps-32 - Everything 32-bit that Steam needs
+# Generated from manifest.tsv by gen-ports.py. Edit the manifest, not this file,
+# unless the package needs something the template cannot express - in which case
+# drop a `recipe.local` beside it and it will be preserved.
+name=steam-deps-32
+version=1.0.0
+release=1
+desc="Everything 32-bit that Steam needs"
+url="https://github.com/apiwo/arctic-linux"
+license="BSD-2-Clause"
+depend="glibc-32 mesa-32 libx11-32 alsa-lib-32 vulkan-loader-32 libgl-32"
+makedepend=""
+source=""
+sha256=""
+
+# A meta package: the dependency list is the whole payload. Installing it pulls
+# in a working setup and nothing else.
+package() {
+	install -d "$pkgdir/usr/share/arctic/meta"
+	printf '%s\n' "glibc-32 mesa-32 libx11-32 alsa-lib-32 vulkan-loader-32 libgl-32" >"$pkgdir/usr/share/arctic/meta/steam-deps-32"
+}

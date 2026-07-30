@@ -1,0 +1,31 @@
+# libxdmcp - X Display Manager Control Protocol
+# Generated from manifest.tsv by gen-ports.py. Edit the manifest, not this file,
+# unless the package needs something the template cannot express - in which case
+# drop a `recipe.local` beside it and it will be preserved.
+name=libxdmcp
+version=1.1.5
+release=1
+desc="X Display Manager Control Protocol"
+url="https://x.org/"
+license="MIT"
+depend="glibc"
+makedepend=""
+source="https://x.org/pub/individual/lib/libXdmcp-1.1.5.tar.xz"
+sha256="SKIP"
+
+build() {
+	cd "libXdmcp-1.1.5"
+	./configure \
+		--prefix=/usr \
+		--sysconfdir=/etc \
+		--localstatedir=/var \
+		--libdir=/usr/lib \
+		--disable-static \
+		--disable-nls
+	make -j"$JOBS"
+}
+
+package() {
+	cd "libXdmcp-1.1.5"
+	make DESTDIR="$pkgdir" install
+}

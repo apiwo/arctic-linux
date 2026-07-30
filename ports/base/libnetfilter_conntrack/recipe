@@ -1,0 +1,31 @@
+# libnetfilter_conntrack - Connection tracking library
+# Generated from manifest.tsv by gen-ports.py. Edit the manifest, not this file,
+# unless the package needs something the template cannot express - in which case
+# drop a `recipe.local` beside it and it will be preserved.
+name=libnetfilter_conntrack
+version=1.1.0
+release=1
+desc="Connection tracking library"
+url="https://netfilter.org/projects/libnetfilter_conntrack/"
+license="GPL-2.0-or-later"
+depend="glibc libmnl libnfnetlink"
+makedepend=""
+source="https://netfilter.org/projects/libnetfilter_conntrack/files/libnetfilter_conntrack-1.1.0.tar.bz2"
+sha256="SKIP"
+
+build() {
+	cd "libnetfilter_conntrack-1.1.0"
+	./configure \
+		--prefix=/usr \
+		--sysconfdir=/etc \
+		--localstatedir=/var \
+		--libdir=/usr/lib \
+		--disable-static \
+		--disable-nls
+	make -j"$JOBS"
+}
+
+package() {
+	cd "libnetfilter_conntrack-1.1.0"
+	make DESTDIR="$pkgdir" install
+}

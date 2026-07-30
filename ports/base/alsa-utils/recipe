@@ -1,0 +1,31 @@
+# alsa-utils - alsamixer, amixer and friends
+# Generated from manifest.tsv by gen-ports.py. Edit the manifest, not this file,
+# unless the package needs something the template cannot express - in which case
+# drop a `recipe.local` beside it and it will be preserved.
+name=alsa-utils
+version=1.2.15
+release=1
+desc="alsamixer, amixer and friends"
+url="https://alsa-project.org/"
+license="GPL-2.0-or-later"
+depend="alsa-lib netbsd-curses"
+makedepend=""
+source="https://www.alsa-project.org/files/pub/utils/alsa-utils-1.2.15.tar.bz2"
+sha256="SKIP"
+
+build() {
+	cd "alsa-utils-1.2.15"
+	./configure \
+		--prefix=/usr \
+		--sysconfdir=/etc \
+		--localstatedir=/var \
+		--libdir=/usr/lib \
+		--disable-static \
+		--disable-nls
+	make -j"$JOBS"
+}
+
+package() {
+	cd "alsa-utils-1.2.15"
+	make DESTDIR="$pkgdir" install
+}

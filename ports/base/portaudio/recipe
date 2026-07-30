@@ -1,0 +1,27 @@
+# portaudio - Portable audio I/O
+# Generated from manifest.tsv by gen-ports.py. Edit the manifest, not this file,
+# unless the package needs something the template cannot express - in which case
+# drop a `recipe.local` beside it and it will be preserved.
+name=portaudio
+version=19.7.0
+release=1
+desc="Portable audio I/O"
+url="http://www.portaudio.com/"
+license="MIT"
+depend="alsa-lib"
+makedepend="cmake ninja"
+source="https://github.com/PortAudio/portaudio/archive/refs/tags/v19.7.0.tar.gz"
+sha256="SKIP"
+
+build() {
+	cmake -S "portaudio-19.7.0" -B build -G Ninja \
+		-DCMAKE_INSTALL_PREFIX=/usr \
+		-DCMAKE_INSTALL_LIBDIR=lib \
+		-DCMAKE_BUILD_TYPE=Release \
+		-DBUILD_SHARED_LIBS=ON
+	ninja -C build -j"$JOBS"
+}
+
+package() {
+	DESTDIR="$pkgdir" ninja -C build install
+}

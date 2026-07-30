@@ -1,0 +1,31 @@
+# acl - Access control list tools
+# Generated from manifest.tsv by gen-ports.py. Edit the manifest, not this file,
+# unless the package needs something the template cannot express - in which case
+# drop a `recipe.local` beside it and it will be preserved.
+name=acl
+version=2.4.0
+release=1
+desc="Access control list tools"
+url="https://savannah.nongnu.org/projects/acl"
+license="LGPL-2.1-or-later"
+depend="glibc attr"
+makedepend=""
+source="https://download.savannah.nongnu.org/releases/acl/acl-2.4.0.tar.xz"
+sha256="SKIP"
+
+build() {
+	cd "acl-2.4.0"
+	./configure \
+		--prefix=/usr \
+		--sysconfdir=/etc \
+		--localstatedir=/var \
+		--libdir=/usr/lib \
+		--disable-static \
+		--disable-nls
+	make -j"$JOBS"
+}
+
+package() {
+	cd "acl-2.4.0"
+	make DESTDIR="$pkgdir" install
+}

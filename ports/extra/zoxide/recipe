@@ -1,0 +1,31 @@
+# zoxide - A smarter cd
+# Generated from manifest.tsv by gen-ports.py. Edit the manifest, not this file,
+# unless the package needs something the template cannot express - in which case
+# drop a `recipe.local` beside it and it will be preserved.
+name=zoxide
+version=0.9.9
+release=1
+desc="A smarter cd"
+url="https://github.com/ajeetdsouza/zoxide"
+license="MIT"
+depend="glibc"
+makedepend="rust cargo"
+source="https://github.com/ajeetdsouza/zoxide/archive/refs/tags/v0.9.9.tar.gz"
+sha256="SKIP"
+
+build() {
+	cd "zoxide-0.9.9"
+	# Arctic builds Rust offline against a vendored tree so packages are
+	# reproducible and the build host needs no network.
+	export RUSTFLAGS="-C linker=clang -C link-arg=-fuse-ld=lld"
+	cargo build --release --locked --offline
+}
+
+package() {
+	cd "zoxide-0.9.9"
+	install -Dm755 "target/release/zoxide" "$pkgdir/usr/bin/zoxide"
+	for d in README.md README LICENSE; do
+		[ -f "$d" ] && install -Dm644 "$d" "$pkgdir/usr/share/doc/zoxide/$d"
+	done
+	true
+}

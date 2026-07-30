@@ -1,0 +1,31 @@
+# libevent - Event notification library
+# Generated from manifest.tsv by gen-ports.py. Edit the manifest, not this file,
+# unless the package needs something the template cannot express - in which case
+# drop a `recipe.local` beside it and it will be preserved.
+name=libevent
+version=2.1.12
+release=1
+desc="Event notification library"
+url="https://libevent.org/"
+license="BSD-3-Clause"
+depend="glibc libressl"
+makedepend=""
+source="https://github.com/libevent/libevent/releases/download/release-2.1.12-stable/libevent-2.1.12-stable.tar.gz"
+sha256="SKIP"
+
+build() {
+	cd "libevent-2.1.12-stable"
+	./configure \
+		--prefix=/usr \
+		--sysconfdir=/etc \
+		--localstatedir=/var \
+		--libdir=/usr/lib \
+		--disable-static \
+		--disable-nls
+	make -j"$JOBS"
+}
+
+package() {
+	cd "libevent-2.1.12-stable"
+	make DESTDIR="$pkgdir" install
+}

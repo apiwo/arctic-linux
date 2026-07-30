@@ -1,0 +1,32 @@
+# libdrm - Direct Rendering Manager library
+# Generated from manifest.tsv by gen-ports.py. Edit the manifest, not this file,
+# unless the package needs something the template cannot express - in which case
+# drop a `recipe.local` beside it and it will be preserved.
+name=libdrm
+version=2.4.130
+release=1
+desc="Direct Rendering Manager library"
+url="https://dri.freedesktop.org/"
+license="MIT"
+depend="glibc libpciaccess"
+makedepend="meson ninja"
+source="https://dri.freedesktop.org/libdrm/libdrm-2.4.130.tar.xz"
+sha256="SKIP"
+
+build() {
+	cd "libdrm-2.4.130"
+	meson setup build \
+		--prefix=/usr \
+		--libdir=/usr/lib \
+		--sysconfdir=/etc \
+		--localstatedir=/var \
+		--buildtype=release \
+		--wrap-mode=nodownload \
+		-Db_lto=true
+	ninja -C build -j"$JOBS"
+}
+
+package() {
+	cd "libdrm-2.4.130"
+	DESTDIR="$pkgdir" ninja -C build install
+}

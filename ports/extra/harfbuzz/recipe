@@ -1,0 +1,32 @@
+# harfbuzz - Text shaping engine
+# Generated from manifest.tsv by gen-ports.py. Edit the manifest, not this file,
+# unless the package needs something the template cannot express - in which case
+# drop a `recipe.local` beside it and it will be preserved.
+name=harfbuzz
+version=12.2.0
+release=1
+desc="Text shaping engine"
+url="https://harfbuzz.github.io/"
+license="MIT"
+depend="glibc freetype glib cairo"
+makedepend="meson ninja"
+source="https://github.com/harfbuzz/harfbuzz/releases/download/12.2.0/harfbuzz-12.2.0.tar.xz"
+sha256="SKIP"
+
+build() {
+	cd "harfbuzz-12.2.0"
+	meson setup build \
+		--prefix=/usr \
+		--libdir=/usr/lib \
+		--sysconfdir=/etc \
+		--localstatedir=/var \
+		--buildtype=release \
+		--wrap-mode=nodownload \
+		-Db_lto=true
+	ninja -C build -j"$JOBS"
+}
+
+package() {
+	cd "harfbuzz-12.2.0"
+	DESTDIR="$pkgdir" ninja -C build install
+}

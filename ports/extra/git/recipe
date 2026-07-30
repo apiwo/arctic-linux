@@ -1,0 +1,25 @@
+# git - version control. Built without any GNU dependency.
+name=git
+version=2.53.0
+release=1
+desc="Distributed version control system"
+url="https://git-scm.com/"
+license="GPL-2.0-only"
+depend="glibc zlib openssl curl expat"
+makedepend="clang lld bmake"
+source="https://mirrors.edge.kernel.org/pub/software/scm/git/git-$version.tar.xz"
+sha256="SKIP"
+
+build() {
+	cd "git-$version"
+	./configure --prefix=/usr --with-libpcre2 --without-tcltk
+	make -j"$JOBS" all
+}
+
+package() {
+	cd "git-$version"
+	make DESTDIR="$pkgdir" install
+	# The shipped completion works with the zsh Arctic defaults to.
+	install -Dm644 contrib/completion/git-completion.zsh \
+		"$pkgdir/usr/share/zsh/site-functions/_git"
+}

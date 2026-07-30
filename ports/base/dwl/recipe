@@ -1,0 +1,26 @@
+# dwl - dwm's ideas, on Wayland. Patched and configured, suckless style.
+name=dwl
+version=0.8
+release=1
+desc="Dynamic window manager for Wayland, in the spirit of dwm"
+url="https://codeberg.org/dwl/dwl"
+license="GPL-3.0-only"
+depend="glibc wayland wlroots libinput libxkbcommon"
+makedepend="bmake clang lld pkgconf"
+source="dwl-$version.tar.gz::https://codeberg.org/dwl/dwl/archive/v$version.tar.gz"
+sha256="SKIP"
+
+build() {
+	cd dwl
+	# Suckless software is configured by editing the source, so Arctic ships a
+	# config.h rather than patching at runtime.
+	cp config.def.h config.h
+	sed -i 's/"foot"/"foot"/' config.h
+	make -j"$JOBS" PREFIX=/usr
+}
+
+package() {
+	cd dwl
+	make PREFIX=/usr DESTDIR="$pkgdir" install
+	install -Dm644 config.h "$pkgdir/usr/share/dwl/config.h"
+}

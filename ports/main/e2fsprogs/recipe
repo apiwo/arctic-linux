@@ -1,0 +1,31 @@
+# e2fsprogs - ext2/3/4 filesystem tools
+# Generated from manifest.tsv by gen-ports.py. Edit the manifest, not this file,
+# unless the package needs something the template cannot express - in which case
+# drop a `recipe.local` beside it and it will be preserved.
+name=e2fsprogs
+version=1.48.2
+release=1
+desc="ext2/3/4 filesystem tools"
+url="https://e2fsprogs.sourceforge.net/"
+license="GPL-2.0-only LGPL-2.0-only"
+depend="glibc util-linux-libs"
+makedepend=""
+source="https://kernel.org/pub/linux/kernel/people/tytso/e2fsprogs/v1.48.2/e2fsprogs-1.48.2.tar.xz"
+sha256="SKIP"
+
+build() {
+	cd "e2fsprogs-1.48.2"
+	./configure \
+		--prefix=/usr \
+		--sysconfdir=/etc \
+		--localstatedir=/var \
+		--libdir=/usr/lib \
+		--disable-static \
+		--disable-nls
+	make -j"$JOBS"
+}
+
+package() {
+	cd "e2fsprogs-1.48.2"
+	make DESTDIR="$pkgdir" install
+}

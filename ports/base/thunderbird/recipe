@@ -1,0 +1,31 @@
+# thunderbird - Email client
+# Generated from manifest.tsv by gen-ports.py. Edit the manifest, not this file,
+# unless the package needs something the template cannot express - in which case
+# drop a `recipe.local` beside it and it will be preserved.
+name=thunderbird
+version=147.0
+release=1
+desc="Email client"
+url="https://thunderbird.net/"
+license="MPL-2.0"
+depend="glibc gtk3 nss nspr icu ffmpeg"
+makedepend="rust cargo nodejs python nasm"
+source="https://archive.mozilla.org/pub/thunderbird/releases/147.0/source/thunderbird-147.0.source.tar.xz"
+sha256="SKIP"
+
+build() {
+	cd "thunderbird-147.0.source"
+	./configure \
+		--prefix=/usr \
+		--sysconfdir=/etc \
+		--localstatedir=/var \
+		--libdir=/usr/lib \
+		--disable-static \
+		--disable-nls
+	make -j"$JOBS"
+}
+
+package() {
+	cd "thunderbird-147.0.source"
+	make DESTDIR="$pkgdir" install
+}

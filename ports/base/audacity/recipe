@@ -1,0 +1,27 @@
+# audacity - Audio editor
+# Generated from manifest.tsv by gen-ports.py. Edit the manifest, not this file,
+# unless the package needs something the template cannot express - in which case
+# drop a `recipe.local` beside it and it will be preserved.
+name=audacity
+version=3.8.0
+release=1
+desc="Audio editor"
+url="https://audacityteam.org/"
+license="GPL-3.0-or-later"
+depend="wxwidgets alsa-lib libsndfile ffmpeg portaudio"
+makedepend="cmake ninja"
+source="https://github.com/audacity/audacity/archive/refs/tags/Audacity-3.8.0.tar.gz"
+sha256="SKIP"
+
+build() {
+	cmake -S "Audacity-3.8.0" -B build -G Ninja \
+		-DCMAKE_INSTALL_PREFIX=/usr \
+		-DCMAKE_INSTALL_LIBDIR=lib \
+		-DCMAKE_BUILD_TYPE=Release \
+		-DBUILD_SHARED_LIBS=ON
+	ninja -C build -j"$JOBS"
+}
+
+package() {
+	DESTDIR="$pkgdir" ninja -C build install
+}

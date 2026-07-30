@@ -1,0 +1,32 @@
+# cairo - 2D graphics library
+# Generated from manifest.tsv by gen-ports.py. Edit the manifest, not this file,
+# unless the package needs something the template cannot express - in which case
+# drop a `recipe.local` beside it and it will be preserved.
+name=cairo
+version=1.20.0
+release=1
+desc="2D graphics library"
+url="https://cairographics.org/"
+license="LGPL-2.1-only MPL-1.1"
+depend="glibc pixman freetype fontconfig libpng glib"
+makedepend="meson ninja"
+source="https://cairographics.org/releases/cairo-1.20.0.tar.xz"
+sha256="SKIP"
+
+build() {
+	cd "cairo-1.20.0"
+	meson setup build \
+		--prefix=/usr \
+		--libdir=/usr/lib \
+		--sysconfdir=/etc \
+		--localstatedir=/var \
+		--buildtype=release \
+		--wrap-mode=nodownload \
+		-Db_lto=true
+	ninja -C build -j"$JOBS"
+}
+
+package() {
+	cd "cairo-1.20.0"
+	DESTDIR="$pkgdir" ninja -C build install
+}

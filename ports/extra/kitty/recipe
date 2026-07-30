@@ -1,0 +1,24 @@
+# kitty - Fast, feature-rich terminal
+# Generated from manifest.tsv by gen-ports.py. Edit the manifest, not this file,
+# unless the package needs something the template cannot express - in which case
+# drop a `recipe.local` beside it and it will be preserved.
+name=kitty
+version=0.45.2
+release=1
+desc="Fast, feature-rich terminal"
+url="https://sw.kovidgoyal.net/kitty/"
+license="GPL-3.0-only"
+depend="glibc harfbuzz wayland libpng freetype fontconfig"
+makedepend="python go"
+source="https://github.com/kovidgoyal/kitty/releases/download/v0.45.2/kitty-0.45.2.tar.xz"
+sha256="SKIP"
+
+build() {
+	cd "kitty-0.45.2"
+	python -m build --wheel --no-isolation
+}
+
+package() {
+	cd "kitty-0.45.2"
+	python -m installer --destdir="$pkgdir" dist/*.whl
+}

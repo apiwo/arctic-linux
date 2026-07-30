@@ -1,0 +1,31 @@
+# nghttp2 - HTTP/2 library
+# Generated from manifest.tsv by gen-ports.py. Edit the manifest, not this file,
+# unless the package needs something the template cannot express - in which case
+# drop a `recipe.local` beside it and it will be preserved.
+name=nghttp2
+version=1.68.0
+release=1
+desc="HTTP/2 library"
+url="https://nghttp2.org/"
+license="MIT"
+depend="glibc"
+makedepend=""
+source="https://github.com/nghttp2/nghttp2/releases/download/v1.68.0/nghttp2-1.68.0.tar.xz"
+sha256="SKIP"
+
+build() {
+	cd "nghttp2-1.68.0"
+	./configure \
+		--prefix=/usr \
+		--sysconfdir=/etc \
+		--localstatedir=/var \
+		--libdir=/usr/lib \
+		--disable-static \
+		--disable-nls
+	make -j"$JOBS"
+}
+
+package() {
+	cd "nghttp2-1.68.0"
+	make DESTDIR="$pkgdir" install
+}

@@ -1,0 +1,27 @@
+# hyprgraphics - Hyprland graphics resources
+# Generated from manifest.tsv by gen-ports.py. Edit the manifest, not this file,
+# unless the package needs something the template cannot express - in which case
+# drop a `recipe.local` beside it and it will be preserved.
+name=hyprgraphics
+version=0.2.0
+release=1
+desc="Hyprland graphics resources"
+url="https://github.com/hyprwm/hyprgraphics"
+license="BSD-3-Clause"
+depend="glibc cairo libjpeg-turbo libwebp librsvg"
+makedepend="cmake ninja"
+source="https://github.com/hyprwm/hyprgraphics/archive/refs/tags/v0.2.0.tar.gz"
+sha256="SKIP"
+
+build() {
+	cmake -S "hyprgraphics-0.2.0" -B build -G Ninja \
+		-DCMAKE_INSTALL_PREFIX=/usr \
+		-DCMAKE_INSTALL_LIBDIR=lib \
+		-DCMAKE_BUILD_TYPE=Release \
+		-DBUILD_SHARED_LIBS=ON
+	ninja -C build -j"$JOBS"
+}
+
+package() {
+	DESTDIR="$pkgdir" ninja -C build install
+}

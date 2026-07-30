@@ -1,0 +1,31 @@
+# tuigreet - Console greeter for greetd
+# Generated from manifest.tsv by gen-ports.py. Edit the manifest, not this file,
+# unless the package needs something the template cannot express - in which case
+# drop a `recipe.local` beside it and it will be preserved.
+name=tuigreet
+version=0.10.0
+release=1
+desc="Console greeter for greetd"
+url="https://github.com/apognu/tuigreet"
+license="GPL-3.0-only"
+depend="greetd"
+makedepend="rust cargo"
+source="https://github.com/apognu/tuigreet/archive/refs/tags/0.10.0.tar.gz"
+sha256="SKIP"
+
+build() {
+	cd "0.10.0"
+	# Arctic builds Rust offline against a vendored tree so packages are
+	# reproducible and the build host needs no network.
+	export RUSTFLAGS="-C linker=clang -C link-arg=-fuse-ld=lld"
+	cargo build --release --locked --offline
+}
+
+package() {
+	cd "0.10.0"
+	install -Dm755 "target/release/tuigreet" "$pkgdir/usr/bin/tuigreet"
+	for d in README.md README LICENSE; do
+		[ -f "$d" ] && install -Dm644 "$d" "$pkgdir/usr/share/doc/tuigreet/$d"
+	done
+	true
+}

@@ -1,0 +1,24 @@
+# unrar - Extract RAR archives
+# Generated from manifest.tsv by gen-ports.py. Edit the manifest, not this file,
+# unless the package needs something the template cannot express - in which case
+# drop a `recipe.local` beside it and it will be preserved.
+name=unrar
+version=7.2.2
+release=1
+desc="Extract RAR archives"
+url="https://www.rarlab.com/"
+license="unRAR-restricted"
+depend="glibc"
+makedepend=""
+source="https://www.rarlab.com/rar/unrarsrc-7.2.2.tar.gz"
+sha256="SKIP"
+
+build() {
+	cd "unrarsrc-7.2.2"
+	make -j"$JOBS" PREFIX=/usr
+}
+
+package() {
+	cd "unrarsrc-7.2.2"
+	make PREFIX=/usr DESTDIR="$pkgdir" install
+}

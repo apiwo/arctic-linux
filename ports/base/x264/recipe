@@ -1,0 +1,31 @@
+# x264 - H.264 encoder
+# Generated from manifest.tsv by gen-ports.py. Edit the manifest, not this file,
+# unless the package needs something the template cannot express - in which case
+# drop a `recipe.local` beside it and it will be preserved.
+name=x264
+version=0.165
+release=1
+desc="H.264 encoder"
+url="https://www.videolan.org/developers/x264.html"
+license="GPL-2.0-or-later"
+depend="glibc"
+makedepend="nasm"
+source="https://code.videolan.org/videolan/x264/-/archive/master/x264-master.tar.bz2"
+sha256="SKIP"
+
+build() {
+	cd "x264-master"
+	./configure \
+		--prefix=/usr \
+		--sysconfdir=/etc \
+		--localstatedir=/var \
+		--libdir=/usr/lib \
+		--disable-static \
+		--disable-nls
+	make -j"$JOBS"
+}
+
+package() {
+	cd "x264-master"
+	make DESTDIR="$pkgdir" install
+}

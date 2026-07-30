@@ -1,0 +1,24 @@
+# efivar - UEFI variable library
+# Generated from manifest.tsv by gen-ports.py. Edit the manifest, not this file,
+# unless the package needs something the template cannot express - in which case
+# drop a `recipe.local` beside it and it will be preserved.
+name=efivar
+version=39
+release=1
+desc="UEFI variable library"
+url="https://github.com/rhboot/efivar"
+license="LGPL-2.1-only"
+depend="glibc"
+makedepend=""
+source="https://github.com/rhboot/efivar/releases/download/39/efivar-39.tar.bz2"
+sha256="SKIP"
+
+build() {
+	cd "efivar-39"
+	make -j"$JOBS" PREFIX=/usr
+}
+
+package() {
+	cd "efivar-39"
+	make PREFIX=/usr DESTDIR="$pkgdir" install
+}

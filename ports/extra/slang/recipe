@@ -1,0 +1,31 @@
+# slang - Screen and interpreter library
+# Generated from manifest.tsv by gen-ports.py. Edit the manifest, not this file,
+# unless the package needs something the template cannot express - in which case
+# drop a `recipe.local` beside it and it will be preserved.
+name=slang
+version=2.3.3
+release=1
+desc="Screen and interpreter library"
+url="https://www.jedsoft.org/slang/"
+license="GPL-2.0-or-later"
+depend="glibc pcre2 zlib"
+makedepend=""
+source="https://www.jedsoft.org/releases/slang/slang-2.3.3.tar.bz2"
+sha256="SKIP"
+
+build() {
+	cd "slang-2.3.3"
+	./configure \
+		--prefix=/usr \
+		--sysconfdir=/etc \
+		--localstatedir=/var \
+		--libdir=/usr/lib \
+		--disable-static \
+		--disable-nls
+	make -j"$JOBS"
+}
+
+package() {
+	cd "slang-2.3.3"
+	make DESTDIR="$pkgdir" install
+}

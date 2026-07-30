@@ -1,0 +1,31 @@
+# mtdev - Multitouch protocol translation
+# Generated from manifest.tsv by gen-ports.py. Edit the manifest, not this file,
+# unless the package needs something the template cannot express - in which case
+# drop a `recipe.local` beside it and it will be preserved.
+name=mtdev
+version=1.1.7
+release=1
+desc="Multitouch protocol translation"
+url="https://bitmath.org/code/mtdev/"
+license="MIT"
+depend="glibc"
+makedepend=""
+source="https://bitmath.org/code/mtdev/mtdev-1.1.7.tar.bz2"
+sha256="SKIP"
+
+build() {
+	cd "mtdev-1.1.7"
+	./configure \
+		--prefix=/usr \
+		--sysconfdir=/etc \
+		--localstatedir=/var \
+		--libdir=/usr/lib \
+		--disable-static \
+		--disable-nls
+	make -j"$JOBS"
+}
+
+package() {
+	cd "mtdev-1.1.7"
+	make DESTDIR="$pkgdir" install
+}

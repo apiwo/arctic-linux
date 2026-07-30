@@ -1,0 +1,19 @@
+# linux-firmware - the device firmware most hardware needs.
+# This lives in the kernels repo rather than nonfree because a lot of it is
+# redistributable under free terms; the genuinely proprietary parts that need
+# a click-through licence are split into the nonfree repo instead.
+name=linux-firmware
+version=20260701
+release=1
+desc="Firmware files for Linux device drivers"
+url="https://git.kernel.org/pub/scm/linux/kernel/git/firmware/linux-firmware.git"
+license="various-redistributable"
+depend=""
+source="git+https://git.kernel.org/pub/scm/linux/kernel/git/firmware/linux-firmware.git"
+sha256="SKIP"
+options="!strip"
+
+package() {
+	cd linux-firmware
+	make DESTDIR="$pkgdir" FIRMWAREDIR=/usr/lib/firmware install
+}

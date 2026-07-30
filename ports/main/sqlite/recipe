@@ -1,0 +1,31 @@
+# sqlite - Embedded SQL database
+# Generated from manifest.tsv by gen-ports.py. Edit the manifest, not this file,
+# unless the package needs something the template cannot express - in which case
+# drop a `recipe.local` beside it and it will be preserved.
+name=sqlite
+version=3.52.0
+release=1
+desc="Embedded SQL database"
+url="https://sqlite.org/"
+license="blessing"
+depend="glibc netbsd-curses libedit"
+makedepend=""
+source="https://sqlite.org/2026/sqlite-autoconf-3520000.tar.gz"
+sha256="SKIP"
+
+build() {
+	cd "sqlite-autoconf-3520000"
+	./configure \
+		--prefix=/usr \
+		--sysconfdir=/etc \
+		--localstatedir=/var \
+		--libdir=/usr/lib \
+		--disable-static \
+		--disable-nls
+	make -j"$JOBS"
+}
+
+package() {
+	cd "sqlite-autoconf-3520000"
+	make DESTDIR="$pkgdir" install
+}

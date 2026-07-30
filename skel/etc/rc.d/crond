@@ -1,0 +1,8 @@
+#!/bin/sh
+NAME=crond
+CMD=/usr/bin/crond
+ARGS="-f -l 8"
+BACKGROUND=yes
+
+. /etc/arctic/svc.lib
+svc_main "$@"

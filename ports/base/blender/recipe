@@ -1,0 +1,27 @@
+# blender - 3D creation suite
+# Generated from manifest.tsv by gen-ports.py. Edit the manifest, not this file,
+# unless the package needs something the template cannot express - in which case
+# drop a `recipe.local` beside it and it will be preserved.
+name=blender
+version=5.0
+release=1
+desc="3D creation suite"
+url="https://blender.org/"
+license="GPL-3.0-or-later"
+depend="mesa ffmpeg openexr openimageio embree python vulkan-loader"
+makedepend="cmake ninja"
+source="https://download.blender.org/source/blender-5.0.tar.xz"
+sha256="SKIP"
+
+build() {
+	cmake -S "blender-5.0" -B build -G Ninja \
+		-DCMAKE_INSTALL_PREFIX=/usr \
+		-DCMAKE_INSTALL_LIBDIR=lib \
+		-DCMAKE_BUILD_TYPE=Release \
+		-DBUILD_SHARED_LIBS=ON
+	ninja -C build -j"$JOBS"
+}
+
+package() {
+	DESTDIR="$pkgdir" ninja -C build install
+}

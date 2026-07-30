@@ -1,0 +1,24 @@
+# dkms - Rebuild kernel modules when the kernel changes
+# Generated from manifest.tsv by gen-ports.py. Edit the manifest, not this file,
+# unless the package needs something the template cannot express - in which case
+# drop a `recipe.local` beside it and it will be preserved.
+name=dkms
+version=3.2.4
+release=1
+desc="Rebuild kernel modules when the kernel changes"
+url="https://github.com/dell/dkms"
+license="GPL-2.0-or-later"
+depend="glibc kmod bmake"
+makedepend=""
+source="https://github.com/dell/dkms/archive/refs/tags/v3.2.4.tar.gz"
+sha256="SKIP"
+
+build() {
+	cd "dkms-3.2.4"
+	make -j"$JOBS" PREFIX=/usr
+}
+
+package() {
+	cd "dkms-3.2.4"
+	make PREFIX=/usr DESTDIR="$pkgdir" install
+}

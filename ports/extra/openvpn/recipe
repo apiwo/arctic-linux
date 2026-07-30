@@ -1,0 +1,31 @@
+# openvpn - VPN daemon
+# Generated from manifest.tsv by gen-ports.py. Edit the manifest, not this file,
+# unless the package needs something the template cannot express - in which case
+# drop a `recipe.local` beside it and it will be preserved.
+name=openvpn
+version=2.7.3
+release=1
+desc="VPN daemon"
+url="https://openvpn.net/"
+license="GPL-2.0-only"
+depend="glibc libressl lz4 lzo"
+makedepend=""
+source="https://swupdate.openvpn.org/community/releases/openvpn-2.7.3.tar.xz"
+sha256="SKIP"
+
+build() {
+	cd "openvpn-2.7.3"
+	./configure \
+		--prefix=/usr \
+		--sysconfdir=/etc \
+		--localstatedir=/var \
+		--libdir=/usr/lib \
+		--disable-static \
+		--disable-nls
+	make -j"$JOBS"
+}
+
+package() {
+	cd "openvpn-2.7.3"
+	make DESTDIR="$pkgdir" install
+}

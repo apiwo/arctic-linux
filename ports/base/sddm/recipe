@@ -1,0 +1,28 @@
+# sddm - the display manager Arctic defaults to.
+name=sddm
+version=0.22.0
+release=1
+desc="Qt display manager, Wayland capable"
+url="https://github.com/sddm/sddm"
+license="GPL-2.0-or-later"
+depend="glibc qt6-base qt6-declarative libxcb pam-less-shadow"
+makedepend="cmake ninja clang lld qt6-tools"
+source="sddm-$version.tar.gz::https://github.com/sddm/sddm/archive/refs/tags/v$version.tar.gz"
+sha256="SKIP"
+
+build() {
+	cmake -S "sddm-$version" -B build -G Ninja \
+		-DCMAKE_INSTALL_PREFIX=/usr \
+		-DCMAKE_BUILD_TYPE=Release \
+		-DBUILD_MAN_PAGES=ON \
+		-DENABLE_JOURNALD=OFF \
+		-DNO_SYSTEMD=ON \
+		-DUSE_ELOGIND=OFF \
+		-DBUILD_WITH_QT6=ON
+	ninja -C build -j"$JOBS"
+}
+
+package() {
+	DESTDIR="$pkgdir" ninja -C build install
+	install -d "$pkgdir/var/lib/sddm"
+}

@@ -1,0 +1,36 @@
+# mesa - the graphics stack for AMD, Intel and everything else free.
+name=mesa
+version=26.0.2
+release=1
+desc="Open source OpenGL and Vulkan implementation"
+url="https://mesa3d.org/"
+license="MIT"
+depend="glibc libdrm wayland libx11 zlib zstd expat llvm"
+makedepend="meson ninja clang lld python"
+provides="opengl vulkan"
+source="https://archive.mesa3d.org/mesa-$version.tar.xz"
+sha256="SKIP"
+
+build() {
+	cd "mesa-$version"
+	# One build covers AMD, Intel and the software fallback. Arctic enables
+	# every free driver so a single package works on any machine.
+	meson setup build --prefix=/usr --buildtype=release \
+		-Dgallium-drivers=radeonsi,r300,r600,nouveau,llvmpipe,softpipe,zink,virgl,svga \
+		-Dvulkan-drivers=amd,intel,intel_hasvk,swrast,nouveau \
+		-Dplatforms=wayland,x11 \
+		-Dglx=dri \
+		-Degl=enabled \
+		-Dgbm=enabled \
+		-Dllvm=enabled \
+		-Dshared-llvm=enabled \
+		-Dvideo-codecs=all \
+		-Dgallium-va=enabled \
+		-Dgallium-vdpau=enabled
+	ninja -C build -j"$JOBS"
+}
+
+package() {
+	cd "mesa-$version"
+	DESTDIR="$pkgdir" ninja -C build install
+}

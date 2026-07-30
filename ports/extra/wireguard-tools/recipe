@@ -1,0 +1,24 @@
+# wireguard-tools - wg and wg-quick
+# Generated from manifest.tsv by gen-ports.py. Edit the manifest, not this file,
+# unless the package needs something the template cannot express - in which case
+# drop a `recipe.local` beside it and it will be preserved.
+name=wireguard-tools
+version=1.0.20250521
+release=1
+desc="wg and wg-quick"
+url="https://www.wireguard.com/"
+license="GPL-2.0-only"
+depend="glibc"
+makedepend=""
+source="https://git.zx2c4.com/wireguard-tools/snapshot/wireguard-tools-1.0.20250521.tar.xz"
+sha256="SKIP"
+
+build() {
+	cd "wireguard-tools-1.0.20250521"
+	make -j"$JOBS" PREFIX=/usr
+}
+
+package() {
+	cd "wireguard-tools-1.0.20250521"
+	make PREFIX=/usr DESTDIR="$pkgdir" install
+}

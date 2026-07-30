@@ -1,0 +1,31 @@
+# libfontenc - X font encoding library
+# Generated from manifest.tsv by gen-ports.py. Edit the manifest, not this file,
+# unless the package needs something the template cannot express - in which case
+# drop a `recipe.local` beside it and it will be preserved.
+name=libfontenc
+version=1.1.8
+release=1
+desc="X font encoding library"
+url="https://x.org/"
+license="MIT"
+depend="glibc zlib"
+makedepend=""
+source="https://x.org/pub/individual/lib/libfontenc-1.1.8.tar.xz"
+sha256="SKIP"
+
+build() {
+	cd "libfontenc-1.1.8"
+	./configure \
+		--prefix=/usr \
+		--sysconfdir=/etc \
+		--localstatedir=/var \
+		--libdir=/usr/lib \
+		--disable-static \
+		--disable-nls
+	make -j"$JOBS"
+}
+
+package() {
+	cd "libfontenc-1.1.8"
+	make DESTDIR="$pkgdir" install
+}

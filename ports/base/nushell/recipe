@@ -1,0 +1,31 @@
+# nushell - A shell built around structured data
+# Generated from manifest.tsv by gen-ports.py. Edit the manifest, not this file,
+# unless the package needs something the template cannot express - in which case
+# drop a `recipe.local` beside it and it will be preserved.
+name=nushell
+version=0.109.0
+release=1
+desc="A shell built around structured data"
+url="https://www.nushell.sh/"
+license="MIT"
+depend="glibc libressl"
+makedepend="rust cargo"
+source="https://github.com/nushell/nushell/archive/refs/tags/0.109.0.tar.gz"
+sha256="SKIP"
+
+build() {
+	cd "0.109.0"
+	# Arctic builds Rust offline against a vendored tree so packages are
+	# reproducible and the build host needs no network.
+	export RUSTFLAGS="-C linker=clang -C link-arg=-fuse-ld=lld"
+	cargo build --release --locked --offline
+}
+
+package() {
+	cd "0.109.0"
+	install -Dm755 "target/release/nushell" "$pkgdir/usr/bin/nushell"
+	for d in README.md README LICENSE; do
+		[ -f "$d" ] && install -Dm644 "$d" "$pkgdir/usr/share/doc/nushell/$d"
+	done
+	true
+}

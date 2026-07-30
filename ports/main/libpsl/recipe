@@ -1,0 +1,32 @@
+# libpsl - Public suffix list library
+# Generated from manifest.tsv by gen-ports.py. Edit the manifest, not this file,
+# unless the package needs something the template cannot express - in which case
+# drop a `recipe.local` beside it and it will be preserved.
+name=libpsl
+version=0.21.5
+release=1
+desc="Public suffix list library"
+url="https://github.com/rockdaboot/libpsl"
+license="MIT"
+depend="glibc"
+makedepend="meson ninja"
+source="https://github.com/rockdaboot/libpsl/releases/download/0.21.5/libpsl-0.21.5.tar.gz"
+sha256="SKIP"
+
+build() {
+	cd "libpsl-0.21.5"
+	meson setup build \
+		--prefix=/usr \
+		--libdir=/usr/lib \
+		--sysconfdir=/etc \
+		--localstatedir=/var \
+		--buildtype=release \
+		--wrap-mode=nodownload \
+		-Db_lto=true
+	ninja -C build -j"$JOBS"
+}
+
+package() {
+	cd "libpsl-0.21.5"
+	DESTDIR="$pkgdir" ninja -C build install
+}

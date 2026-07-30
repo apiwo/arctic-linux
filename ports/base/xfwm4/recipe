@@ -1,0 +1,31 @@
+# xfwm4 - The Xfce window manager
+# Generated from manifest.tsv by gen-ports.py. Edit the manifest, not this file,
+# unless the package needs something the template cannot express - in which case
+# drop a `recipe.local` beside it and it will be preserved.
+name=xfwm4
+version=4.22.0
+release=1
+desc="The Xfce window manager"
+url="https://xfce.org/"
+license="GPL-2.0-or-later"
+depend="gtk3 libwnck libxfce4ui"
+makedepend=""
+source="https://archive.xfce.org/src/xfce/xfwm4/4.22/xfwm4-4.22.0.tar.bz2"
+sha256="SKIP"
+
+build() {
+	cd "xfwm4-4.22.0"
+	./configure \
+		--prefix=/usr \
+		--sysconfdir=/etc \
+		--localstatedir=/var \
+		--libdir=/usr/lib \
+		--disable-static \
+		--disable-nls
+	make -j"$JOBS"
+}
+
+package() {
+	cd "xfwm4-4.22.0"
+	make DESTDIR="$pkgdir" install
+}

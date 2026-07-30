@@ -1,0 +1,24 @@
+# flex-alt - reflex, a BSD-licensed lex
+# Generated from manifest.tsv by gen-ports.py. Edit the manifest, not this file,
+# unless the package needs something the template cannot express - in which case
+# drop a `recipe.local` beside it and it will be preserved.
+name=flex-alt
+version=20260210
+release=1
+desc="reflex, a BSD-licensed lex"
+url="https://github.com/michaelforney/reflex"
+license="BSD-2-Clause"
+depend="glibc"
+makedepend=""
+source="https://github.com/michaelforney/reflex/archive/refs/tags/20260210.tar.gz"
+sha256="SKIP"
+
+build() {
+	cd "20260210"
+	make -j"$JOBS" PREFIX=/usr
+}
+
+package() {
+	cd "20260210"
+	make PREFIX=/usr DESTDIR="$pkgdir" install
+}

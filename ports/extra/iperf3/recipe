@@ -1,0 +1,31 @@
+# iperf3 - Network throughput measurement
+# Generated from manifest.tsv by gen-ports.py. Edit the manifest, not this file,
+# unless the package needs something the template cannot express - in which case
+# drop a `recipe.local` beside it and it will be preserved.
+name=iperf3
+version=3.20
+release=1
+desc="Network throughput measurement"
+url="https://software.es.net/iperf/"
+license="BSD-3-Clause"
+depend="glibc libressl"
+makedepend=""
+source="https://github.com/esnet/iperf/archive/refs/tags/3.20.tar.gz"
+sha256="SKIP"
+
+build() {
+	cd "3.20"
+	./configure \
+		--prefix=/usr \
+		--sysconfdir=/etc \
+		--localstatedir=/var \
+		--libdir=/usr/lib \
+		--disable-static \
+		--disable-nls
+	make -j"$JOBS"
+}
+
+package() {
+	cd "3.20"
+	make DESTDIR="$pkgdir" install
+}

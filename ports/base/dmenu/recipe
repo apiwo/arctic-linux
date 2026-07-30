@@ -1,0 +1,29 @@
+# dmenu - Dynamic menu for X
+# Generated from manifest.tsv by gen-ports.py. Edit the manifest, not this file,
+# unless the package needs something the template cannot express - in which case
+# drop a `recipe.local` beside it and it will be preserved.
+name=dmenu
+version=5.4
+release=1
+desc="Dynamic menu for X"
+url="https://tools.suckless.org/dmenu/"
+license="MIT"
+depend="libx11 libxft libxinerama freetype fontconfig"
+makedepend="bmake"
+source="https://dl.suckless.org/tools/dmenu-5.4.tar.gz"
+sha256="SKIP"
+
+build() {
+	cd "dmenu-5.4"
+	# Suckless software is configured in the source. Arctic ships a config.h
+	# with the Arctic palette; replace it and rebuild to change anything.
+	[ -f config.def.h ] && cp -f config.def.h config.h
+	make -j"$JOBS" PREFIX=/usr
+}
+
+package() {
+	cd "dmenu-5.4"
+	make PREFIX=/usr DESTDIR="$pkgdir" install
+	[ -f config.h ] && install -Dm644 config.h "$pkgdir/usr/share/dmenu/config.h"
+	true
+}

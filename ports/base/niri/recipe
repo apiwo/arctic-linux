@@ -1,0 +1,25 @@
+# niri - scrollable tiling. Windows go left and right forever.
+name=niri
+version=25.11
+release=1
+desc="A scrollable-tiling Wayland compositor"
+url="https://github.com/YaLTeR/niri"
+license="GPL-3.0-or-later"
+depend="glibc wayland mesa libinput libxkbcommon seatd pango pipewire"
+makedepend="rust cargo clang lld"
+source="niri-$version.tar.gz::https://github.com/YaLTeR/niri/archive/refs/tags/v$version.tar.gz"
+sha256="SKIP"
+
+build() {
+	cd "niri-$version"
+	cargo build --release --locked
+}
+
+package() {
+	cd "niri-$version"
+	install -Dm755 target/release/niri "$pkgdir/usr/bin/niri"
+	install -Dm644 resources/niri.desktop \
+		"$pkgdir/usr/share/wayland-sessions/niri.desktop"
+	install -Dm644 resources/default-config.kdl \
+		"$pkgdir/etc/xdg/niri/config.kdl"
+}

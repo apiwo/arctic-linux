@@ -1,0 +1,32 @@
+# wlroots - Wayland compositor library
+# Generated from manifest.tsv by gen-ports.py. Edit the manifest, not this file,
+# unless the package needs something the template cannot express - in which case
+# drop a `recipe.local` beside it and it will be preserved.
+name=wlroots
+version=0.20.0
+release=1
+desc="Wayland compositor library"
+url="https://gitlab.freedesktop.org/wlroots/wlroots"
+license="MIT"
+depend="wayland mesa libinput libxkbcommon pixman seatd libdrm"
+makedepend="meson ninja"
+source="https://gitlab.freedesktop.org/wlroots/wlroots/-/releases/0.20.0/downloads/wlroots-0.20.0.tar.gz"
+sha256="SKIP"
+
+build() {
+	cd "wlroots-0.20.0"
+	meson setup build \
+		--prefix=/usr \
+		--libdir=/usr/lib \
+		--sysconfdir=/etc \
+		--localstatedir=/var \
+		--buildtype=release \
+		--wrap-mode=nodownload \
+		-Db_lto=true
+	ninja -C build -j"$JOBS"
+}
+
+package() {
+	cd "wlroots-0.20.0"
+	DESTDIR="$pkgdir" ninja -C build install
+}

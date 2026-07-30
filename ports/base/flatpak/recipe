@@ -1,0 +1,32 @@
+# flatpak - Application sandboxing and distribution
+# Generated from manifest.tsv by gen-ports.py. Edit the manifest, not this file,
+# unless the package needs something the template cannot express - in which case
+# drop a `recipe.local` beside it and it will be preserved.
+name=flatpak
+version=1.17.0
+release=1
+desc="Application sandboxing and distribution"
+url="https://flatpak.org/"
+license="LGPL-2.1-or-later"
+depend="glib libostree polkit fuse3 xdg-desktop-portal"
+makedepend="meson ninja"
+source="https://github.com/flatpak/flatpak/releases/download/1.17.0/flatpak-1.17.0.tar.xz"
+sha256="SKIP"
+
+build() {
+	cd "flatpak-1.17.0"
+	meson setup build \
+		--prefix=/usr \
+		--libdir=/usr/lib \
+		--sysconfdir=/etc \
+		--localstatedir=/var \
+		--buildtype=release \
+		--wrap-mode=nodownload \
+		-Db_lto=true
+	ninja -C build -j"$JOBS"
+}
+
+package() {
+	cd "flatpak-1.17.0"
+	DESTDIR="$pkgdir" ninja -C build install
+}

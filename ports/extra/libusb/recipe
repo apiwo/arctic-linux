@@ -1,0 +1,31 @@
+# libusb - USB device access library
+# Generated from manifest.tsv by gen-ports.py. Edit the manifest, not this file,
+# unless the package needs something the template cannot express - in which case
+# drop a `recipe.local` beside it and it will be preserved.
+name=libusb
+version=1.0.30
+release=1
+desc="USB device access library"
+url="https://libusb.info/"
+license="LGPL-2.1-or-later"
+depend="glibc"
+makedepend=""
+source="https://github.com/libusb/libusb/releases/download/v1.0.30/libusb-1.0.30.tar.bz2"
+sha256="SKIP"
+
+build() {
+	cd "libusb-1.0.30"
+	./configure \
+		--prefix=/usr \
+		--sysconfdir=/etc \
+		--localstatedir=/var \
+		--libdir=/usr/lib \
+		--disable-static \
+		--disable-nls
+	make -j"$JOBS"
+}
+
+package() {
+	cd "libusb-1.0.30"
+	make DESTDIR="$pkgdir" install
+}

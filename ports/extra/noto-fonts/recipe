@@ -1,0 +1,24 @@
+# noto-fonts - Google Noto fonts
+# Generated from manifest.tsv by gen-ports.py. Edit the manifest, not this file,
+# unless the package needs something the template cannot express - in which case
+# drop a `recipe.local` beside it and it will be preserved.
+name=noto-fonts
+version=20260501
+release=1
+desc="Google Noto fonts"
+url="https://fonts.google.com/noto"
+license="OFL-1.1"
+depend=""
+makedepend=""
+source="https://github.com/notofonts/notofonts.github.io/archive/refs/tags/noto-monthly-release-20260501.tar.gz"
+sha256="SKIP"
+
+build() {
+	cd "noto-monthly-release-20260501"
+	make -j"$JOBS" PREFIX=/usr
+}
+
+package() {
+	cd "noto-monthly-release-20260501"
+	make PREFIX=/usr DESTDIR="$pkgdir" install
+}

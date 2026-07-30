@@ -1,0 +1,31 @@
+# libgpg-error - Error codes for GnuPG
+# Generated from manifest.tsv by gen-ports.py. Edit the manifest, not this file,
+# unless the package needs something the template cannot express - in which case
+# drop a `recipe.local` beside it and it will be preserved.
+name=libgpg-error
+version=1.55
+release=1
+desc="Error codes for GnuPG"
+url="https://gnupg.org/software/libgpg-error/"
+license="LGPL-2.1-or-later"
+depend="glibc"
+makedepend=""
+source="https://gnupg.org/ftp/gcrypt/libgpg-error/libgpg-error-1.55.tar.bz2"
+sha256="SKIP"
+
+build() {
+	cd "libgpg-error-1.55"
+	./configure \
+		--prefix=/usr \
+		--sysconfdir=/etc \
+		--localstatedir=/var \
+		--libdir=/usr/lib \
+		--disable-static \
+		--disable-nls
+	make -j"$JOBS"
+}
+
+package() {
+	cd "libgpg-error-1.55"
+	make DESTDIR="$pkgdir" install
+}

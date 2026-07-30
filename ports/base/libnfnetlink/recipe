@@ -1,0 +1,31 @@
+# libnfnetlink - Low-level netfilter netlink library
+# Generated from manifest.tsv by gen-ports.py. Edit the manifest, not this file,
+# unless the package needs something the template cannot express - in which case
+# drop a `recipe.local` beside it and it will be preserved.
+name=libnfnetlink
+version=1.0.2
+release=1
+desc="Low-level netfilter netlink library"
+url="https://netfilter.org/projects/libnfnetlink/"
+license="GPL-2.0-or-later"
+depend="glibc"
+makedepend=""
+source="https://netfilter.org/projects/libnfnetlink/files/libnfnetlink-1.0.2.tar.bz2"
+sha256="SKIP"
+
+build() {
+	cd "libnfnetlink-1.0.2"
+	./configure \
+		--prefix=/usr \
+		--sysconfdir=/etc \
+		--localstatedir=/var \
+		--libdir=/usr/lib \
+		--disable-static \
+		--disable-nls
+	make -j"$JOBS"
+}
+
+package() {
+	cd "libnfnetlink-1.0.2"
+	make DESTDIR="$pkgdir" install
+}

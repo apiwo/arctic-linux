@@ -1,0 +1,32 @@
+# gamemode - Optimise the system while a game runs
+# Generated from manifest.tsv by gen-ports.py. Edit the manifest, not this file,
+# unless the package needs something the template cannot express - in which case
+# drop a `recipe.local` beside it and it will be preserved.
+name=gamemode
+version=1.9
+release=1
+desc="Optimise the system while a game runs"
+url="https://github.com/FeralInteractive/gamemode"
+license="BSD-3-Clause"
+depend="glibc dbus libinih"
+makedepend="meson ninja"
+source="https://github.com/FeralInteractive/gamemode/archive/refs/tags/1.9.tar.gz"
+sha256="SKIP"
+
+build() {
+	cd "1.9"
+	meson setup build \
+		--prefix=/usr \
+		--libdir=/usr/lib \
+		--sysconfdir=/etc \
+		--localstatedir=/var \
+		--buildtype=release \
+		--wrap-mode=nodownload \
+		-Db_lto=true
+	ninja -C build -j"$JOBS"
+}
+
+package() {
+	cd "1.9"
+	DESTDIR="$pkgdir" ninja -C build install
+}

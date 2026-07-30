@@ -1,0 +1,24 @@
+# screenfetch - System information, with the Arctic logo
+# Generated from manifest.tsv by gen-ports.py. Edit the manifest, not this file,
+# unless the package needs something the template cannot express - in which case
+# drop a `recipe.local` beside it and it will be preserved.
+name=screenfetch
+version=3.9.1
+release=1
+desc="System information, with the Arctic logo"
+url="https://github.com/KittyKatt/screenFetch"
+license="GPL-3.0-only"
+depend="glibc"
+makedepend=""
+source="https://github.com/KittyKatt/screenFetch/archive/refs/tags/v3.9.1.tar.gz"
+sha256="SKIP"
+
+build() {
+	cd "screenfetch-3.9.1"
+	make -j"$JOBS" PREFIX=/usr
+}
+
+package() {
+	cd "screenfetch-3.9.1"
+	make PREFIX=/usr DESTDIR="$pkgdir" install
+}

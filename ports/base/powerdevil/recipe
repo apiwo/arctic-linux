@@ -1,0 +1,27 @@
+# powerdevil - Plasma power management
+# Generated from manifest.tsv by gen-ports.py. Edit the manifest, not this file,
+# unless the package needs something the template cannot express - in which case
+# drop a `recipe.local` beside it and it will be preserved.
+name=powerdevil
+version=6.5.0
+release=1
+desc="Plasma power management"
+url="https://kde.org/"
+license="GPL-2.0-or-later"
+depend="kf6 plasma-workspace"
+makedepend="cmake ninja"
+source="https://download.kde.org/stable/plasma/6.5.0/powerdevil-6.5.0.tar.xz"
+sha256="SKIP"
+
+build() {
+	cmake -S "powerdevil-6.5.0" -B build -G Ninja \
+		-DCMAKE_INSTALL_PREFIX=/usr \
+		-DCMAKE_INSTALL_LIBDIR=lib \
+		-DCMAKE_BUILD_TYPE=Release \
+		-DBUILD_SHARED_LIBS=ON
+	ninja -C build -j"$JOBS"
+}
+
+package() {
+	DESTDIR="$pkgdir" ninja -C build install
+}

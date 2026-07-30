@@ -1,0 +1,31 @@
+# expat - Stream-oriented XML parser
+# Generated from manifest.tsv by gen-ports.py. Edit the manifest, not this file,
+# unless the package needs something the template cannot express - in which case
+# drop a `recipe.local` beside it and it will be preserved.
+name=expat
+version=2.8.2
+release=1
+desc="Stream-oriented XML parser"
+url="https://libexpat.github.io/"
+license="MIT"
+depend="glibc"
+makedepend=""
+source="https://github.com/libexpat/libexpat/releases/download/R_2_8_2/expat-2.8.2.tar.xz"
+sha256="SKIP"
+
+build() {
+	cd "expat-2.8.2"
+	./configure \
+		--prefix=/usr \
+		--sysconfdir=/etc \
+		--localstatedir=/var \
+		--libdir=/usr/lib \
+		--disable-static \
+		--disable-nls
+	make -j"$JOBS"
+}
+
+package() {
+	cd "expat-2.8.2"
+	make DESTDIR="$pkgdir" install
+}

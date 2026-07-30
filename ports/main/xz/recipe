@@ -1,0 +1,31 @@
+# xz - liblzma and the xz tools
+# Generated from manifest.tsv by gen-ports.py. Edit the manifest, not this file,
+# unless the package needs something the template cannot express - in which case
+# drop a `recipe.local` beside it and it will be preserved.
+name=xz
+version=5.8.3
+release=1
+desc="liblzma and the xz tools"
+url="https://tukaani.org/xz/"
+license="0BSD"
+depend="glibc"
+makedepend=""
+source="https://github.com/tukaani-project/xz/releases/download/v5.8.3/xz-5.8.3.tar.gz"
+sha256="SKIP"
+
+build() {
+	cd "xz-5.8.3"
+	./configure \
+		--prefix=/usr \
+		--sysconfdir=/etc \
+		--localstatedir=/var \
+		--libdir=/usr/lib \
+		--disable-static \
+		--disable-nls
+	make -j"$JOBS"
+}
+
+package() {
+	cd "xz-5.8.3"
+	make DESTDIR="$pkgdir" install
+}

@@ -1,0 +1,9 @@
+# Arctic Linux - main repository
+# Everything needed to install and boot Arctic: glibc, busybox, toybox, zsh, doas, alpm itself.
+name = main
+url = https://repo.arcticlinux.org/main
+enabled = yes
+priority = 10
+mirror = https://repo.arcticlinux.org/main
+mirror = https://mirror.eu.arcticlinux.org/main
+mirror = https://mirror.us.arcticlinux.org/main

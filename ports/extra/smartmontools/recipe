@@ -1,0 +1,31 @@
+# smartmontools - Disk health monitoring
+# Generated from manifest.tsv by gen-ports.py. Edit the manifest, not this file,
+# unless the package needs something the template cannot express - in which case
+# drop a `recipe.local` beside it and it will be preserved.
+name=smartmontools
+version=7.6
+release=1
+desc="Disk health monitoring"
+url="https://smartmontools.org/"
+license="GPL-2.0-or-later"
+depend="glibc"
+makedepend=""
+source="https://downloads.sourceforge.net/smartmontools/smartmontools-7.6.tar.gz"
+sha256="SKIP"
+
+build() {
+	cd "smartmontools-7.6"
+	./configure \
+		--prefix=/usr \
+		--sysconfdir=/etc \
+		--localstatedir=/var \
+		--libdir=/usr/lib \
+		--disable-static \
+		--disable-nls
+	make -j"$JOBS"
+}
+
+package() {
+	cd "smartmontools-7.6"
+	make DESTDIR="$pkgdir" install
+}

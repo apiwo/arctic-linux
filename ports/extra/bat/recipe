@@ -1,0 +1,31 @@
+# bat - cat with syntax highlighting
+# Generated from manifest.tsv by gen-ports.py. Edit the manifest, not this file,
+# unless the package needs something the template cannot express - in which case
+# drop a `recipe.local` beside it and it will be preserved.
+name=bat
+version=0.26.0
+release=1
+desc="cat with syntax highlighting"
+url="https://github.com/sharkdp/bat"
+license="MIT Apache-2.0"
+depend="glibc"
+makedepend="rust cargo"
+source="https://github.com/sharkdp/bat/archive/refs/tags/v0.26.0.tar.gz"
+sha256="SKIP"
+
+build() {
+	cd "bat-0.26.0"
+	# Arctic builds Rust offline against a vendored tree so packages are
+	# reproducible and the build host needs no network.
+	export RUSTFLAGS="-C linker=clang -C link-arg=-fuse-ld=lld"
+	cargo build --release --locked --offline
+}
+
+package() {
+	cd "bat-0.26.0"
+	install -Dm755 "target/release/bat" "$pkgdir/usr/bin/bat"
+	for d in README.md README LICENSE; do
+		[ -f "$d" ] && install -Dm644 "$d" "$pkgdir/usr/share/doc/bat/$d"
+	done
+	true
+}

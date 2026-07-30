@@ -1,0 +1,26 @@
+# gh - GitHub command line
+# Generated from manifest.tsv by gen-ports.py. Edit the manifest, not this file,
+# unless the package needs something the template cannot express - in which case
+# drop a `recipe.local` beside it and it will be preserved.
+name=gh
+version=2.86.0
+release=1
+desc="GitHub command line"
+url="https://cli.github.com/"
+license="MIT"
+depend="glibc git"
+makedepend="go"
+source="https://github.com/cli/cli/archive/refs/tags/v2.86.0.tar.gz"
+sha256="SKIP"
+
+build() {
+	cd "gh-2.86.0"
+	export CGO_CPPFLAGS="$CPPFLAGS" CGO_CFLAGS="$CFLAGS" CGO_LDFLAGS="$LDFLAGS"
+	export GOFLAGS="-buildmode=pie -trimpath -mod=readonly -modcacherw"
+	go build -o "gh" .
+}
+
+package() {
+	cd "gh-2.86.0"
+	install -Dm755 "gh" "$pkgdir/usr/bin/gh"
+}

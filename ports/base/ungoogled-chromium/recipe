@@ -1,0 +1,24 @@
+# ungoogled-chromium - Chromium with the Google integration removed
+# Generated from manifest.tsv by gen-ports.py. Edit the manifest, not this file,
+# unless the package needs something the template cannot express - in which case
+# drop a `recipe.local` beside it and it will be preserved.
+name=ungoogled-chromium
+version=146.0.7500.60
+release=1
+desc="Chromium with the Google integration removed"
+url="https://github.com/ungoogled-software/ungoogled-chromium"
+license="BSD-3-Clause"
+depend="glibc gtk4 mesa nss nspr alsa-lib pipewire libva ffmpeg icu"
+makedepend="python nodejs clang lld ninja"
+source="https://github.com/ungoogled-software/ungoogled-chromium/archive/refs/tags/146.0.7500.60-1.tar.gz"
+sha256="SKIP"
+
+build() {
+	cd "146.0.7500.60-1"
+	make -j"$JOBS" PREFIX=/usr
+}
+
+package() {
+	cd "146.0.7500.60-1"
+	make PREFIX=/usr DESTDIR="$pkgdir" install
+}

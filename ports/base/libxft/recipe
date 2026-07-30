@@ -1,0 +1,31 @@
+# libxft - X FreeType interface
+# Generated from manifest.tsv by gen-ports.py. Edit the manifest, not this file,
+# unless the package needs something the template cannot express - in which case
+# drop a `recipe.local` beside it and it will be preserved.
+name=libxft
+version=2.3.9
+release=1
+desc="X FreeType interface"
+url="https://x.org/"
+license="MIT"
+depend="glibc libx11 freetype fontconfig libxrender"
+makedepend=""
+source="https://x.org/pub/individual/lib/libXft-2.3.9.tar.xz"
+sha256="SKIP"
+
+build() {
+	cd "libXft-2.3.9"
+	./configure \
+		--prefix=/usr \
+		--sysconfdir=/etc \
+		--localstatedir=/var \
+		--libdir=/usr/lib \
+		--disable-static \
+		--disable-nls
+	make -j"$JOBS"
+}
+
+package() {
+	cd "libXft-2.3.9"
+	make DESTDIR="$pkgdir" install
+}

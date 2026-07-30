@@ -1,0 +1,31 @@
+# ripgrep - Very fast recursive grep
+# Generated from manifest.tsv by gen-ports.py. Edit the manifest, not this file,
+# unless the package needs something the template cannot express - in which case
+# drop a `recipe.local` beside it and it will be preserved.
+name=ripgrep
+version=15.1.0
+release=1
+desc="Very fast recursive grep"
+url="https://github.com/BurntSushi/ripgrep"
+license="MIT Unlicense"
+depend="glibc pcre2"
+makedepend="rust cargo"
+source="https://github.com/BurntSushi/ripgrep/archive/refs/tags/15.1.0.tar.gz"
+sha256="SKIP"
+
+build() {
+	cd "15.1.0"
+	# Arctic builds Rust offline against a vendored tree so packages are
+	# reproducible and the build host needs no network.
+	export RUSTFLAGS="-C linker=clang -C link-arg=-fuse-ld=lld"
+	cargo build --release --locked --offline
+}
+
+package() {
+	cd "15.1.0"
+	install -Dm755 "target/release/ripgrep" "$pkgdir/usr/bin/ripgrep"
+	for d in README.md README LICENSE; do
+		[ -f "$d" ] && install -Dm644 "$d" "$pkgdir/usr/share/doc/ripgrep/$d"
+	done
+	true
+}

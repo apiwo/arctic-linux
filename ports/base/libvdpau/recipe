@@ -1,0 +1,32 @@
+# libvdpau - Video Decode and Presentation API
+# Generated from manifest.tsv by gen-ports.py. Edit the manifest, not this file,
+# unless the package needs something the template cannot express - in which case
+# drop a `recipe.local` beside it and it will be preserved.
+name=libvdpau
+version=1.5
+release=1
+desc="Video Decode and Presentation API"
+url="https://gitlab.freedesktop.org/vdpau/libvdpau"
+license="MIT"
+depend="glibc libx11"
+makedepend="meson ninja"
+source="https://gitlab.freedesktop.org/vdpau/libvdpau/-/archive/1.5/libvdpau-1.5.tar.gz"
+sha256="SKIP"
+
+build() {
+	cd "libvdpau-1.5"
+	meson setup build \
+		--prefix=/usr \
+		--libdir=/usr/lib \
+		--sysconfdir=/etc \
+		--localstatedir=/var \
+		--buildtype=release \
+		--wrap-mode=nodownload \
+		-Db_lto=true
+	ninja -C build -j"$JOBS"
+}
+
+package() {
+	cd "libvdpau-1.5"
+	DESTDIR="$pkgdir" ninja -C build install
+}

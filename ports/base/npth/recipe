@@ -1,0 +1,31 @@
+# npth - New portable threads library
+# Generated from manifest.tsv by gen-ports.py. Edit the manifest, not this file,
+# unless the package needs something the template cannot express - in which case
+# drop a `recipe.local` beside it and it will be preserved.
+name=npth
+version=1.8
+release=1
+desc="New portable threads library"
+url="https://gnupg.org/software/npth/"
+license="LGPL-2.1-or-later"
+depend="glibc"
+makedepend=""
+source="https://gnupg.org/ftp/gcrypt/npth/npth-1.8.tar.bz2"
+sha256="SKIP"
+
+build() {
+	cd "npth-1.8"
+	./configure \
+		--prefix=/usr \
+		--sysconfdir=/etc \
+		--localstatedir=/var \
+		--libdir=/usr/lib \
+		--disable-static \
+		--disable-nls
+	make -j"$JOBS"
+}
+
+package() {
+	cd "npth-1.8"
+	make DESTDIR="$pkgdir" install
+}

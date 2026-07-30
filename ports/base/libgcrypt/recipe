@@ -1,0 +1,31 @@
+# libgcrypt - Cryptographic library
+# Generated from manifest.tsv by gen-ports.py. Edit the manifest, not this file,
+# unless the package needs something the template cannot express - in which case
+# drop a `recipe.local` beside it and it will be preserved.
+name=libgcrypt
+version=1.11.2
+release=1
+desc="Cryptographic library"
+url="https://gnupg.org/software/libgcrypt/"
+license="LGPL-2.1-or-later"
+depend="glibc libgpg-error"
+makedepend=""
+source="https://gnupg.org/ftp/gcrypt/libgcrypt/libgcrypt-1.11.2.tar.bz2"
+sha256="SKIP"
+
+build() {
+	cd "libgcrypt-1.11.2"
+	./configure \
+		--prefix=/usr \
+		--sysconfdir=/etc \
+		--localstatedir=/var \
+		--libdir=/usr/lib \
+		--disable-static \
+		--disable-nls
+	make -j"$JOBS"
+}
+
+package() {
+	cd "libgcrypt-1.11.2"
+	make DESTDIR="$pkgdir" install
+}

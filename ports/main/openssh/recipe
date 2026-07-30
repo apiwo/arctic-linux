@@ -1,0 +1,31 @@
+# openssh - OpenBSD secure shell
+# Generated from manifest.tsv by gen-ports.py. Edit the manifest, not this file,
+# unless the package needs something the template cannot express - in which case
+# drop a `recipe.local` beside it and it will be preserved.
+name=openssh
+version=10.3p1
+release=1
+desc="OpenBSD secure shell"
+url="https://www.openssh.com/"
+license="BSD-2-Clause"
+depend="glibc libressl zlib libedit"
+makedepend=""
+source="https://cdn.openbsd.org/pub/OpenBSD/OpenSSH/portable/openssh-10.3p1.tar.gz"
+sha256="SKIP"
+
+build() {
+	cd "openssh-10.3p1"
+	./configure \
+		--prefix=/usr \
+		--sysconfdir=/etc \
+		--localstatedir=/var \
+		--libdir=/usr/lib \
+		--disable-static \
+		--disable-nls
+	make -j"$JOBS"
+}
+
+package() {
+	cd "openssh-10.3p1"
+	make DESTDIR="$pkgdir" install
+}

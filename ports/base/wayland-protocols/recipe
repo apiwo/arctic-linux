@@ -1,0 +1,32 @@
+# wayland-protocols - Wayland protocol extensions
+# Generated from manifest.tsv by gen-ports.py. Edit the manifest, not this file,
+# unless the package needs something the template cannot express - in which case
+# drop a `recipe.local` beside it and it will be preserved.
+name=wayland-protocols
+version=1.48
+release=1
+desc="Wayland protocol extensions"
+url="https://wayland.freedesktop.org/"
+license="MIT"
+depend="wayland"
+makedepend="meson ninja"
+source="https://gitlab.freedesktop.org/wayland/wayland-protocols/-/releases/1.48/downloads/wayland-protocols-1.48.tar.xz"
+sha256="SKIP"
+
+build() {
+	cd "wayland-protocols-1.48"
+	meson setup build \
+		--prefix=/usr \
+		--libdir=/usr/lib \
+		--sysconfdir=/etc \
+		--localstatedir=/var \
+		--buildtype=release \
+		--wrap-mode=nodownload \
+		-Db_lto=true
+	ninja -C build -j"$JOBS"
+}
+
+package() {
+	cd "wayland-protocols-1.48"
+	DESTDIR="$pkgdir" ninja -C build install
+}

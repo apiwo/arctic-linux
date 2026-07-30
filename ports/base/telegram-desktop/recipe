@@ -1,0 +1,27 @@
+# telegram-desktop - Telegram client
+# Generated from manifest.tsv by gen-ports.py. Edit the manifest, not this file,
+# unless the package needs something the template cannot express - in which case
+# drop a `recipe.local` beside it and it will be preserved.
+name=telegram-desktop
+version=6.5.0
+release=1
+desc="Telegram client"
+url="https://desktop.telegram.org/"
+license="GPL-3.0-only"
+depend="qt6-base ffmpeg openal libwebp rnnoise"
+makedepend="cmake ninja"
+source="https://github.com/telegramdesktop/tdesktop/releases/download/v6.5.0/tdesktop-6.5.0-full.tar.gz"
+sha256="SKIP"
+
+build() {
+	cmake -S "tdesktop-6.5.0-full" -B build -G Ninja \
+		-DCMAKE_INSTALL_PREFIX=/usr \
+		-DCMAKE_INSTALL_LIBDIR=lib \
+		-DCMAKE_BUILD_TYPE=Release \
+		-DBUILD_SHARED_LIBS=ON
+	ninja -C build -j"$JOBS"
+}
+
+package() {
+	DESTDIR="$pkgdir" ninja -C build install
+}

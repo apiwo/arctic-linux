@@ -1,0 +1,31 @@
+# vim - Vi improved
+# Generated from manifest.tsv by gen-ports.py. Edit the manifest, not this file,
+# unless the package needs something the template cannot express - in which case
+# drop a `recipe.local` beside it and it will be preserved.
+name=vim
+version=9.2.0100
+release=1
+desc="Vi improved"
+url="https://www.vim.org/"
+license="Vim"
+depend="glibc netbsd-curses libxcrypt"
+makedepend=""
+source="https://github.com/vim/vim/archive/refs/tags/v9.2.0100.tar.gz"
+sha256="SKIP"
+
+build() {
+	cd "vim-9.2.0100"
+	./configure \
+		--prefix=/usr \
+		--sysconfdir=/etc \
+		--localstatedir=/var \
+		--libdir=/usr/lib \
+		--disable-static \
+		--disable-nls
+	make -j"$JOBS"
+}
+
+package() {
+	cd "vim-9.2.0100"
+	make DESTDIR="$pkgdir" install
+}

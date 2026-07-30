@@ -1,0 +1,31 @@
+# lvm2 - Logical volume management
+# Generated from manifest.tsv by gen-ports.py. Edit the manifest, not this file,
+# unless the package needs something the template cannot express - in which case
+# drop a `recipe.local` beside it and it will be preserved.
+name=lvm2
+version=2.03.36
+release=1
+desc="Logical volume management"
+url="https://sourceware.org/lvm2/"
+license="GPL-2.0-only LGPL-2.1-only"
+depend="glibc util-linux-libs"
+makedepend=""
+source="https://sourceware.org/pub/lvm2/LVM2.2.03.36.tgz"
+sha256="SKIP"
+
+build() {
+	cd "LVM2.2.03.36"
+	./configure \
+		--prefix=/usr \
+		--sysconfdir=/etc \
+		--localstatedir=/var \
+		--libdir=/usr/lib \
+		--disable-static \
+		--disable-nls
+	make -j"$JOBS"
+}
+
+package() {
+	cd "LVM2.2.03.36"
+	make DESTDIR="$pkgdir" install
+}

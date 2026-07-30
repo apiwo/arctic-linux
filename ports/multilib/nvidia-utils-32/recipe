@@ -1,0 +1,26 @@
+# nvidia-utils-32 - NVIDIA userspace libraries, 32-bit
+# Generated from manifest.tsv by gen-ports.py. Edit the manifest, not this file,
+# unless the package needs something the template cannot express - in which case
+# drop a `recipe.local` beside it and it will be preserved.
+name=nvidia-utils-32
+version=590.48
+release=1
+desc="NVIDIA userspace libraries, 32-bit"
+url="https://www.nvidia.com/"
+license="NVIDIA-proprietary"
+depend="nvidia-utils glibc-32"
+makedepend=""
+source="https://us.download.nvidia.com/XFree86/Linux-x86_64/590.48/NVIDIA-Linux-x86_64-590.48.run"
+sha256="SKIP"
+
+# Repackaged upstream build. Arctic prefers to compile from source, but a few
+# things ship only as binaries; those live here with the licence stated plainly.
+options="!strip"
+
+package() {
+	cd "NVIDIA-Linux-x86_64-590.48.run"
+	install -d "$pkgdir/opt/nvidia-utils-32"
+	cp -a . "$pkgdir/opt/nvidia-utils-32/"
+	install -d "$pkgdir/usr/bin"
+	ln -sf "/opt/nvidia-utils-32/nvidia-utils-32" "$pkgdir/usr/bin/nvidia-utils-32"
+}

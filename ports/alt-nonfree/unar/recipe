@@ -1,0 +1,24 @@
+# unar - Free RAR extractor, replaces unrar
+# Generated from manifest.tsv by gen-ports.py. Edit the manifest, not this file,
+# unless the package needs something the template cannot express - in which case
+# drop a `recipe.local` beside it and it will be preserved.
+name=unar
+version=1.10.8
+release=1
+desc="Free RAR extractor, replaces unrar"
+url="https://theunarchiver.com/command-line"
+license="LGPL-2.1-or-later"
+depend="glibc zlib bzip2 icu"
+makedepend=""
+source="https://github.com/MacPaw/XADMaster/archive/refs/tags/v1.10.8.tar.gz"
+sha256="SKIP"
+
+build() {
+	cd "unar-1.10.8"
+	make -j"$JOBS" PREFIX=/usr
+}
+
+package() {
+	cd "unar-1.10.8"
+	make PREFIX=/usr DESTDIR="$pkgdir" install
+}

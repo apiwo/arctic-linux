@@ -1,0 +1,27 @@
+# hyprpaper - Wallpaper daemon for Hyprland
+# Generated from manifest.tsv by gen-ports.py. Edit the manifest, not this file,
+# unless the package needs something the template cannot express - in which case
+# drop a `recipe.local` beside it and it will be preserved.
+name=hyprpaper
+version=0.7.6
+release=1
+desc="Wallpaper daemon for Hyprland"
+url="https://github.com/hyprwm/hyprpaper"
+license="BSD-3-Clause"
+depend="hyprland hyprlang hyprgraphics"
+makedepend="cmake ninja"
+source="https://github.com/hyprwm/hyprpaper/archive/refs/tags/v0.7.6.tar.gz"
+sha256="SKIP"
+
+build() {
+	cmake -S "hyprpaper-0.7.6" -B build -G Ninja \
+		-DCMAKE_INSTALL_PREFIX=/usr \
+		-DCMAKE_INSTALL_LIBDIR=lib \
+		-DCMAKE_BUILD_TYPE=Release \
+		-DBUILD_SHARED_LIBS=ON
+	ninja -C build -j"$JOBS"
+}
+
+package() {
+	DESTDIR="$pkgdir" ninja -C build install
+}

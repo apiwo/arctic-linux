@@ -1,0 +1,31 @@
+# libxmu - X miscellaneous utility library
+# Generated from manifest.tsv by gen-ports.py. Edit the manifest, not this file,
+# unless the package needs something the template cannot express - in which case
+# drop a `recipe.local` beside it and it will be preserved.
+name=libxmu
+version=1.2.1
+release=1
+desc="X miscellaneous utility library"
+url="https://x.org/"
+license="MIT"
+depend="glibc libx11 libxext"
+makedepend=""
+source="https://x.org/pub/individual/lib/libXmu-1.2.1.tar.xz"
+sha256="SKIP"
+
+build() {
+	cd "libXmu-1.2.1"
+	./configure \
+		--prefix=/usr \
+		--sysconfdir=/etc \
+		--localstatedir=/var \
+		--libdir=/usr/lib \
+		--disable-static \
+		--disable-nls
+	make -j"$JOBS"
+}
+
+package() {
+	cd "libXmu-1.2.1"
+	make DESTDIR="$pkgdir" install
+}

@@ -1,0 +1,170 @@
+# Arctic Linux - system zsh configuration
+# Loaded for every interactive zsh. Per-user overrides go in ~/.zshrc.
+
+# ------------------------------------------------------------------- behaviour
+setopt AUTO_CD                  # 'Downloads' instead of 'cd Downloads'
+setopt AUTO_PUSHD PUSHD_IGNORE_DUPS PUSHD_SILENT
+setopt EXTENDED_GLOB NO_CASE_GLOB NUMERIC_GLOB_SORT
+setopt INTERACTIVE_COMMENTS
+setopt NO_BEEP
+setopt PROMPT_SUBST
+setopt CORRECT
+
+# History that survives, shared between shells, without duplicates.
+HISTFILE=${HOME}/.zsh_history
+HISTSIZE=50000
+SAVEHIST=50000
+setopt APPEND_HISTORY INC_APPEND_HISTORY SHARE_HISTORY
+setopt HIST_IGNORE_DUPS HIST_IGNORE_ALL_DUPS HIST_IGNORE_SPACE
+setopt HIST_REDUCE_BLANKS HIST_VERIFY EXTENDED_HISTORY
+
+# --------------------------------------------------------------- completion
+autoload -Uz compinit
+# Cache the dump under the user's own directory so root and users do not fight.
+compinit -d "${XDG_CACHE_HOME:-$HOME/.cache}/zcompdump"
+
+zstyle ':completion:*' menu select
+zstyle ':completion:*' matcher-list 'm:{a-zA-Z}={A-Za-z}' 'r:|=*' 'l:|=* r:|=*'
+zstyle ':completion:*' list-colors ''
+zstyle ':completion:*' group-name ''
+zstyle ':completion:*:descriptions' format '%F{44}%B%d%b%f'
+zstyle ':completion:*:warnings' format '%F{203}no match%f'
+zstyle ':completion:*' use-cache on
+zstyle ':completion:*' cache-path "${XDG_CACHE_HOME:-$HOME/.cache}/zcompcache"
+
+# alpm completion: subcommands, then package names from the real database.
+_alpm() {
+	local -a cmds
+	cmds=(
+		ins:'install packages' del:'remove packages' get:'fetch without installing'
+		fetch:'sync repositories' update:'upgrade the system' list:'list installed'
+		index:'list available' search:'search' info:'package details'
+		files:'files owned' owns:'which package owns a path' deps:'dependency tree'
+		rdeps:'reverse dependencies' why:'why is this installed' orphans:'unneeded'
+		verify:'checksum installed files' doctor:'check the system' clean:'clear cache'
+		hold:'pin a version' unhold:'unpin' mark:'change install reason'
+		snapshot:'save state' rollback:'undo a transaction' log:'transaction log'
+		stats:'statistics' add:'add a repository' commit:'activate a staged package'
+		autoremove:'remove all orphans' build:'build from a recipe' reins:'reinstall'
+		del+deps:'remove with orphaned dependencies'
+		del+junk:'remove with leftovers'
+		del+deps+junk:'remove with both'
+	)
+	if (( CURRENT == 2 )); then
+		_describe 'alpm command' cmds
+		return
+	fi
+	case ${words[2]} in
+	del|del+deps|del+junk|del+deps+junk|info|files|deps|rdeps|why|hold|unhold|mark|verify|reins|commit)
+		_values 'installed package' $(ls /var/lib/alpm/local 2>/dev/null) ;;
+	ins|get|update)
+		_values 'package' $(cut -f1 /var/lib/alpm/sync/*.idx 2>/dev/null | sort -u) ;;
+	fetch)
+		_values 'repository' all main extra base source kernels nonfree alt-nonfree multilib ;;
+	esac
+}
+compdef _alpm alpm 2>/dev/null
+
+compdef _gnu_generic arctic-service 2>/dev/null
+
+# ----------------------------------------------------------------------- keys
+bindkey -e                                  # emacs keys; set -o vi if you prefer
+bindkey '^[[A' history-beginning-search-backward
+bindkey '^[[B' history-beginning-search-forward
+bindkey '^[[H' beginning-of-line
+bindkey '^[[F' end-of-line
+bindkey '^[[3~' delete-char
+bindkey '^[[1;5C' forward-word
+bindkey '^[[1;5D' backward-word
+bindkey '^H' backward-kill-word
+
+# --------------------------------------------------------------------- prompt
+# Two lines: context on the first, a gradient arrow on the second. The arrow
+# turns amber when the last command failed and violet for root.
+autoload -Uz vcs_info
+zstyle ':vcs_info:*' enable git
+zstyle ':vcs_info:git:*' formats ' %F{99}%b%f'
+zstyle ':vcs_info:git:*' actionformats ' %F{215}%b|%a%f'
+precmd() { vcs_info }
+
+_arctic_prompt() {
+	local ret=$?
+	local arrow_colour=44
+	(( ret != 0 )) && arrow_colour=203
+	(( EUID == 0 )) && arrow_colour=99
+	# vcs_info_msg_0_ is expanded here rather than passed through as text:
+	# prompt expansion performs only one round of $ substitution, so whatever
+	# this function prints is rescanned for % escapes but never for $ again.
+	print -n "%F{245}%n%f%F{238}@%f%F{69}%m%f %F{81}%~%f${vcs_info_msg_0_}"
+	(( ret != 0 )) && print -n " %F{203}[$ret]%f"
+	print ""
+	print -n "%F{$arrow_colour}%B>%b%f "
+}
+PROMPT='$(_arctic_prompt)'
+RPROMPT='%F{238}%*%f'
+
+# --------------------------------------------------------------------- aliases
+# Arctic's userland is toybox and busybox, so ls has no --color=auto. Both
+# implementations honour the -F and -h flags used here.
+alias ls='ls -F'
+alias ll='ls -lhF'
+alias la='ls -lahF'
+alias l='ls -F'
+alias ..='cd ..'
+alias ...='cd ../..'
+alias ....='cd ../../..'
+alias grep='grep --color=auto 2>/dev/null || grep'
+alias df='df -h'
+alias du='du -h'
+alias free='free -m'
+alias mkdir='mkdir -p'
+alias ip='ip -c 2>/dev/null || ip'
+alias fetch='arcticfetch'
+alias ff='arcticfetch'
+
+# alpm shorthands, matching how people actually type.
+alias ins='doas alpm ins'
+alias del='doas alpm del'
+alias up='doas alpm update'
+alias sync='doas alpm fetch all'
+alias pkgs='alpm list'
+alias search='alpm search'
+
+# Root without typing doas every time.
+alias please='doas'
+alias root='doas -s'
+
+# ------------------------------------------------------------------ conveniences
+# Make a directory and step into it.
+mkcd() { mkdir -p "$1" && cd "$1"; }
+
+# Unpack anything, using bsdtar so one command handles every format.
+unpack() {
+	[ -f "$1" ] || { print "unpack: $1 is not a file" >&2; return 1; }
+	bsdtar -xvf "$1"
+}
+
+# What is listening on the network right now.
+ports() { doas netstat -tulpn 2>/dev/null || doas ss -tulpn; }
+
+# Which package owns the thing in $PATH.
+whopkg() { alpm owns "$(command -v "$1")"; }
+
+# ---------------------------------------------------------------------- extras
+# Syntax highlighting and autosuggestions if the packages are installed.
+for p in \
+	/usr/share/zsh/plugins/zsh-autosuggestions/zsh-autosuggestions.zsh \
+	/usr/share/zsh/plugins/zsh-syntax-highlighting/zsh-syntax-highlighting.zsh
+do
+	[[ -r $p ]] && source $p
+done
+ZSH_AUTOSUGGEST_HIGHLIGHT_STYLE='fg=238'
+
+# Anything dropped in here is picked up automatically.
+for f in /etc/zsh/zshrc.d/*.zsh(N); do source $f; done
+
+# A quiet greeting on the first interactive shell of a login session.
+if [[ -o interactive ]] && [[ -z $ARCTIC_GREETED ]] && [[ -z $ARCTIC_CHROOT ]]; then
+	export ARCTIC_GREETED=1
+	[[ -x /usr/bin/arcticfetch ]] && [[ $SHLVL -eq 1 ]] && arcticfetch
+fi

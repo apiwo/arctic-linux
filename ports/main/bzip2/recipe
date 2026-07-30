@@ -1,0 +1,24 @@
+# bzip2 - Block-sorting compressor
+# Generated from manifest.tsv by gen-ports.py. Edit the manifest, not this file,
+# unless the package needs something the template cannot express - in which case
+# drop a `recipe.local` beside it and it will be preserved.
+name=bzip2
+version=1.0.8
+release=1
+desc="Block-sorting compressor"
+url="https://sourceware.org/bzip2/"
+license="bzip2-1.0.6"
+depend="glibc"
+makedepend=""
+source="https://sourceware.org/pub/bzip2/bzip2-1.0.8.tar.gz"
+sha256="SKIP"
+
+build() {
+	cd "bzip2-1.0.8"
+	make -j"$JOBS" PREFIX=/usr
+}
+
+package() {
+	cd "bzip2-1.0.8"
+	make PREFIX=/usr DESTDIR="$pkgdir" install
+}

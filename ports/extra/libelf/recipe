@@ -1,0 +1,31 @@
+# libelf - ELF utilities and libelf
+# Generated from manifest.tsv by gen-ports.py. Edit the manifest, not this file,
+# unless the package needs something the template cannot express - in which case
+# drop a `recipe.local` beside it and it will be preserved.
+name=libelf
+version=0.194
+release=1
+desc="ELF utilities and libelf"
+url="https://sourceware.org/elfutils/"
+license="GPL-2.0-or-later LGPL-3.0-or-later"
+depend="glibc zlib zstd bzip2 xz"
+makedepend=""
+source="https://sourceware.org/elfutils/ftp/0.194/elfutils-0.194.tar.bz2"
+sha256="SKIP"
+
+build() {
+	cd "elfutils-0.194"
+	./configure \
+		--prefix=/usr \
+		--sysconfdir=/etc \
+		--localstatedir=/var \
+		--libdir=/usr/lib \
+		--disable-static \
+		--disable-nls
+	make -j"$JOBS"
+}
+
+package() {
+	cd "elfutils-0.194"
+	make DESTDIR="$pkgdir" install
+}

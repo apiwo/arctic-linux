@@ -1,0 +1,17 @@
+# vulkan-radeon - RADV, the AMD Vulkan driver. Split out of mesa for size.
+name=vulkan-radeon
+version=26.0.2
+release=1
+desc="AMD RADV Vulkan driver"
+url="https://mesa3d.org/"
+license="MIT"
+depend="mesa"
+provides="vulkan-driver"
+source=""
+sha256=""
+
+package() {
+	install -d "$pkgdir/usr/share/vulkan/icd.d"
+	printf '{"file_format_version":"1.0.0","ICD":{"library_path":"/usr/lib/libvulkan_radeon.so","api_version":"1.4.0"}}\n' \
+		>"$pkgdir/usr/share/vulkan/icd.d/radeon_icd.x86_64.json"
+}

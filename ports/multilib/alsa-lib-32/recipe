@@ -1,0 +1,31 @@
+# alsa-lib-32 - ALSA library, 32-bit
+# Generated from manifest.tsv by gen-ports.py. Edit the manifest, not this file,
+# unless the package needs something the template cannot express - in which case
+# drop a `recipe.local` beside it and it will be preserved.
+name=alsa-lib-32
+version=1.2.15
+release=1
+desc="ALSA library, 32-bit"
+url="https://alsa-project.org/"
+license="LGPL-2.1-or-later"
+depend="alsa-lib glibc-32"
+makedepend=""
+source="https://www.alsa-project.org/files/pub/lib/alsa-lib-1.2.15.tar.bz2"
+sha256="SKIP"
+
+build() {
+	cd "alsa-lib-1.2.15"
+	./configure \
+		--prefix=/usr \
+		--sysconfdir=/etc \
+		--localstatedir=/var \
+		--libdir=/usr/lib \
+		--disable-static \
+		--disable-nls
+	make -j"$JOBS"
+}
+
+package() {
+	cd "alsa-lib-1.2.15"
+	make DESTDIR="$pkgdir" install
+}

@@ -1,0 +1,32 @@
+# glib - Core GNOME utility library
+# Generated from manifest.tsv by gen-ports.py. Edit the manifest, not this file,
+# unless the package needs something the template cannot express - in which case
+# drop a `recipe.local` beside it and it will be preserved.
+name=glib
+version=2.90.1
+release=1
+desc="Core GNOME utility library"
+url="https://gitlab.gnome.org/GNOME/glib"
+license="LGPL-2.1-or-later"
+depend="glibc zlib libffi pcre2"
+makedepend="meson ninja python"
+source="https://download.gnome.org/sources/glib/2.90/glib-2.90.1.tar.xz"
+sha256="SKIP"
+
+build() {
+	cd "glib-2.90.1"
+	meson setup build \
+		--prefix=/usr \
+		--libdir=/usr/lib \
+		--sysconfdir=/etc \
+		--localstatedir=/var \
+		--buildtype=release \
+		--wrap-mode=nodownload \
+		-Db_lto=true
+	ninja -C build -j"$JOBS"
+}
+
+package() {
+	cd "glib-2.90.1"
+	DESTDIR="$pkgdir" ninja -C build install
+}

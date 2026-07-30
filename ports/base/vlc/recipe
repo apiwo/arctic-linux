@@ -1,0 +1,31 @@
+# vlc - Media player
+# Generated from manifest.tsv by gen-ports.py. Edit the manifest, not this file,
+# unless the package needs something the template cannot express - in which case
+# drop a `recipe.local` beside it and it will be preserved.
+name=vlc
+version=3.0.22
+release=1
+desc="Media player"
+url="https://videolan.org/vlc/"
+license="GPL-2.0-or-later"
+depend="ffmpeg qt6-base alsa-lib libxcb mesa lua"
+makedepend=""
+source="https://download.videolan.org/pub/videolan/vlc/3.0.22/vlc-3.0.22.tar.xz"
+sha256="SKIP"
+
+build() {
+	cd "vlc-3.0.22"
+	./configure \
+		--prefix=/usr \
+		--sysconfdir=/etc \
+		--localstatedir=/var \
+		--libdir=/usr/lib \
+		--disable-static \
+		--disable-nls
+	make -j"$JOBS"
+}
+
+package() {
+	cd "vlc-3.0.22"
+	make DESTDIR="$pkgdir" install
+}

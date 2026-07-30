@@ -1,0 +1,31 @@
+# firefox - Mozilla Firefox
+# Generated from manifest.tsv by gen-ports.py. Edit the manifest, not this file,
+# unless the package needs something the template cannot express - in which case
+# drop a `recipe.local` beside it and it will be preserved.
+name=firefox
+version=147.0
+release=1
+desc="Mozilla Firefox"
+url="https://mozilla.org/firefox/"
+license="MPL-2.0"
+depend="glibc gtk3 mesa pipewire ffmpeg libxcb nss nspr icu fontconfig"
+makedepend="rust cargo nodejs python nasm"
+source="https://archive.mozilla.org/pub/firefox/releases/147.0/source/firefox-147.0.source.tar.xz"
+sha256="SKIP"
+
+build() {
+	cd "firefox-147.0.source"
+	./configure \
+		--prefix=/usr \
+		--sysconfdir=/etc \
+		--localstatedir=/var \
+		--libdir=/usr/lib \
+		--disable-static \
+		--disable-nls
+	make -j"$JOBS"
+}
+
+package() {
+	cd "firefox-147.0.source"
+	make DESTDIR="$pkgdir" install
+}

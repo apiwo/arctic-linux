@@ -1,0 +1,31 @@
+# nspr - Netscape Portable Runtime
+# Generated from manifest.tsv by gen-ports.py. Edit the manifest, not this file,
+# unless the package needs something the template cannot express - in which case
+# drop a `recipe.local` beside it and it will be preserved.
+name=nspr
+version=4.38
+release=1
+desc="Netscape Portable Runtime"
+url="https://firefox-source-docs.mozilla.org/nspr/"
+license="MPL-2.0"
+depend="glibc"
+makedepend=""
+source="https://ftp.mozilla.org/pub/nspr/releases/v4.38/src/nspr-4.38.tar.gz"
+sha256="SKIP"
+
+build() {
+	cd "nspr-4.38"
+	./configure \
+		--prefix=/usr \
+		--sysconfdir=/etc \
+		--localstatedir=/var \
+		--libdir=/usr/lib \
+		--disable-static \
+		--disable-nls
+	make -j"$JOBS"
+}
+
+package() {
+	cd "nspr-4.38"
+	make DESTDIR="$pkgdir" install
+}

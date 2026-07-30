@@ -1,0 +1,31 @@
+# nftables - The Linux packet filter
+# Generated from manifest.tsv by gen-ports.py. Edit the manifest, not this file,
+# unless the package needs something the template cannot express - in which case
+# drop a `recipe.local` beside it and it will be preserved.
+name=nftables
+version=1.1.5
+release=1
+desc="The Linux packet filter"
+url="https://netfilter.org/projects/nftables/"
+license="GPL-2.0-only"
+depend="glibc libmnl libnftnl gmp-alt libedit"
+makedepend=""
+source="https://netfilter.org/projects/nftables/files/nftables-1.1.5.tar.xz"
+sha256="SKIP"
+
+build() {
+	cd "nftables-1.1.5"
+	./configure \
+		--prefix=/usr \
+		--sysconfdir=/etc \
+		--localstatedir=/var \
+		--libdir=/usr/lib \
+		--disable-static \
+		--disable-nls
+	make -j"$JOBS"
+}
+
+package() {
+	cd "nftables-1.1.5"
+	make DESTDIR="$pkgdir" install
+}

@@ -1,0 +1,31 @@
+# bind-tools - dig, host and nslookup
+# Generated from manifest.tsv by gen-ports.py. Edit the manifest, not this file,
+# unless the package needs something the template cannot express - in which case
+# drop a `recipe.local` beside it and it will be preserved.
+name=bind-tools
+version=9.22.4
+release=1
+desc="dig, host and nslookup"
+url="https://www.isc.org/bind/"
+license="MPL-2.0"
+depend="glibc libressl libuv json-c"
+makedepend=""
+source="https://downloads.isc.org/isc/bind9/9.22.4/bind-9.22.4.tar.xz"
+sha256="SKIP"
+
+build() {
+	cd "bind-9.22.4"
+	./configure \
+		--prefix=/usr \
+		--sysconfdir=/etc \
+		--localstatedir=/var \
+		--libdir=/usr/lib \
+		--disable-static \
+		--disable-nls
+	make -j"$JOBS"
+}
+
+package() {
+	cd "bind-9.22.4"
+	make DESTDIR="$pkgdir" install
+}

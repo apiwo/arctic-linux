@@ -1,0 +1,32 @@
+# xorg-server - The X.Org display server
+# Generated from manifest.tsv by gen-ports.py. Edit the manifest, not this file,
+# unless the package needs something the template cannot express - in which case
+# drop a `recipe.local` beside it and it will be preserved.
+name=xorg-server
+version=21.1.20
+release=1
+desc="The X.Org display server"
+url="https://x.org/"
+license="MIT"
+depend="glibc mesa libdrm pixman libxkbcommon libxfont2"
+makedepend="meson ninja"
+source="https://x.org/pub/individual/xserver/xorg-server-21.1.20.tar.xz"
+sha256="SKIP"
+
+build() {
+	cd "xorg-server-21.1.20"
+	meson setup build \
+		--prefix=/usr \
+		--libdir=/usr/lib \
+		--sysconfdir=/etc \
+		--localstatedir=/var \
+		--buildtype=release \
+		--wrap-mode=nodownload \
+		-Db_lto=true
+	ninja -C build -j"$JOBS"
+}
+
+package() {
+	cd "xorg-server-21.1.20"
+	DESTDIR="$pkgdir" ninja -C build install
+}

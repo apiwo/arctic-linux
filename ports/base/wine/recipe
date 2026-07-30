@@ -1,0 +1,31 @@
+# wine - Run Windows applications
+# Generated from manifest.tsv by gen-ports.py. Edit the manifest, not this file,
+# unless the package needs something the template cannot express - in which case
+# drop a `recipe.local` beside it and it will be preserved.
+name=wine
+version=11.0
+release=1
+desc="Run Windows applications"
+url="https://winehq.org/"
+license="LGPL-2.1-or-later"
+depend="glibc mesa libx11 freetype alsa-lib vulkan-loader glibc-32"
+makedepend="flex-alt byacc"
+source="https://dl.winehq.org/wine/source/11.0/wine-11.0.tar.xz"
+sha256="SKIP"
+
+build() {
+	cd "wine-11.0"
+	./configure \
+		--prefix=/usr \
+		--sysconfdir=/etc \
+		--localstatedir=/var \
+		--libdir=/usr/lib \
+		--disable-static \
+		--disable-nls
+	make -j"$JOBS"
+}
+
+package() {
+	cd "wine-11.0"
+	make DESTDIR="$pkgdir" install
+}

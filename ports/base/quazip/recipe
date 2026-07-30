@@ -1,0 +1,27 @@
+# quazip - Qt zip library
+# Generated from manifest.tsv by gen-ports.py. Edit the manifest, not this file,
+# unless the package needs something the template cannot express - in which case
+# drop a `recipe.local` beside it and it will be preserved.
+name=quazip
+version=1.5
+release=1
+desc="Qt zip library"
+url="https://github.com/stachenov/quazip"
+license="LGPL-2.1-or-later"
+depend="qt6-base zlib"
+makedepend="cmake ninja"
+source="https://github.com/stachenov/quazip/archive/refs/tags/v1.5.tar.gz"
+sha256="SKIP"
+
+build() {
+	cmake -S "quazip-1.5" -B build -G Ninja \
+		-DCMAKE_INSTALL_PREFIX=/usr \
+		-DCMAKE_INSTALL_LIBDIR=lib \
+		-DCMAKE_BUILD_TYPE=Release \
+		-DBUILD_SHARED_LIBS=ON
+	ninja -C build -j"$JOBS"
+}
+
+package() {
+	DESTDIR="$pkgdir" ninja -C build install
+}

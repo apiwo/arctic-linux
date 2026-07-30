@@ -1,0 +1,26 @@
+# yq - Command-line YAML processor
+# Generated from manifest.tsv by gen-ports.py. Edit the manifest, not this file,
+# unless the package needs something the template cannot express - in which case
+# drop a `recipe.local` beside it and it will be preserved.
+name=yq
+version=4.48.1
+release=1
+desc="Command-line YAML processor"
+url="https://github.com/mikefarah/yq"
+license="MIT"
+depend="glibc"
+makedepend="go"
+source="https://github.com/mikefarah/yq/archive/refs/tags/v4.48.1.tar.gz"
+sha256="SKIP"
+
+build() {
+	cd "yq-4.48.1"
+	export CGO_CPPFLAGS="$CPPFLAGS" CGO_CFLAGS="$CFLAGS" CGO_LDFLAGS="$LDFLAGS"
+	export GOFLAGS="-buildmode=pie -trimpath -mod=readonly -modcacherw"
+	go build -o "yq" .
+}
+
+package() {
+	cd "yq-4.48.1"
+	install -Dm755 "yq" "$pkgdir/usr/bin/yq"
+}

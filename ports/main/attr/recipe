@@ -1,0 +1,31 @@
+# attr - Extended attribute tools
+# Generated from manifest.tsv by gen-ports.py. Edit the manifest, not this file,
+# unless the package needs something the template cannot express - in which case
+# drop a `recipe.local` beside it and it will be preserved.
+name=attr
+version=2.6.0
+release=1
+desc="Extended attribute tools"
+url="https://savannah.nongnu.org/projects/attr"
+license="LGPL-2.1-or-later"
+depend="glibc"
+makedepend=""
+source="https://download.savannah.nongnu.org/releases/attr/attr-2.6.0.tar.gz"
+sha256="SKIP"
+
+build() {
+	cd "attr-2.6.0"
+	./configure \
+		--prefix=/usr \
+		--sysconfdir=/etc \
+		--localstatedir=/var \
+		--libdir=/usr/lib \
+		--disable-static \
+		--disable-nls
+	make -j"$JOBS"
+}
+
+package() {
+	cd "attr-2.6.0"
+	make DESTDIR="$pkgdir" install
+}

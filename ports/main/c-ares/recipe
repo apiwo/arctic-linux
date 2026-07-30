@@ -1,0 +1,27 @@
+# c-ares - Asynchronous DNS resolver
+# Generated from manifest.tsv by gen-ports.py. Edit the manifest, not this file,
+# unless the package needs something the template cannot express - in which case
+# drop a `recipe.local` beside it and it will be preserved.
+name=c-ares
+version=1.36.0
+release=1
+desc="Asynchronous DNS resolver"
+url="https://c-ares.org/"
+license="MIT"
+depend="glibc"
+makedepend="cmake ninja"
+source="https://github.com/c-ares/c-ares/releases/download/v1.36.0/c-ares-1.36.0.tar.gz"
+sha256="SKIP"
+
+build() {
+	cmake -S "c-ares-1.36.0" -B build -G Ninja \
+		-DCMAKE_INSTALL_PREFIX=/usr \
+		-DCMAKE_INSTALL_LIBDIR=lib \
+		-DCMAKE_BUILD_TYPE=Release \
+		-DBUILD_SHARED_LIBS=ON
+	ninja -C build -j"$JOBS"
+}
+
+package() {
+	DESTDIR="$pkgdir" ninja -C build install
+}

@@ -1,0 +1,26 @@
+# runc - OCI container runtime
+# Generated from manifest.tsv by gen-ports.py. Edit the manifest, not this file,
+# unless the package needs something the template cannot express - in which case
+# drop a `recipe.local` beside it and it will be preserved.
+name=runc
+version=1.4.0
+release=1
+desc="OCI container runtime"
+url="https://github.com/opencontainers/runc"
+license="Apache-2.0"
+depend="glibc libseccomp"
+makedepend="go"
+source="https://github.com/opencontainers/runc/archive/refs/tags/v1.4.0.tar.gz"
+sha256="SKIP"
+
+build() {
+	cd "runc-1.4.0"
+	export CGO_CPPFLAGS="$CPPFLAGS" CGO_CFLAGS="$CFLAGS" CGO_LDFLAGS="$LDFLAGS"
+	export GOFLAGS="-buildmode=pie -trimpath -mod=readonly -modcacherw"
+	go build -o "runc" .
+}
+
+package() {
+	cd "runc-1.4.0"
+	install -Dm755 "runc" "$pkgdir/usr/bin/runc"
+}

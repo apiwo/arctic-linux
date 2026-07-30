@@ -1,0 +1,27 @@
+# hyprcursor - Hyprland cursor format
+# Generated from manifest.tsv by gen-ports.py. Edit the manifest, not this file,
+# unless the package needs something the template cannot express - in which case
+# drop a `recipe.local` beside it and it will be preserved.
+name=hyprcursor
+version=0.1.13
+release=1
+desc="Hyprland cursor format"
+url="https://github.com/hyprwm/hyprcursor"
+license="BSD-3-Clause"
+depend="glibc hyprlang librsvg cairo"
+makedepend="cmake ninja"
+source="https://github.com/hyprwm/hyprcursor/archive/refs/tags/v0.1.13.tar.gz"
+sha256="SKIP"
+
+build() {
+	cmake -S "hyprcursor-0.1.13" -B build -G Ninja \
+		-DCMAKE_INSTALL_PREFIX=/usr \
+		-DCMAKE_INSTALL_LIBDIR=lib \
+		-DCMAKE_BUILD_TYPE=Release \
+		-DBUILD_SHARED_LIBS=ON
+	ninja -C build -j"$JOBS"
+}
+
+package() {
+	DESTDIR="$pkgdir" ninja -C build install
+}

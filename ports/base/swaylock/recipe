@@ -1,0 +1,32 @@
+# swaylock - Screen locker for Wayland
+# Generated from manifest.tsv by gen-ports.py. Edit the manifest, not this file,
+# unless the package needs something the template cannot express - in which case
+# drop a `recipe.local` beside it and it will be preserved.
+name=swaylock
+version=1.8.4
+release=1
+desc="Screen locker for Wayland"
+url="https://github.com/swaywm/swaylock"
+license="MIT"
+depend="wayland libxkbcommon cairo libxcrypt"
+makedepend="meson ninja"
+source="https://github.com/swaywm/swaylock/archive/refs/tags/v1.8.4.tar.gz"
+sha256="SKIP"
+
+build() {
+	cd "swaylock-1.8.4"
+	meson setup build \
+		--prefix=/usr \
+		--libdir=/usr/lib \
+		--sysconfdir=/etc \
+		--localstatedir=/var \
+		--buildtype=release \
+		--wrap-mode=nodownload \
+		-Db_lto=true
+	ninja -C build -j"$JOBS"
+}
+
+package() {
+	cd "swaylock-1.8.4"
+	DESTDIR="$pkgdir" ninja -C build install
+}

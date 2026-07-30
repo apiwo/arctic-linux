@@ -1,0 +1,24 @@
+# perf - Linux performance counters
+# Generated from manifest.tsv by gen-ports.py. Edit the manifest, not this file,
+# unless the package needs something the template cannot express - in which case
+# drop a `recipe.local` beside it and it will be preserved.
+name=perf
+version=7.1.3
+release=1
+desc="Linux performance counters"
+url="https://perf.wiki.kernel.org/"
+license="GPL-2.0-only"
+depend="glibc libelf numactl slang"
+makedepend=""
+source="https://cdn.kernel.org/pub/linux/kernel/v7.x/linux-7.1.3.tar.xz"
+sha256="SKIP"
+
+build() {
+	cd "linux-7.1.3"
+	make -j"$JOBS" PREFIX=/usr
+}
+
+package() {
+	cd "linux-7.1.3"
+	make PREFIX=/usr DESTDIR="$pkgdir" install
+}

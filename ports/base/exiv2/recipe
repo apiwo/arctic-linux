@@ -1,0 +1,27 @@
+# exiv2 - Image metadata library
+# Generated from manifest.tsv by gen-ports.py. Edit the manifest, not this file,
+# unless the package needs something the template cannot express - in which case
+# drop a `recipe.local` beside it and it will be preserved.
+name=exiv2
+version=0.28.7
+release=1
+desc="Image metadata library"
+url="https://exiv2.org/"
+license="GPL-2.0-or-later"
+depend="glibc expat zlib brotli"
+makedepend="cmake ninja"
+source="https://github.com/Exiv2/exiv2/archive/refs/tags/v0.28.7.tar.gz"
+sha256="SKIP"
+
+build() {
+	cmake -S "exiv2-0.28.7" -B build -G Ninja \
+		-DCMAKE_INSTALL_PREFIX=/usr \
+		-DCMAKE_INSTALL_LIBDIR=lib \
+		-DCMAKE_BUILD_TYPE=Release \
+		-DBUILD_SHARED_LIBS=ON
+	ninja -C build -j"$JOBS"
+}
+
+package() {
+	DESTDIR="$pkgdir" ninja -C build install
+}

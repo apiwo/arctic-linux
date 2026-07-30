@@ -1,0 +1,31 @@
+# firefox-esr - Firefox Extended Support Release
+# Generated from manifest.tsv by gen-ports.py. Edit the manifest, not this file,
+# unless the package needs something the template cannot express - in which case
+# drop a `recipe.local` beside it and it will be preserved.
+name=firefox-esr
+version=140.7.0
+release=1
+desc="Firefox Extended Support Release"
+url="https://mozilla.org/firefox/"
+license="MPL-2.0"
+depend="glibc gtk3 mesa pipewire ffmpeg nss nspr icu"
+makedepend="rust cargo nodejs python nasm"
+source="https://archive.mozilla.org/pub/firefox/releases/140.7.0esr/source/firefox-140.7.0esr.source.tar.xz"
+sha256="SKIP"
+
+build() {
+	cd "firefox-140.7.0esr.source"
+	./configure \
+		--prefix=/usr \
+		--sysconfdir=/etc \
+		--localstatedir=/var \
+		--libdir=/usr/lib \
+		--disable-static \
+		--disable-nls
+	make -j"$JOBS"
+}
+
+package() {
+	cd "firefox-140.7.0esr.source"
+	make DESTDIR="$pkgdir" install
+}

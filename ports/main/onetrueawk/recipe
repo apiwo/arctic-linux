@@ -1,0 +1,24 @@
+# onetrueawk - awk as Aho, Weinberger and Kernighan wrote it. Not gawk.
+name=onetrueawk
+version=20260426
+release=1
+desc="The one true awk"
+url="https://github.com/onetrueawk/awk"
+license="MIT"
+depend="glibc"
+provides="awk"
+makedepend="byacc"
+source="onetrueawk-$version.tar.gz::https://github.com/onetrueawk/awk/archive/refs/tags/$version.tar.gz"
+sha256="SKIP"
+
+build() {
+	cd "awk-$version"
+	make YACC="yacc -d" CC="$CC $CFLAGS"
+}
+
+package() {
+	cd "awk-$version"
+	install -Dm755 a.out "$pkgdir/usr/bin/awk"
+	install -Dm644 awk.1 "$pkgdir/usr/share/man/man1/awk.1"
+	ln -sf awk "$pkgdir/usr/bin/nawk"
+}

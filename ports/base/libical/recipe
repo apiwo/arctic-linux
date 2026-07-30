@@ -1,0 +1,27 @@
+# libical - iCalendar library
+# Generated from manifest.tsv by gen-ports.py. Edit the manifest, not this file,
+# unless the package needs something the template cannot express - in which case
+# drop a `recipe.local` beside it and it will be preserved.
+name=libical
+version=3.0.20
+release=1
+desc="iCalendar library"
+url="https://github.com/libical/libical"
+license="MPL-2.0 LGPL-2.1-only"
+depend="glibc libxml2 icu"
+makedepend="cmake ninja"
+source="https://github.com/libical/libical/releases/download/v3.0.20/libical-3.0.20.tar.gz"
+sha256="SKIP"
+
+build() {
+	cmake -S "libical-3.0.20" -B build -G Ninja \
+		-DCMAKE_INSTALL_PREFIX=/usr \
+		-DCMAKE_INSTALL_LIBDIR=lib \
+		-DCMAKE_BUILD_TYPE=Release \
+		-DBUILD_SHARED_LIBS=ON
+	ninja -C build -j"$JOBS"
+}
+
+package() {
+	DESTDIR="$pkgdir" ninja -C build install
+}

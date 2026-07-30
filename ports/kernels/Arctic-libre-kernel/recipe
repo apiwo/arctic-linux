@@ -1,0 +1,41 @@
+# Arctic-libre-kernel - the same kernel with every blob path closed off.
+# No firmware loader helper, no proprietary microcode, no GSP firmware for
+# NVIDIA. If a device needs a blob to work, it will not work on this kernel.
+name=Arctic-libre-kernel
+version=7.1.3
+release=1
+desc="Arctic Linux kernel, fully free, no binary blob loading"
+url="https://kernel.org/"
+license="GPL-2.0-only"
+depend="glibc"
+makedepend="clang lld bmake"
+provides="kernel"
+conflicts="linux-firmware"
+source="https://cdn.kernel.org/pub/linux/kernel/v7.x/linux-$version.tar.xz
+	arctic-libre.config"
+sha256="SKIP
+	SKIP"
+options="!strip"
+
+build() {
+	cd "linux-$version"
+	cp ../arctic-libre.config .config
+	scripts/config --disable FW_LOADER_USER_HELPER
+	scripts/config --set-str EXTRA_FIRMWARE ""
+	scripts/config --disable MICROCODE_INITRD32
+	scripts/config --disable DRM_NOUVEAU_GSP_DEFAULT
+	scripts/config --set-str LOCALVERSION "-arctic-libre"
+	make olddefconfig
+	make -j"$JOBS" bzImage modules
+}
+
+package() {
+	cd "linux-$version"
+	local kver
+	kver=$(make -s kernelrelease)
+	install -Dm644 arch/x86/boot/bzImage "$pkgdir/boot/vmlinuz-arctic-libre"
+	install -Dm644 .config "$pkgdir/boot/config-arctic-libre"
+	make INSTALL_MOD_PATH="$pkgdir/usr" INSTALL_MOD_STRIP=1 modules_install
+	rm -f "$pkgdir/usr/lib/modules/$kver/build" \
+	      "$pkgdir/usr/lib/modules/$kver/source"
+}

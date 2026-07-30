@@ -1,0 +1,9 @@
+# Arctic Linux - kernels repository
+# Kernel flavours: Arctic-base-kernel, Arctic-libre-kernel, Arctic-small-kernel, and their headers.
+name = kernels
+url = https://repo.arcticlinux.org/kernels
+enabled = yes
+priority = 15
+mirror = https://repo.arcticlinux.org/kernels
+mirror = https://mirror.eu.arcticlinux.org/kernels
+mirror = https://mirror.us.arcticlinux.org/kernels

@@ -1,0 +1,31 @@
+# exfatprogs - exFAT filesystem tools
+# Generated from manifest.tsv by gen-ports.py. Edit the manifest, not this file,
+# unless the package needs something the template cannot express - in which case
+# drop a `recipe.local` beside it and it will be preserved.
+name=exfatprogs
+version=1.2.9
+release=1
+desc="exFAT filesystem tools"
+url="https://github.com/exfatprogs/exfatprogs"
+license="GPL-2.0-or-later"
+depend="glibc"
+makedepend=""
+source="https://github.com/exfatprogs/exfatprogs/releases/download/1.2.9/exfatprogs-1.2.9.tar.xz"
+sha256="SKIP"
+
+build() {
+	cd "exfatprogs-1.2.9"
+	./configure \
+		--prefix=/usr \
+		--sysconfdir=/etc \
+		--localstatedir=/var \
+		--libdir=/usr/lib \
+		--disable-static \
+		--disable-nls
+	make -j"$JOBS"
+}
+
+package() {
+	cd "exfatprogs-1.2.9"
+	make DESTDIR="$pkgdir" install
+}

@@ -1,0 +1,31 @@
+# eudev - Standalone udev, for desktops that need it
+# Generated from manifest.tsv by gen-ports.py. Edit the manifest, not this file,
+# unless the package needs something the template cannot express - in which case
+# drop a `recipe.local` beside it and it will be preserved.
+name=eudev
+version=3.2.14
+release=1
+desc="Standalone udev, for desktops that need it"
+url="https://github.com/eudev-project/eudev"
+license="GPL-2.0-or-later"
+depend="glibc libcap"
+makedepend=""
+source="https://github.com/eudev-project/eudev/releases/download/v3.2.14/eudev-3.2.14.tar.gz"
+sha256="SKIP"
+
+build() {
+	cd "eudev-3.2.14"
+	./configure \
+		--prefix=/usr \
+		--sysconfdir=/etc \
+		--localstatedir=/var \
+		--libdir=/usr/lib \
+		--disable-static \
+		--disable-nls
+	make -j"$JOBS"
+}
+
+package() {
+	cd "eudev-3.2.14"
+	make DESTDIR="$pkgdir" install
+}

@@ -1,0 +1,27 @@
+# netbsd-curses - the terminal library, in place of ncurses.
+# ncurses is a GNU project, so Arctic uses NetBSD's curses instead. It provides
+# the ncurses ABI names as symlinks, which is enough for everything in base.
+name=netbsd-curses
+version=0.3.2
+release=1
+desc="NetBSD curses, a BSD-licensed replacement for ncurses"
+url="https://github.com/sabotage-linux/netbsd-curses"
+license="BSD-3-Clause"
+depend="glibc"
+provides="ncurses"
+source="netbsd-curses-$version.tar.gz::https://github.com/sabotage-linux/netbsd-curses/archive/refs/tags/v$version.tar.gz"
+sha256="SKIP"
+
+build() {
+	cd "netbsd-curses-$version"
+	make -j"$JOBS" PREFIX=/usr all-dynamic
+}
+
+package() {
+	cd "netbsd-curses-$version"
+	make PREFIX=/usr DESTDIR="$pkgdir" install-dynamic
+	# Anything looking for -lncurses finds this instead.
+	for n in ncurses ncursesw tinfo terminfo; do
+		ln -sf libcurses.so "$pkgdir/usr/lib/lib$n.so"
+	done
+}

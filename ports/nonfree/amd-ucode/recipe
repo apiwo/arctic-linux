@@ -1,0 +1,21 @@
+# amd-ucode - CPU microcode for AMD processors.
+name=amd-ucode
+version=20260701
+release=1
+desc="Microcode update image for AMD CPUs"
+url="https://git.kernel.org/pub/scm/linux/kernel/git/firmware/linux-firmware.git"
+license="AMD-proprietary-redistributable"
+depend=""
+source="git+https://git.kernel.org/pub/scm/linux/kernel/git/firmware/linux-firmware.git"
+sha256="SKIP"
+options="!strip"
+
+package() {
+	cd linux-firmware
+	install -d "$pkgdir/usr/lib/firmware/amd-ucode"
+	install -Dm644 amd-ucode/* "$pkgdir/usr/lib/firmware/amd-ucode/"
+	mkdir -p ucode/kernel/x86/microcode
+	cat amd-ucode/microcode_amd*.bin >ucode/kernel/x86/microcode/AuthenticAMD.bin
+	install -d "$pkgdir/boot"
+	( cd ucode && find . | cpio -o -H newc ) >"$pkgdir/boot/amd-ucode.img"
+}

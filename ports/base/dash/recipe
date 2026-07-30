@@ -1,0 +1,31 @@
+# dash - POSIX-compliant minimal shell
+# Generated from manifest.tsv by gen-ports.py. Edit the manifest, not this file,
+# unless the package needs something the template cannot express - in which case
+# drop a `recipe.local` beside it and it will be preserved.
+name=dash
+version=0.5.13
+release=1
+desc="POSIX-compliant minimal shell"
+url="http://gondor.apana.org.au/~herbert/dash/"
+license="BSD-3-Clause"
+depend="glibc"
+makedepend=""
+source="http://gondor.apana.org.au/~herbert/dash/files/dash-0.5.13.tar.gz"
+sha256="SKIP"
+
+build() {
+	cd "dash-0.5.13"
+	./configure \
+		--prefix=/usr \
+		--sysconfdir=/etc \
+		--localstatedir=/var \
+		--libdir=/usr/lib \
+		--disable-static \
+		--disable-nls
+	make -j"$JOBS"
+}
+
+package() {
+	cd "dash-0.5.13"
+	make DESTDIR="$pkgdir" install
+}

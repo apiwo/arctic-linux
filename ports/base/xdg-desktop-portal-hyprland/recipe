@@ -1,0 +1,27 @@
+# xdg-desktop-portal-hyprland - Hyprland portal backend
+# Generated from manifest.tsv by gen-ports.py. Edit the manifest, not this file,
+# unless the package needs something the template cannot express - in which case
+# drop a `recipe.local` beside it and it will be preserved.
+name=xdg-desktop-portal-hyprland
+version=1.3.10
+release=1
+desc="Hyprland portal backend"
+url="https://github.com/hyprwm/xdg-desktop-portal-hyprland"
+license="MIT"
+depend="hyprland xdg-desktop-portal qt6-base"
+makedepend="cmake ninja"
+source="https://github.com/hyprwm/xdg-desktop-portal-hyprland/archive/refs/tags/v1.3.10.tar.gz"
+sha256="SKIP"
+
+build() {
+	cmake -S "xdg-desktop-portal-hyprland-1.3.10" -B build -G Ninja \
+		-DCMAKE_INSTALL_PREFIX=/usr \
+		-DCMAKE_INSTALL_LIBDIR=lib \
+		-DCMAKE_BUILD_TYPE=Release \
+		-DBUILD_SHARED_LIBS=ON
+	ninja -C build -j"$JOBS"
+}
+
+package() {
+	DESTDIR="$pkgdir" ninja -C build install
+}

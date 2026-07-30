@@ -1,0 +1,31 @@
+# libx11 - X11 client library
+# Generated from manifest.tsv by gen-ports.py. Edit the manifest, not this file,
+# unless the package needs something the template cannot express - in which case
+# drop a `recipe.local` beside it and it will be preserved.
+name=libx11
+version=1.8.13
+release=1
+desc="X11 client library"
+url="https://x.org/"
+license="MIT"
+depend="glibc libxcb"
+makedepend=""
+source="https://x.org/pub/individual/lib/libX11-1.8.13.tar.xz"
+sha256="SKIP"
+
+build() {
+	cd "libX11-1.8.13"
+	./configure \
+		--prefix=/usr \
+		--sysconfdir=/etc \
+		--localstatedir=/var \
+		--libdir=/usr/lib \
+		--disable-static \
+		--disable-nls
+	make -j"$JOBS"
+}
+
+package() {
+	cd "libX11-1.8.13"
+	make DESTDIR="$pkgdir" install
+}

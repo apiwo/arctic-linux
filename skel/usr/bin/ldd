@@ -1,0 +1,33 @@
+#!/bin/sh
+# ldd - list the shared libraries a program needs.
+#
+# glibc ships ldd(1) as a bash script. Arctic has no bash, so this asks the
+# dynamic loader to do the work instead, which is all ldd ever did anyway.
+
+LOADER=
+for l in /usr/lib/ld-linux-x86-64.so.2 /lib64/ld-linux-x86-64.so.2; do
+	[ -x "$l" ] && { LOADER=$l; break; }
+done
+[ -n "$LOADER" ] || { echo "ldd: cannot find the dynamic loader" >&2; exit 1; }
+
+case "${1:-}" in
+--version) "$LOADER" --version | head -1; exit 0 ;;
+-h|--help)
+	printf 'usage: ldd [--version] FILE...\n'
+	exit 0 ;;
+"") echo "ldd: missing file operand" >&2; exit 1 ;;
+esac
+
+rc=0
+for f in "$@"; do
+	if [ ! -e "$f" ]; then
+		printf 'ldd: %s: No such file or directory\n' "$f" >&2
+		rc=1; continue
+	fi
+	[ $# -gt 1 ] && printf '%s:\n' "$f"
+	if ! "$LOADER" --list "$f" 2>/dev/null; then
+		printf '\tnot a dynamic executable\n'
+		rc=1
+	fi
+done
+exit $rc

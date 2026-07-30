@@ -1,0 +1,8 @@
+#!/bin/sh
+NAME=bluetoothd
+CMD=/usr/bin/bluetoothd
+ARGS=""
+BACKGROUND=yes
+
+. /etc/arctic/svc.lib
+svc_main "$@"

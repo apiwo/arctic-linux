@@ -1,0 +1,32 @@
+# grim - Screenshot utility for Wayland
+# Generated from manifest.tsv by gen-ports.py. Edit the manifest, not this file,
+# unless the package needs something the template cannot express - in which case
+# drop a `recipe.local` beside it and it will be preserved.
+name=grim
+version=1.6.0
+release=1
+desc="Screenshot utility for Wayland"
+url="https://sr.ht/~emersion/grim/"
+license="MIT"
+depend="wayland cairo libpng"
+makedepend="meson ninja"
+source="https://git.sr.ht/~emersion/grim/archive/v1.6.0.tar.gz"
+sha256="SKIP"
+
+build() {
+	cd "grim-1.6.0"
+	meson setup build \
+		--prefix=/usr \
+		--libdir=/usr/lib \
+		--sysconfdir=/etc \
+		--localstatedir=/var \
+		--buildtype=release \
+		--wrap-mode=nodownload \
+		-Db_lto=true
+	ninja -C build -j"$JOBS"
+}
+
+package() {
+	cd "grim-1.6.0"
+	DESTDIR="$pkgdir" ninja -C build install
+}

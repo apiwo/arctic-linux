@@ -1,0 +1,21 @@
+# libargon2 - Argon2 library, alias for argon2
+# Generated from manifest.tsv by gen-ports.py. Edit the manifest, not this file,
+# unless the package needs something the template cannot express - in which case
+# drop a `recipe.local` beside it and it will be preserved.
+name=libargon2
+version=20190702
+release=1
+desc="Argon2 library, alias for argon2"
+url="https://github.com/P-H-C/phc-winner-argon2"
+license="Apache-2.0"
+depend="argon2"
+makedepend=""
+source=""
+sha256=""
+
+# A meta package: the dependency list is the whole payload. Installing it pulls
+# in a working setup and nothing else.
+package() {
+	install -d "$pkgdir/usr/share/arctic/meta"
+	printf '%s\n' "argon2" >"$pkgdir/usr/share/arctic/meta/libargon2"
+}

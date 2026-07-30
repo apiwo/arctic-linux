@@ -1,0 +1,55 @@
+#!/bin/sh
+# Arctic Linux - bring the network up according to /etc/arctic/network.conf
+NAME=network
+. /etc/arctic/network.conf 2>/dev/null || NET_MODE=dhcp
+
+pick_iface() {
+	[ -n "${NET_IFACE:-}" ] && { echo "$NET_IFACE"; return; }
+	for i in /sys/class/net/*; do
+		n=$(basename "$i")
+		[ "$n" = lo ] && continue
+		[ -d "$i/wireless" ] && continue
+		echo "$n"; return
+	done
+	# No wired link, fall back to whatever is there.
+	for i in /sys/class/net/*; do
+		n=$(basename "$i"); [ "$n" = lo ] || { echo "$n"; return; }
+	done
+}
+
+start() {
+	ip link set lo up 2>/dev/null
+	iface=$(pick_iface)
+	[ -n "$iface" ] || return 0
+	ip link set "$iface" up 2>/dev/null
+	case "${NET_MODE:-dhcp}" in
+	static)
+		ip addr add "$NET_ADDR" dev "$iface" 2>/dev/null
+		ip route add default via "$NET_GATEWAY" 2>/dev/null
+		printf 'nameserver %s\n' "$NET_DNS" >/etc/resolv.conf ;;
+	wifi)
+		# iwd owns the link; it only needs an address once associated.
+		udhcpc -b -i "$iface" -p "/run/udhcpc.$iface.pid" >/dev/null 2>&1 ;;
+	*)
+		udhcpc -b -i "$iface" -p "/run/udhcpc.$iface.pid" >/dev/null 2>&1 \
+			|| dhcpcd "$iface" >/dev/null 2>&1 ;;
+	esac
+}
+
+stop() {
+	for p in /run/udhcpc.*.pid; do
+		[ -f "$p" ] && { kill "$(cat "$p")" 2>/dev/null; rm -f "$p"; }
+	done
+	for i in /sys/class/net/*; do
+		n=$(basename "$i"); [ "$n" = lo ] && continue
+		ip addr flush dev "$n" 2>/dev/null
+	done
+}
+
+case "${1:-}" in
+start) start ;;
+stop) stop ;;
+restart) stop; sleep 1; start ;;
+status) ip route 2>/dev/null | grep -q '^default' ;;
+*) echo "usage: $0 start|stop|restart|status" >&2; exit 2 ;;
+esac

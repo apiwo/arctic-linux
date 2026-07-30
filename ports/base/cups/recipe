@@ -1,0 +1,31 @@
+# cups - Printing system
+# Generated from manifest.tsv by gen-ports.py. Edit the manifest, not this file,
+# unless the package needs something the template cannot express - in which case
+# drop a `recipe.local` beside it and it will be preserved.
+name=cups
+version=2.4.15
+release=1
+desc="Printing system"
+url="https://openprinting.github.io/cups/"
+license="Apache-2.0"
+depend="glibc libressl zlib dbus libusb"
+makedepend=""
+source="https://github.com/OpenPrinting/cups/releases/download/v2.4.15/cups-2.4.15-source.tar.gz"
+sha256="SKIP"
+
+build() {
+	cd "cups-2.4.15-source"
+	./configure \
+		--prefix=/usr \
+		--sysconfdir=/etc \
+		--localstatedir=/var \
+		--libdir=/usr/lib \
+		--disable-static \
+		--disable-nls
+	make -j"$JOBS"
+}
+
+package() {
+	cd "cups-2.4.15-source"
+	make DESTDIR="$pkgdir" install
+}

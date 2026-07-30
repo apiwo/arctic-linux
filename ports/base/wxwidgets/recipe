@@ -1,0 +1,31 @@
+# wxwidgets - Cross-platform GUI toolkit
+# Generated from manifest.tsv by gen-ports.py. Edit the manifest, not this file,
+# unless the package needs something the template cannot express - in which case
+# drop a `recipe.local` beside it and it will be preserved.
+name=wxwidgets
+version=3.2.8
+release=1
+desc="Cross-platform GUI toolkit"
+url="https://wxwidgets.org/"
+license="LGPL-2.0-or-later"
+depend="gtk3 libjpeg-turbo libpng libtiff"
+makedepend=""
+source="https://github.com/wxWidgets/wxWidgets/releases/download/v3.2.8/wxWidgets-3.2.8.tar.bz2"
+sha256="SKIP"
+
+build() {
+	cd "wxWidgets-3.2.8"
+	./configure \
+		--prefix=/usr \
+		--sysconfdir=/etc \
+		--localstatedir=/var \
+		--libdir=/usr/lib \
+		--disable-static \
+		--disable-nls
+	make -j"$JOBS"
+}
+
+package() {
+	cd "wxWidgets-3.2.8"
+	make DESTDIR="$pkgdir" install
+}

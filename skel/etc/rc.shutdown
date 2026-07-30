@@ -1,0 +1,51 @@
+#!/bin/sh
+# Arctic Linux - system shutdown
+# shellcheck shell=sh disable=SC2039
+
+PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin
+export PATH
+. /etc/arctic/rc.lib 2>/dev/null || { begin(){ :;}; good(){ :;}; bad(){ :;}; }
+
+printf '\n'
+
+# Stop services in the reverse of the order they were started.
+if [ -d /etc/arctic/services ]; then
+	for s in $(ls -r /etc/arctic/services 2>/dev/null); do
+		[ -x "/etc/rc.d/$s" ] || continue
+		begin "stopping $s"
+		"/etc/rc.d/$s" stop >/dev/null 2>&1 && good || bad
+	done
+fi
+
+begin "saving the random seed"
+mkdir -p /var/lib/arctic
+dd if=/dev/urandom of=/var/lib/arctic/random-seed bs=512 count=1 2>/dev/null
+chmod 600 /var/lib/arctic/random-seed
+good
+
+begin "saving the hardware clock"
+[ -e /dev/rtc0 ] && hwclock --systohc --utc 2>/dev/null || :
+good
+
+begin "sending TERM to everything"
+killall5 -15 2>/dev/null || kill -15 -1 2>/dev/null
+sleep 2
+good
+
+begin "sending KILL to what is left"
+killall5 -9 2>/dev/null || kill -9 -1 2>/dev/null
+good
+
+begin "deactivating swap"
+swapoff -a 2>/dev/null || :
+good
+
+begin "unmounting filesystems"
+sync
+umount -a -r 2>/dev/null || :
+mount -o remount,ro / 2>/dev/null || :
+good
+
+sync
+printf '\n  %sArctic Linux has stopped.%s\n\n' "${_TEAL:-}${_B:-}" "${_R:-}"
+exit 0

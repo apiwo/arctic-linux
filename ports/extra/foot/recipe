@@ -1,0 +1,48 @@
+# foot - the Arctic terminal. Wayland native, fast, no dependencies to speak of.
+name=foot
+version=1.24.0
+release=1
+desc="A fast, lightweight Wayland terminal emulator"
+url="https://codeberg.org/dnkl/foot"
+license="MIT"
+depend="glibc wayland fontconfig freetype pixman libxkbcommon fcft"
+makedepend="meson ninja clang lld scdoc"
+source="foot-$version.tar.gz::https://codeberg.org/dnkl/foot/archive/$version.tar.gz"
+sha256="SKIP"
+
+build() {
+	cd foot
+	meson setup build --prefix=/usr --buildtype=release \
+		-Dgrapheme-clustering=enabled -Dterminfo=disabled
+	ninja -C build -j"$JOBS"
+}
+
+package() {
+	cd foot
+	DESTDIR="$pkgdir" ninja -C build install
+	# Arctic's own defaults: the logo palette, and a readable size.
+	mkdir -p "$(dirname $pkgdir/etc/xdg/foot/foot.ini)"
+cat >"$pkgdir/etc/xdg/foot/foot.ini" <<-'INI'
+		# Arctic Linux defaults for foot
+		font=monospace:size=11
+		dpi-aware=yes
+		pad=8x8
+
+		[colors]
+		alpha=0.96
+		background=1a1b26
+		foreground=c8d3f5
+		regular0=414868
+		regular1=f7768e
+		regular2=9ece6a
+		regular3=e0af68
+		regular4=7aa2f7
+		regular5=bb9af7
+		regular6=7dcfff
+		regular7=c0caf5
+
+		[cursor]
+		color=1a1b26 03dbbb
+INI
+chmod 644 "$pkgdir/etc/xdg/foot/foot.ini"
+}

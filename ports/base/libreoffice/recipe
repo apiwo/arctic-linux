@@ -1,0 +1,31 @@
+# libreoffice - Office suite
+# Generated from manifest.tsv by gen-ports.py. Edit the manifest, not this file,
+# unless the package needs something the template cannot express - in which case
+# drop a `recipe.local` beside it and it will be preserved.
+name=libreoffice
+version=26.2.0
+release=1
+desc="Office suite"
+url="https://libreoffice.org/"
+license="MPL-2.0"
+depend="glibc gtk3 poppler icu lcms2 libxml2 nss java-openjdk boost"
+makedepend="python nasm"
+source="https://download.documentfoundation.org/libreoffice/src/26.2.0/libreoffice-26.2.0.tar.xz"
+sha256="SKIP"
+
+build() {
+	cd "libreoffice-26.2.0"
+	./configure \
+		--prefix=/usr \
+		--sysconfdir=/etc \
+		--localstatedir=/var \
+		--libdir=/usr/lib \
+		--disable-static \
+		--disable-nls
+	make -j"$JOBS"
+}
+
+package() {
+	cd "libreoffice-26.2.0"
+	make DESTDIR="$pkgdir" install
+}

@@ -1,0 +1,27 @@
+# aom - AV1 codec
+# Generated from manifest.tsv by gen-ports.py. Edit the manifest, not this file,
+# unless the package needs something the template cannot express - in which case
+# drop a `recipe.local` beside it and it will be preserved.
+name=aom
+version=3.14.1
+release=1
+desc="AV1 codec"
+url="https://aomedia.googlesource.com/aom/"
+license="BSD-2-Clause"
+depend="glibc"
+makedepend="cmake ninja nasm"
+source="https://storage.googleapis.com/aom-releases/libaom-3.14.1.tar.gz"
+sha256="SKIP"
+
+build() {
+	cmake -S "libaom-3.14.1" -B build -G Ninja \
+		-DCMAKE_INSTALL_PREFIX=/usr \
+		-DCMAKE_INSTALL_LIBDIR=lib \
+		-DCMAKE_BUILD_TYPE=Release \
+		-DBUILD_SHARED_LIBS=ON
+	ninja -C build -j"$JOBS"
+}
+
+package() {
+	DESTDIR="$pkgdir" ninja -C build install
+}

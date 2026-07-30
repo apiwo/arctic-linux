@@ -1,0 +1,26 @@
+# lazygit - Terminal UI for git
+# Generated from manifest.tsv by gen-ports.py. Edit the manifest, not this file,
+# unless the package needs something the template cannot express - in which case
+# drop a `recipe.local` beside it and it will be preserved.
+name=lazygit
+version=0.58.0
+release=1
+desc="Terminal UI for git"
+url="https://github.com/jesseduffield/lazygit"
+license="MIT"
+depend="glibc git"
+makedepend="go"
+source="https://github.com/jesseduffield/lazygit/archive/refs/tags/v0.58.0.tar.gz"
+sha256="SKIP"
+
+build() {
+	cd "lazygit-0.58.0"
+	export CGO_CPPFLAGS="$CPPFLAGS" CGO_CFLAGS="$CFLAGS" CGO_LDFLAGS="$LDFLAGS"
+	export GOFLAGS="-buildmode=pie -trimpath -mod=readonly -modcacherw"
+	go build -o "lazygit" .
+}
+
+package() {
+	cd "lazygit-0.58.0"
+	install -Dm755 "lazygit" "$pkgdir/usr/bin/lazygit"
+}

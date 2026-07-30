@@ -1,0 +1,31 @@
+# java-openjdk - The OpenJDK Java runtime and compiler
+# Generated from manifest.tsv by gen-ports.py. Edit the manifest, not this file,
+# unless the package needs something the template cannot express - in which case
+# drop a `recipe.local` beside it and it will be preserved.
+name=java-openjdk
+version=25.0.2
+release=1
+desc="The OpenJDK Java runtime and compiler"
+url="https://openjdk.org/"
+license="GPL-2.0-only WITH Classpath-exception-2.0"
+depend="glibc alsa-lib libx11 freetype fontconfig lcms2"
+makedepend=""
+source="https://github.com/openjdk/jdk25u/archive/refs/tags/jdk-25.0.2-ga.tar.gz"
+sha256="SKIP"
+
+build() {
+	cd "jdk-25.0.2-ga"
+	./configure \
+		--prefix=/usr \
+		--sysconfdir=/etc \
+		--localstatedir=/var \
+		--libdir=/usr/lib \
+		--disable-static \
+		--disable-nls
+	make -j"$JOBS"
+}
+
+package() {
+	cd "jdk-25.0.2-ga"
+	make DESTDIR="$pkgdir" install
+}

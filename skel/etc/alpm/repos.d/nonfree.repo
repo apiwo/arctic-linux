@@ -1,0 +1,9 @@
+# Arctic Linux - nonfree repository
+# Proprietary firmware and drivers: NVIDIA, Broadcom, microcode, various blobs.
+name = nonfree
+url = https://repo.arcticlinux.org/nonfree
+enabled = yes
+priority = 40
+mirror = https://repo.arcticlinux.org/nonfree
+mirror = https://mirror.eu.arcticlinux.org/nonfree
+mirror = https://mirror.us.arcticlinux.org/nonfree

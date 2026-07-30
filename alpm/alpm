@@ -1,0 +1,1252 @@
+#!/bin/sh
+# alpm - Arctic Linux Package Manager
+# Binary packages are .alpmz (tar.xz). No GNU utilities required at runtime.
+# shellcheck shell=sh disable=SC2039,SC2044,SC2086
+
+set -u
+
+for p in /usr/lib/alpm/libalpm.sh ./libalpm.sh "$(dirname "$0")/libalpm.sh"; do
+	[ -f "$p" ] && { . "$p"; break; }
+done
+[ -n "${ALPM_VERSION:-}" ] || { echo "alpm: cannot locate libalpm.sh" >&2; exit 1; }
+
+alpm_load_conf
+
+ARCH=${ALPM_ARCH:-x86_64}
+NOMOD=0
+SOURCE=0
+
+# ------------------------------------------------------------------------ usage
+
+usage() {
+	cat <<EOF
+${A_TEAL}${C_B}alpm${C_R} ${A_GREY}${ALPM_VERSION} - Arctic Linux Package Manager${C_R}
+
+${C_B}INSTALLING${C_R}
+  alpm ins <pkg>...          install binary packages
+  alpm ins -s <pkg>...       build and install from source
+  alpm ins -nomod <pkg>...   install without putting it into place (no hooks,
+                             no bootloader/initramfs wiring) - for kernels and
+                             other system pieces you want to stage first
+  alpm commit <pkg>...       activate a package that was installed with -nomod
+  alpm update [pkg]...       upgrade everything, or just the named packages
+  alpm reins <pkg>...        reinstall, repairing any modified files
+
+${C_B}REMOVING${C_R}
+  alpm del <pkg>...          remove packages
+  alpm del+deps <pkg>...     remove packages and any dependencies left orphaned
+  alpm del+junk <pkg>...     remove packages and their config/cache leftovers
+  alpm del+deps+junk <pkg>   both of the above
+  alpm autoremove            remove every orphan on the system
+
+${C_B}FETCHING${C_R}
+  alpm get <pkg>...          unpack package contents here without installing
+  alpm get -s <pkg>...       fetch upstream source here
+  alpm fetch all             sync every enabled repo
+  alpm fetch <repo>...       sync main | extra | base | source | kernels |
+                             nonfree | alt-nonfree | multilib
+
+${C_B}REPOSITORIES${C_R}
+  alpm add repo <url>        add a repository
+  alpm del repo <name>       remove a repository
+  alpm list repos            show configured repositories
+  alpm mirror <repo>         show/pick the fastest mirror for a repo
+
+${C_B}QUERYING${C_R}
+  alpm list                  list installed packages
+  alpm list -e               list explicitly installed packages only
+  alpm index [repo]          list everything available
+  alpm search <pattern>      search names and descriptions
+  alpm info <pkg>            show package details
+  alpm files <pkg>           list files a package owns
+  alpm owns <path>           find which package owns a file
+  alpm deps <pkg>            show the dependency tree
+  alpm rdeps <pkg>           show what depends on a package
+  alpm why <pkg>             explain why a package is on the system
+  alpm orphans               list packages nothing needs
+  alpm stats                 installed size, counts, repo breakdown
+
+${C_B}MAINTENANCE${C_R}
+  alpm verify [pkg]          checksum every installed file against the database
+  alpm doctor                check the system for problems and offer fixes
+  alpm clean                 clear the download cache
+  alpm hold <pkg> / unhold   pin a package against upgrades
+  alpm mark <pkg> explicit|dep
+  alpm snapshot [name]       save the current package state
+  alpm rollback [id]         undo a transaction, restoring replaced files
+  alpm log                   show the transaction log
+  alpm build <recipe>        build an .alpmz from an Arctic port recipe
+  alpm version               print version
+
+Run as root for anything that changes the system.
+EOF
+}
+
+# ------------------------------------------------------------- dependency logic
+
+_seen=""
+_order=""
+
+_resolve() {
+	# Every one of these must be local: this function recurses, and without
+	# local the inner call overwrites the caller's pkg, so the wrong name ends
+	# up in _order and packages appear twice.
+	local pkg entry deps d
+	pkg=$1
+	case " $_seen " in *" $pkg "*) return 0 ;; esac
+	_seen="$_seen $pkg"
+
+	entry=$(idx_lookup "$pkg") || {
+		if is_installed "$pkg"; then return 0; fi
+		die "package not found: $pkg (try 'alpm fetch all')"
+	}
+	deps=$(printf '%s' "$entry" | cut -f9)
+	for d in $deps; do
+		[ "$d" = "-" ] && continue
+		_resolve "$d"
+	done
+	_order="$_order $pkg"
+}
+
+# Prints the install order for a set of targets, deps first.
+resolve_targets() {
+	_seen=""; _order=""
+	for t in "$@"; do _resolve "$t"; done
+	printf '%s\n' $_order
+}
+
+# ------------------------------------------------------------------ transactions
+
+txid() { date '+%Y%m%d-%H%M%S'; }
+
+TX=""
+TX_DIR=""
+
+tx_begin() {
+	TX=$(txid)
+	TX_DIR="$ALPM_DB/snapshots/$TX"
+	mkdir -p "$TX_DIR/replaced"
+	: >"$TX_DIR/added"
+	: >"$TX_DIR/packages"
+	printf 'id = %s\nstarted = %s\ncommand = %s\n' \
+		"$TX" "$(date '+%Y-%m-%d %H:%M:%S')" "$ALPM_CMDLINE" >"$TX_DIR/TXINFO"
+}
+
+# Preserve a file we are about to clobber so rollback can put it back.
+tx_save() {
+	f=$1
+	[ -n "$TX_DIR" ] || return 0
+	[ -e "$ALPM_ROOT$f" ] || return 0
+	d=$(dirname "$TX_DIR/replaced$f")
+	mkdir -p "$d"
+	cp -a "$ALPM_ROOT$f" "$TX_DIR/replaced$f" 2>/dev/null || :
+}
+
+tx_added() { [ -n "$TX_DIR" ] && printf '%s\n' "$1" >>"$TX_DIR/added" || :; }
+
+tx_end() {
+	[ -n "$TX_DIR" ] || return 0
+	printf 'finished = %s\nstatus = %s\n' "$(date '+%Y-%m-%d %H:%M:%S')" "${1:-ok}" \
+		>>"$TX_DIR/TXINFO"
+	# Keep the last 20 transactions; older ones are pruned.
+	ls -1d "$ALPM_DB"/snapshots/*/ 2>/dev/null | sort | head -n -20 | \
+		while read -r old; do rm -rf "$old"; done
+}
+
+# ----------------------------------------------------------------------- hooks
+
+run_hooks() {
+	[ "$NOMOD" = "1" ] && { info "skipping system hooks (-nomod)"; return 0; }
+	msg2 "running system hooks"
+	if have ldconfig; then ldconfig 2>/dev/null || :; fi
+	for k in "$ALPM_ROOT"/lib/modules/*; do
+		[ -d "$k" ] || continue
+		have depmod && depmod -a "$(basename "$k")" 2>/dev/null || :
+	done
+	if [ -n "$HOOK_KERNEL" ]; then
+		if have arctic-mkinitramfs; then
+			msg2 "regenerating initramfs"
+			arctic-mkinitramfs || warn "initramfs generation failed"
+		fi
+		if have arctic-bootctl; then
+			msg2 "updating bootloader entries"
+			arctic-bootctl update || warn "bootloader update failed"
+		fi
+	fi
+	have update-desktop-database && update-desktop-database -q 2>/dev/null || :
+	have gtk-update-icon-cache && \
+		gtk-update-icon-cache -qtf "$ALPM_ROOT/usr/share/icons/hicolor" 2>/dev/null || :
+	have makewhatis && makewhatis "$ALPM_ROOT/usr/share/man" 2>/dev/null || :
+	:
+}
+
+pkg_script() {
+	pkgdir=$1 phase=$2 name=$3
+	[ -f "$pkgdir/.INSTALL" ] || return 0
+	[ "$NOMOD" = "1" ] && return 0
+	# The script is sourced in a subshell so a bad hook cannot poison alpm.
+	( . "$pkgdir/.INSTALL"
+	  if command -v "$phase" >/dev/null 2>&1; then
+		msg2 "$name: $phase"
+		"$phase" || warn "$name: $phase failed"
+	  fi ) || :
+}
+
+# ---------------------------------------------------------------------- install
+
+fetch_pkg() {
+	pkg=$1
+	entry=$(idx_lookup "$pkg") || die "package not found: $pkg"
+	repo=$(printf '%s' "$entry" | cut -f1)
+	ver=$(printf '%s' "$entry" | cut -f3)
+	rel=$(printf '%s' "$entry" | cut -f4)
+	arch=$(printf '%s' "$entry" | cut -f5)
+	want=$(printf '%s' "$entry" | cut -f8)
+	file="$pkg-$ver-$rel.$arch.alpmz"
+	dest="$ALPM_CACHE/pkg/$file"
+
+	if [ -s "$dest" ]; then
+		if [ "$want" = "-" ] || [ "$(sha256 "$dest")" = "$want" ]; then
+			printf '%s\n' "$dest"; return 0
+		fi
+		warn "cached $file failed checksum, refetching"
+		rm -f "$dest"
+	fi
+
+	url=$(alpm_repo_url "$repo")
+	dl "$url/$arch/$file" "$dest" || die "download failed: $file"
+	if [ "$want" != "-" ] && [ "$(sha256 "$dest")" != "$want" ]; then
+		rm -f "$dest"
+		die "checksum mismatch on $file - refusing to install"
+	fi
+	printf '%s\n' "$dest"
+}
+
+install_one() {
+	archive=$1
+	tmp="$ALPM_CACHE/build/.unpack.$$"
+	rm -rf "$tmp"; mkdir -p "$tmp"
+	untar "$archive" "$tmp" || die "cannot unpack $archive"
+	[ -f "$tmp/.PKGINFO" ] || die "$archive is not a valid .alpmz (no .PKGINFO)"
+
+	name=$(meta "$tmp/.PKGINFO" name)
+	ver=$(meta "$tmp/.PKGINFO" version)
+	rel=$(meta "$tmp/.PKGINFO" release)
+	deps=$(metaall "$tmp/.PKGINFO" depend | tr '\n' ' ')
+	desc=$(meta "$tmp/.PKGINFO" desc)
+
+	# File-conflict check against other packages' manifests.
+	( cd "$tmp" && find . -type f -o -type l ) | sed 's|^\.||' | \
+		grep -v '^/\.\(PKGINFO\|INSTALL\|FILES\)$' >"$tmp.files"
+	while read -r f; do
+		[ -n "$f" ] || continue
+		[ -e "$ALPM_ROOT$f" ] || continue
+		owner=$(grep -rlx "$f" "$ALPM_DB"/local/*/FILES 2>/dev/null | head -1) || :
+		if [ -n "$owner" ]; then
+			o=$(basename "$(dirname "$owner")")
+			[ "$o" = "$name" ] && continue
+			die "file conflict: $f is owned by $o"
+		fi
+	done <"$tmp.files"
+
+	old=""
+	is_installed "$name" && old=$(installed_version "$name")
+
+	if [ -n "$old" ]; then
+		msg2 "upgrading $name $old -> $ver-$rel"
+		pkg_script "$tmp" pre_upgrade "$name"
+	else
+		msg2 "installing $name $ver-$rel"
+		pkg_script "$tmp" pre_install "$name"
+	fi
+
+	# Snapshot anything we are about to replace, then lay the payload down.
+	while read -r f; do
+		[ -n "$f" ] || continue
+		if [ -e "$ALPM_ROOT$f" ]; then tx_save "$f"; else tx_added "$f"; fi
+	done <"$tmp.files"
+
+	rm -f "$tmp/.PKGINFO.keep"
+	cp -a "$tmp/.PKGINFO" "$tmp.PKGINFO"
+	[ -f "$tmp/.INSTALL" ] && cp -a "$tmp/.INSTALL" "$tmp.INSTALL"
+	rm -f "$tmp/.PKGINFO" "$tmp/.INSTALL" "$tmp/.FILES"
+
+	if have bsdtar; then
+		( cd "$tmp" && bsdtar -cf - . ) | ( cd "$ALPM_ROOT" && bsdtar -xpf - )
+	else
+		( cd "$tmp" && tar -cf - . ) | ( cd "$ALPM_ROOT" && tar -xpf - )
+	fi
+
+	# Record it.
+	db="$ALPM_DB/local/$name"
+	mkdir -p "$db"
+	cp -a "$tmp.PKGINFO" "$db/PKGINFO"
+	[ -f "$tmp.INSTALL" ] && cp -a "$tmp.INSTALL" "$db/INSTALL"
+	cp -a "$tmp.files" "$db/FILES"
+	printf '%s\n' $deps >"$db/DEPS"
+	printf 'installed = %s\nsize = %s\ntx = %s\n' \
+		"$(date '+%Y-%m-%d %H:%M:%S')" "$(wc -c <"$archive")" "$TX" >"$db/STATE"
+	[ "$NOMOD" = "1" ] && printf 'activated = no\n' >>"$db/STATE"
+	[ -f "$db/REASON" ] || printf '%s\n' "${REASON:-explicit}" >"$db/REASON"
+
+	# Per-file checksums, so 'alpm verify' can detect tampering or bit rot.
+	: >"$db/HASHES"
+	while read -r f; do
+		[ -f "$ALPM_ROOT$f" ] || continue
+		printf '%s  %s\n' "$(sha256 "$ALPM_ROOT$f")" "$f" >>"$db/HASHES"
+	done <"$tmp.files"
+
+	if [ -n "$old" ]; then pkg_script "$db" post_upgrade "$name"
+	else pkg_script "$db" post_install "$name"; fi
+
+	case "$name" in *kernel*|linux-*) HOOK_KERNEL=1 ;; esac
+	printf '%s %s-%s\n' "$name" "$ver" "$rel" >>"$TX_DIR/packages"
+	alpm_log "install $name $ver-$rel nomod=$NOMOD"
+
+	rm -rf "$tmp" "$tmp.files" "$tmp.PKGINFO" "$tmp.INSTALL"
+}
+
+cmd_ins() {
+	need_root; alpm_init_db
+	[ $# -gt 0 ] || die "no packages named. See 'alpm' for usage."
+
+	if [ "$SOURCE" = "1" ]; then cmd_ins_source "$@"; return; fi
+
+	targets=$(resolve_targets "$@")
+	todo=""
+	for p in $targets; do
+		if is_installed "$p"; then
+			cur=$(installed_version "$p")
+			e=$(idx_lookup "$p") || { info "$p $cur is up to date"; continue; }
+			nv="$(printf '%s' "$e" | cut -f3)-$(printf '%s' "$e" | cut -f4)"
+			if [ "$cur" = "$nv" ]; then
+				case " $* " in *" $p "*) info "$p $cur is already installed" ;; esac
+				continue
+			fi
+		fi
+		todo="$todo $p"
+	done
+	[ -n "$todo" ] || { msg "nothing to do"; return 0; }
+
+	msg "Resolving dependencies"
+	n=0; total=0
+	for p in $todo; do
+		e=$(idx_lookup "$p") || continue
+		total=$(( total + $(printf '%s' "$e" | cut -f6) ))
+		n=$((n+1))
+	done
+	printf '\n'
+	printf '  %sPackages (%s)%s\n' "$C_B" "$n" "$C_R"
+	printf '  '
+	for p in $todo; do
+		e=$(idx_lookup "$p") || continue
+		printf '%s-%s ' "$p" "$(printf '%s' "$e" | cut -f3)"
+	done
+	printf '\n\n  %sDownload size:%s  %s\n' "$A_GREY" "$C_R" "$(human $total)"
+	[ "$NOMOD" = "1" ] && printf '  %sMode:%s           staged (-nomod, not put into place)\n' "$A_AMB" "$C_R"
+	printf '\n'
+	confirm "Proceed with installation?" || { msg "aborted"; return 1; }
+
+	tx_begin
+	msg "Retrieving packages"
+	i=0
+	files=""
+	for p in $todo; do
+		i=$((i+1)); bar "$i" "$n" "$p"
+		f=$(fetch_pkg "$p") || exit 1
+		files="$files $f"
+	done
+
+	msg "Installing"
+	HOOK_KERNEL=""
+	for f in $files; do
+		case " $* " in
+			*" $(basename "$f" | sed 's/-[0-9].*//') "*) REASON=explicit ;;
+			*) REASON=dep ;;
+		esac
+		install_one "$f"
+	done
+	run_hooks
+	tx_end ok
+	printf '\n'
+	ok "$n package(s) installed. Transaction ${A_TEAL}$TX${C_R} (undo with 'alpm rollback')"
+}
+
+cmd_ins_source() {
+	need_root; alpm_init_db
+	msg "Source build requested"
+	for p in "$@"; do
+		recipe=""
+		for d in /var/lib/alpm/ports/*/"$p"/recipe "$ALPM_CACHE/src/$p/recipe"; do
+			[ -f "$d" ] && { recipe=$d; break; }
+		done
+		if [ -z "$recipe" ]; then
+			msg2 "fetching recipe for $p from the source repo"
+			u=$(alpm_repo_url source) || die "no 'source' repo configured"
+			mkdir -p "$ALPM_CACHE/src/$p"
+			dlq "$u/recipes/$p/recipe" "$ALPM_CACHE/src/$p/recipe" || \
+				die "no source recipe for $p"
+			recipe="$ALPM_CACHE/src/$p/recipe"
+		fi
+		msg2 "building $p from $recipe"
+		alpm build "$recipe" || die "build of $p failed"
+		out=$(ls -t "$ALPM_CACHE/build/out/$p"-*.alpmz 2>/dev/null | head -1)
+		[ -n "$out" ] || die "build produced no package for $p"
+		tx_begin; HOOK_KERNEL=""; REASON=explicit
+		install_one "$out"
+		run_hooks; tx_end ok
+		ok "$p built from source and installed"
+	done
+}
+
+cmd_reins() {
+	need_root; alpm_init_db
+	tx_begin; HOOK_KERNEL=""
+	for p in "$@"; do
+		is_installed "$p" || die "$p is not installed"
+		f=$(fetch_pkg "$p")
+		REASON=$(cat "$ALPM_DB/local/$p/REASON" 2>/dev/null || echo explicit)
+		install_one "$f"
+	done
+	run_hooks; tx_end ok
+	ok "reinstalled: $*"
+}
+
+cmd_commit() {
+	need_root
+	for p in "$@"; do
+		is_installed "$p" || die "$p is not installed"
+		grep -q 'activated = no' "$ALPM_DB/local/$p/STATE" 2>/dev/null || {
+			info "$p is already in place"; continue; }
+		msg2 "activating $p"
+		sed -i '/activated = no/d' "$ALPM_DB/local/$p/STATE"
+		NOMOD=0
+		pkg_script "$ALPM_DB/local/$p" post_install "$p"
+		case "$p" in *kernel*|linux-*) HOOK_KERNEL=1 ;; esac
+	done
+	run_hooks
+	ok "activated: $*"
+}
+
+# ----------------------------------------------------------------------- remove
+
+remove_files() {
+	name=$1
+	db="$ALPM_DB/local/$name"
+	[ -f "$db/FILES" ] || return 0
+	# Files first, then directories deepest-first so empties disappear.
+	while read -r f; do
+		[ -n "$f" ] || continue
+		[ -L "$ALPM_ROOT$f" ] || [ -f "$ALPM_ROOT$f" ] || continue
+		tx_save "$f"
+		rm -f "$ALPM_ROOT$f"
+	done <"$db/FILES"
+	sed 's|/[^/]*$||' "$db/FILES" | sort -ru | while read -r d; do
+		[ -n "$d" ] || continue
+		rmdir "$ALPM_ROOT$d" 2>/dev/null || :
+	done
+}
+
+purge_junk() {
+	name=$1
+	msg2 "$name: purging leftovers"
+	for p in \
+		"$ALPM_ROOT/etc/$name" "$ALPM_ROOT/var/cache/$name" \
+		"$ALPM_ROOT/var/lib/$name" "$ALPM_ROOT/var/log/$name" \
+		"$ALPM_ROOT/usr/share/$name"
+	do
+		[ -e "$p" ] && { info "removing $p"; rm -rf "$p"; }
+	done
+	# .alpmnew / .alpmsave files left by config merges.
+	find "$ALPM_ROOT/etc" -name "*.alpmnew" -o -name "*.alpmsave" 2>/dev/null | \
+		while read -r f; do rm -f "$f"; done
+	rm -f "$ALPM_CACHE/pkg/$name"-*.alpmz
+}
+
+find_orphans() {
+	for d in "$ALPM_DB"/local/*/; do
+		[ -d "$d" ] || continue
+		p=$(basename "$d")
+		[ "$(cat "$d/REASON" 2>/dev/null)" = "dep" ] || continue
+		needed=0
+		for o in "$ALPM_DB"/local/*/DEPS; do
+			[ -f "$o" ] || continue
+			[ "$(basename "$(dirname "$o")")" = "$p" ] && continue
+			if grep -qx "$p" "$o" 2>/dev/null; then needed=1; break; fi
+		done
+		[ "$needed" = "0" ] && printf '%s\n' "$p"
+	done
+}
+
+do_remove() {
+	withdeps=$1; withjunk=$2; shift 2
+	need_root; alpm_init_db
+	[ $# -gt 0 ] || die "no packages named."
+
+	for p in "$@"; do
+		is_installed "$p" || die "$p is not installed"
+	done
+
+	# Refuse to break the system: nothing installed may still depend on a target.
+	for p in "$@"; do
+		for o in "$ALPM_DB"/local/*/DEPS; do
+			[ -f "$o" ] || continue
+			on=$(basename "$(dirname "$o")")
+			case " $* " in *" $on "*) continue ;; esac
+			if grep -qx "$p" "$o" 2>/dev/null; then
+				warn "$on depends on $p"
+				[ "${ALPM_FORCE:-0}" = "1" ] || \
+					die "refusing to break dependencies (use ALPM_FORCE=1 to override)"
+			fi
+		done
+	done
+
+	printf '\n  %sRemoving (%s)%s\n  ' "$C_B" "$#" "$C_R"
+	tot=0
+	for p in "$@"; do
+		printf '%s-%s ' "$p" "$(installed_version "$p")"
+		s=$(meta "$ALPM_DB/local/$p/STATE" size 2>/dev/null || echo 0)
+		tot=$(( tot + ${s:-0} ))
+	done
+	printf '\n\n  %sFreed:%s %s\n\n' "$A_GREY" "$C_R" "$(human $tot)"
+	confirm "Remove these packages?" || { msg "aborted"; return 1; }
+
+	tx_begin
+	for p in "$@"; do
+		msg2 "removing $p"
+		pkg_script "$ALPM_DB/local/$p" pre_remove "$p"
+		remove_files "$p"
+		pkg_script "$ALPM_DB/local/$p" post_remove "$p"
+		[ "$withjunk" = "1" ] && purge_junk "$p"
+		rm -rf "$ALPM_DB/local/$p"
+		alpm_log "remove $p junk=$withjunk"
+	done
+
+	if [ "$withdeps" = "1" ]; then
+		orph=$(find_orphans)
+		if [ -n "$orph" ]; then
+			msg "Orphaned dependencies"
+			printf '  %s\n\n' "$(printf '%s' "$orph" | tr '\n' ' ')"
+			if confirm "Remove orphaned dependencies too?"; then
+				for p in $orph; do
+					msg2 "removing orphan $p"
+					pkg_script "$ALPM_DB/local/$p" pre_remove "$p"
+					remove_files "$p"
+					[ "$withjunk" = "1" ] && purge_junk "$p"
+					rm -rf "$ALPM_DB/local/$p"
+					alpm_log "remove-orphan $p"
+				done
+			fi
+		else
+			info "no orphans left behind"
+		fi
+	fi
+	HOOK_KERNEL=""
+	run_hooks
+	tx_end ok
+	ok "done. Transaction ${A_TEAL}$TX${C_R}"
+}
+
+cmd_autoremove() {
+	need_root
+	orph=$(find_orphans)
+	[ -n "$orph" ] || { ok "no orphans on this system"; return 0; }
+	# shellcheck disable=SC2086
+	do_remove 0 1 $orph
+}
+
+# -------------------------------------------------------------------------- get
+
+cmd_get() {
+	alpm_init_db
+	[ $# -gt 0 ] || die "no packages named."
+	if [ "$SOURCE" = "1" ]; then
+		u=$(alpm_repo_url source) || die "no 'source' repo configured"
+		for p in "$@"; do
+			msg "Fetching source for $p"
+			e=$(idx_lookup "$p") || die "package not found: $p"
+			v=$(printf '%s' "$e" | cut -f3)
+			mkdir -p "$p-$v"
+			for f in recipe sources.list patches.tar; do
+				dlq "$u/recipes/$p/$f" "$p-$v/$f" 2>/dev/null && info "got $f" || :
+			done
+			# Pull the upstream tarballs the recipe names.
+			if [ -f "$p-$v/sources.list" ]; then
+				while read -r nm url; do
+					[ -n "$nm" ] || continue
+					msg2 "fetching $nm"
+					dl "$url" "$p-$v/$nm" || warn "failed: $nm"
+				done <"$p-$v/sources.list"
+			fi
+			ok "source for $p in ./$p-$v"
+		done
+		return 0
+	fi
+	for p in "$@"; do
+		msg "Fetching $p"
+		f=$(fetch_pkg "$p")
+		e=$(idx_lookup "$p"); v=$(printf '%s' "$e" | cut -f3)
+		d="$p-$v"
+		rm -rf "$d"; mkdir -p "$d"
+		untar "$f" "$d"
+		ok "contents of $p unpacked into ./$d (nothing was installed)"
+		printf '  %s%s files, %s%s\n' "$A_GREY" \
+			"$(find "$d" -type f | wc -l)" "$(du -sh "$d" | cut -f1)" "$C_R"
+	done
+}
+
+# ------------------------------------------------------------------------ fetch
+
+sync_repo() {
+	name=$1 url=$2
+	printf '  %s->%s %-14s ' "$A_ICE$C_B" "$C_R" "$name"
+	tmp="$ALPM_DB/sync/.$name.new"
+	if dlq "$url/$ARCH/INDEX" "$tmp" 2>/dev/null; then
+		# Strip comments and blank lines; keep it a clean TSV.
+		grep -v '^#' "$tmp" | grep -v '^[[:space:]]*$' >"$ALPM_DB/sync/$name.idx" || :
+		rm -f "$tmp"
+		c=$(wc -l <"$ALPM_DB/sync/$name.idx" | tr -d ' ')
+		printf '%sok%s  %s packages\n' "$A_MINT" "$C_R" "$c"
+		printf '%s\n' "$url" >"$ALPM_DB/sync/$name.url"
+	else
+		rm -f "$tmp"
+		printf '%sunreachable%s\n' "$A_RED" "$C_R"
+		return 1
+	fi
+}
+
+cmd_fetch() {
+	need_root; alpm_init_db
+	which=${1:-all}
+	msg "Synchronising repositories"
+	rc=0
+	if [ "$which" = "all" ]; then
+		alpm_repos | while IFS='	' read -r n u; do sync_repo "$n" "$u" || :; done
+	else
+		for w in "$@"; do
+			u=$(alpm_repo_url "$w")
+			[ -n "$u" ] || { err "no such repo: $w"; rc=1; continue; }
+			sync_repo "$w" "$u" || rc=1
+		done
+	fi
+	tot=$(cat "$ALPM_DB"/sync/*.idx 2>/dev/null | wc -l | tr -d ' ')
+	printf '\n'
+	ok "$tot packages available"
+	alpm_log "fetch $*"
+
+	# Tell the user if upgrades are waiting, but do not act on it.
+	up=0
+	for d in "$ALPM_DB"/local/*/; do
+		[ -d "$d" ] || continue
+		p=$(basename "$d"); is_held "$p" && continue
+		e=$(idx_lookup "$p") || continue
+		nv="$(printf '%s' "$e" | cut -f3)-$(printf '%s' "$e" | cut -f4)"
+		[ "$(installed_version "$p")" != "$nv" ] && up=$((up+1))
+	done
+	[ "$up" -gt 0 ] && msg "$up package(s) can be upgraded - run 'alpm update'"
+	return $rc
+}
+
+# ----------------------------------------------------------------------- update
+
+cmd_update() {
+	need_root; alpm_init_db
+	if [ $# -gt 0 ]; then cmd_ins "$@"; return; fi
+	msg "Checking for upgrades"
+	todo=""
+	for d in "$ALPM_DB"/local/*/; do
+		[ -d "$d" ] || continue
+		p=$(basename "$d")
+		if is_held "$p"; then info "$p is held back"; continue; fi
+		e=$(idx_lookup "$p") || continue
+		cur=$(installed_version "$p")
+		nv="$(printf '%s' "$e" | cut -f3)-$(printf '%s' "$e" | cut -f4)"
+		[ "$cur" = "$nv" ] && continue
+		printf '  %s%-24s%s %s -> %s%s%s\n' "$C_B" "$p" "$C_R" "$cur" "$A_MINT" "$nv" "$C_R"
+		todo="$todo $p"
+	done
+	[ -n "$todo" ] || { ok "system is up to date"; return 0; }
+	printf '\n'
+	# shellcheck disable=SC2086
+	cmd_ins $todo
+}
+
+# ------------------------------------------------------------------------ repos
+
+cmd_addrepo() {
+	need_root; alpm_init_db
+	url=${1:-}
+	[ -n "$url" ] || die "usage: alpm add repo <url>"
+	case "$url" in http://*|https://*|ftp://*|file://*) ;; *) url="https://$url" ;; esac
+	name=$(basename "$url" | sed 's/^arctic-//; s/-repo$//; s/\..*$//')
+	[ -n "$name" ] || name=custom
+	f="$ALPM_REPOD/$name.repo"
+	mkdir -p "$ALPM_REPOD"
+	[ -f "$f" ] && die "repo '$name' already exists ($f)"
+	cat >"$f" <<EOF
+# added by alpm on $(date '+%Y-%m-%d')
+name = $name
+url = $url
+enabled = yes
+priority = 50
+EOF
+	ok "added repo '$name' -> $url"
+	msg2 "syncing it now"
+	sync_repo "$name" "$url" || warn "could not reach $url yet"
+}
+
+cmd_delrepo() {
+	need_root
+	n=${1:-}; [ -n "$n" ] || die "usage: alpm del repo <name>"
+	f="$ALPM_REPOD/$n.repo"
+	[ -f "$f" ] || die "no such repo: $n"
+	rm -f "$f" "$ALPM_DB/sync/$n.idx" "$ALPM_DB/sync/$n.url"
+	ok "removed repo '$n'"
+}
+
+cmd_listrepos() {
+	printf '\n  %s%-14s %-9s %-8s %s%s\n' "$C_B" "REPO" "PACKAGES" "PRIORITY" "URL" "$C_R"
+	for f in "$ALPM_REPOD"/*.repo; do
+		[ -f "$f" ] || continue
+		n=$(meta "$f" name); u=$(meta "$f" url)
+		pr=$(meta "$f" priority); en=$(meta "$f" enabled)
+		[ -n "$n" ] || n=$(basename "$f" .repo)
+		c=0; [ -f "$ALPM_DB/sync/$n.idx" ] && c=$(wc -l <"$ALPM_DB/sync/$n.idx" | tr -d ' ')
+		col=$A_MINT; [ "$en" = "no" ] && col=$A_GREY
+		printf '  %s%-14s%s %-9s %-8s %s%s%s\n' \
+			"$col" "$n" "$C_R" "$c" "${pr:-50}" "$A_GREY" "$u" "$C_R"
+	done
+	printf '\n'
+}
+
+cmd_mirror() {
+	repo=${1:-main}
+	f="$ALPM_REPOD/$repo.repo"
+	[ -f "$f" ] || die "no such repo: $repo"
+	msg "Timing mirrors for $repo"
+	metaall "$f" mirror | while read -r m; do
+		[ -n "$m" ] || continue
+		s=$(date '+%s%N' 2>/dev/null || echo 0)
+		if dlq "$m/$ARCH/INDEX" /dev/null 2>/dev/null; then
+			e=$(date '+%s%N' 2>/dev/null || echo 0)
+			ms=$(( (e - s) / 1000000 ))
+			printf '  %s%6s ms%s  %s\n' "$A_MINT" "$ms" "$C_R" "$m"
+		else
+			printf '  %s   down%s   %s\n' "$A_RED" "$C_R" "$m"
+		fi
+	done
+}
+
+# ---------------------------------------------------------------------- queries
+
+cmd_list() {
+	only_explicit=0
+	[ "${1:-}" = "-e" ] && only_explicit=1
+	n=0; tot=0
+	printf '\n'
+	for d in "$ALPM_DB"/local/*/; do
+		[ -d "$d" ] || continue
+		p=$(basename "$d")
+		r=$(cat "$d/REASON" 2>/dev/null || echo explicit)
+		[ "$only_explicit" = "1" ] && [ "$r" != "explicit" ] && continue
+		v=$(installed_version "$p")
+		s=$(meta "$d/STATE" size 2>/dev/null || echo 0); tot=$(( tot + ${s:-0} ))
+		mark=" "; [ "$r" = "dep" ] && mark="${A_GREY}d${C_R}"
+		is_held "$p" && mark="${A_AMB}h${C_R}"
+		grep -q 'activated = no' "$d/STATE" 2>/dev/null && mark="${A_VIO}s${C_R}"
+		printf '  %s %s%-28s%s %s\n' "$mark" "$A_SNOW" "$p" "$C_R" "$v"
+		n=$((n+1))
+	done
+	printf '\n  %s%s packages, %s%s\n' "$A_GREY" "$n" "$(human $tot)" "$C_R"
+	printf '  %sd = dependency  h = held  s = staged (-nomod)%s\n\n' "$A_GREY" "$C_R"
+}
+
+cmd_index() {
+	r=${1:-}
+	printf '\n  %s%-24s %-14s %-11s %s%s\n' "$C_B" "PACKAGE" "VERSION" "REPO" "DESCRIPTION" "$C_R"
+	for f in "$ALPM_DB"/sync/*.idx; do
+		[ -f "$f" ] || continue
+		rn=$(basename "$f" .idx)
+		[ -n "$r" ] && [ "$r" != "$rn" ] && continue
+		awk -F'\t' -v rn="$rn" -v c1="$A_SNOW" -v c0="$C_R" -v cg="$A_GREY" \
+			'{printf "  %s%-24s%s %-14s %-11s %s%.40s%s\n", c1,$1,c0,$2"-"$3,rn,cg,$9,c0}' "$f"
+	done
+	printf '\n'
+}
+
+cmd_search() {
+	pat=${1:-}
+	[ -n "$pat" ] || die "usage: alpm search <pattern>"
+	found=0
+	printf '\n'
+	for f in "$ALPM_DB"/sync/*.idx; do
+		[ -f "$f" ] || continue
+		rn=$(basename "$f" .idx)
+		while IFS='	' read -r nm ver rel arch sz isz sha deps desc; do
+			case "$nm$desc" in
+			*"$pat"*)
+				st=""
+				is_installed "$nm" && st=" ${A_MINT}[installed]${C_R}"
+				printf '  %s%s/%s%s%s %s%s%s\n' "$A_VIO" "$rn" "$A_SNOW$C_B" "$nm" "$C_R" \
+					"$A_TEAL" "$ver-$rel" "$C_R$st"
+				printf '      %s%s%s\n' "$A_GREY" "$desc" "$C_R"
+				found=$((found+1)) ;;
+			esac
+		done <"$f"
+	done
+	[ "$found" = "0" ] && { printf '  no match for %s\n\n' "$pat"; return 1; }
+	printf '\n  %s%s result(s)%s\n\n' "$A_GREY" "$found" "$C_R"
+}
+
+cmd_info() {
+	p=${1:-}; [ -n "$p" ] || die "usage: alpm info <pkg>"
+	printf '\n'
+	if is_installed "$p"; then
+		d="$ALPM_DB/local/$p"
+		row() { printf '  %s%-16s%s %s\n' "$C_B" "$1" "$C_R" "$2"; }
+		row Name "$p"
+		row Version "$(installed_version "$p")"
+		row Description "$(meta "$d/PKGINFO" desc)"
+		row URL "$(meta "$d/PKGINFO" url)"
+		row License "$(meta "$d/PKGINFO" license)"
+		row Architecture "$(meta "$d/PKGINFO" arch)"
+		row Depends "$(tr '\n' ' ' <"$d/DEPS" 2>/dev/null)"
+		row "Installed" "$(meta "$d/STATE" installed)"
+		row "Install size" "$(human "$(meta "$d/STATE" size 2>/dev/null || echo 0)")"
+		row Files "$(wc -l <"$d/FILES" | tr -d ' ')"
+		row Reason "$(cat "$d/REASON" 2>/dev/null)"
+		is_held "$p" && row Held yes
+		grep -q 'activated = no' "$d/STATE" 2>/dev/null && \
+			row Staged "yes - not in place, run 'alpm commit $p'"
+		rd=$(cmd_rdeps "$p" 2>/dev/null | tr '\n' ' ')
+		row "Required by" "${rd:-nothing}"
+	else
+		e=$(idx_lookup "$p") || die "package not found: $p"
+		row() { printf '  %s%-16s%s %s\n' "$C_B" "$1" "$C_R" "$2"; }
+		row Repository "$(printf '%s' "$e" | cut -f1)"
+		row Name "$p"
+		row Version "$(printf '%s' "$e" | cut -f3)-$(printf '%s' "$e" | cut -f4)"
+		row Architecture "$(printf '%s' "$e" | cut -f5)"
+		row "Download size" "$(human "$(printf '%s' "$e" | cut -f6)")"
+		row "Install size" "$(human "$(printf '%s' "$e" | cut -f7)")"
+		row Depends "$(printf '%s' "$e" | cut -f9)"
+		row Description "$(printf '%s' "$e" | cut -f10)"
+		row Status "not installed"
+	fi
+	printf '\n'
+}
+
+cmd_files() {
+	p=${1:-}; [ -n "$p" ] || die "usage: alpm files <pkg>"
+	is_installed "$p" || die "$p is not installed"
+	cat "$ALPM_DB/local/$p/FILES"
+}
+
+cmd_owns() {
+	path=${1:-}; [ -n "$path" ] || die "usage: alpm owns <path>"
+	# Resolve to an absolute path the way the database stores it.
+	case "$path" in
+	/*) ;;
+	*) w=$(command -v "$path" 2>/dev/null) && path=$w || path="$(pwd)/$path" ;;
+	esac
+	hit=0
+	for f in "$ALPM_DB"/local/*/FILES; do
+		[ -f "$f" ] || continue
+		if grep -qx "$path" "$f" 2>/dev/null; then
+			p=$(basename "$(dirname "$f")")
+			printf '  %s is owned by %s%s %s%s\n' "$path" "$A_SNOW$C_B" "$p" \
+				"$(installed_version "$p")" "$C_R"
+			hit=1
+		fi
+	done
+	[ "$hit" = "0" ] && { err "no package owns $path"; return 1; }
+}
+
+_dt_seen=""
+_deptree() {
+	local p ind st deps d
+	p=$1 ind=$2
+	case " $_dt_seen " in *" $p "*)
+		printf '%s%s%s %s(already shown)%s\n' "$ind" "$A_GREY" "$p" "$A_GREY" "$C_R"
+		return 0 ;;
+	esac
+	_dt_seen="$_dt_seen $p"
+	st=""
+	is_installed "$p" && st=" ${A_MINT}*${C_R}"
+	printf '%s%s%s%s\n' "$ind" "$A_SNOW" "$p" "$C_R$st"
+	deps=""
+	if is_installed "$p"; then deps=$(tr '\n' ' ' <"$ALPM_DB/local/$p/DEPS" 2>/dev/null)
+	else e=$(idx_lookup "$p") 2>/dev/null && deps=$(printf '%s' "$e" | cut -f9); fi
+	for d in $deps; do
+		[ "$d" = "-" ] && continue
+		_deptree "$d" "$ind  "
+	done
+}
+
+cmd_deps() {
+	p=${1:-}; [ -n "$p" ] || die "usage: alpm deps <pkg>"
+	printf '\n'; _dt_seen=""; _deptree "$p" "  "
+	printf '\n  %s* = installed%s\n\n' "$A_GREY" "$C_R"
+}
+
+cmd_rdeps() {
+	p=${1:-}; [ -n "$p" ] || die "usage: alpm rdeps <pkg>"
+	for f in "$ALPM_DB"/local/*/DEPS; do
+		[ -f "$f" ] || continue
+		grep -qx "$p" "$f" 2>/dev/null && basename "$(dirname "$f")"
+	done
+}
+
+cmd_why() {
+	p=${1:-}; [ -n "$p" ] || die "usage: alpm why <pkg>"
+	is_installed "$p" || die "$p is not installed"
+	r=$(cat "$ALPM_DB/local/$p/REASON" 2>/dev/null)
+	printf '\n'
+	if [ "$r" = "explicit" ]; then
+		printf '  %s%s%s was installed explicitly - you asked for it.\n\n' \
+			"$A_SNOW$C_B" "$p" "$C_R"
+		return 0
+	fi
+	printf '  %s%s%s is here as a dependency. Chains that need it:\n\n' \
+		"$A_SNOW$C_B" "$p" "$C_R"
+	# Walk upward from p to explicitly-installed roots.
+	printf '%s\n' "$p" >/tmp/.alpm_why.$$
+	depth=0
+	cur="$p"
+	while [ "$depth" -lt 12 ]; do
+		parents=$(cmd_rdeps "$cur" | tr '\n' ' ')
+		[ -n "$parents" ] || break
+		printf '    %s%s%s <- %s\n' "$A_TEAL" "$cur" "$C_R" "$parents"
+		nxt=""
+		for q in $parents; do
+			[ "$(cat "$ALPM_DB/local/$q/REASON" 2>/dev/null)" = "explicit" ] && {
+				printf '      %sroot: %s (explicit)%s\n' "$A_MINT" "$q" "$C_R"; continue; }
+			nxt="$q"
+		done
+		[ -n "$nxt" ] || break
+		cur=$nxt; depth=$((depth+1))
+	done
+	rm -f /tmp/.alpm_why.$$
+	printf '\n'
+}
+
+cmd_orphans() {
+	o=$(find_orphans)
+	[ -n "$o" ] || { ok "no orphans"; return 0; }
+	printf '\n  %sOrphans (nothing depends on these):%s\n\n' "$C_B" "$C_R"
+	for p in $o; do printf '    %s %s\n' "$p" "$(installed_version "$p")"; done
+	printf '\n  %sremove them with: alpm autoremove%s\n\n' "$A_GREY" "$C_R"
+}
+
+cmd_stats() {
+	n=0; tot=0; expl=0; dep=0
+	for d in "$ALPM_DB"/local/*/; do
+		[ -d "$d" ] || continue
+		n=$((n+1))
+		s=$(meta "$d/STATE" size 2>/dev/null || echo 0); tot=$(( tot + ${s:-0} ))
+		if [ "$(cat "$d/REASON" 2>/dev/null)" = "dep" ]; then dep=$((dep+1)); else expl=$((expl+1)); fi
+	done
+	printf '\n  %sArctic Linux - package statistics%s\n\n' "$A_TEAL$C_B" "$C_R"
+	printf '  %-22s %s\n' "Installed packages" "$n"
+	printf '  %-22s %s\n' "  explicit" "$expl"
+	printf '  %-22s %s\n' "  dependencies" "$dep"
+	printf '  %-22s %s\n' "Total size" "$(human $tot)"
+	printf '  %-22s %s\n' "Cache size" "$(du -sh "$ALPM_CACHE" 2>/dev/null | cut -f1)"
+	printf '  %-22s %s\n' "Transactions kept" "$(ls -1d "$ALPM_DB"/snapshots/*/ 2>/dev/null | wc -l | tr -d ' ')"
+	printf '\n  %sAvailable by repo%s\n' "$C_B" "$C_R"
+	for f in "$ALPM_DB"/sync/*.idx; do
+		[ -f "$f" ] || continue
+		printf '  %-22s %s\n' "  $(basename "$f" .idx)" "$(wc -l <"$f" | tr -d ' ')"
+	done
+	printf '\n'
+}
+
+# ------------------------------------------------------------------ maintenance
+
+cmd_verify() {
+	targets=""
+	if [ $# -gt 0 ]; then targets="$*"
+	else
+		for d in "$ALPM_DB"/local/*/; do
+			[ -d "$d" ] && targets="$targets $(basename "$d")"
+		done
+	fi
+	bad=0; miss=0; checked=0
+	msg "Verifying installed files"
+	for p in $targets; do
+		h="$ALPM_DB/local/$p/HASHES"
+		[ -f "$h" ] || continue
+		while read -r want f; do
+			[ -n "$f" ] || continue
+			checked=$((checked+1))
+			if [ ! -e "$ALPM_ROOT$f" ]; then
+				printf '  %smissing%s  %s (%s)\n' "$A_RED" "$C_R" "$f" "$p"; miss=$((miss+1))
+			elif [ -f "$ALPM_ROOT$f" ] && [ "$(sha256 "$ALPM_ROOT$f")" != "$want" ]; then
+				printf '  %saltered%s  %s (%s)\n' "$A_AMB" "$C_R" "$f" "$p"; bad=$((bad+1))
+			fi
+		done <"$h"
+	done
+	printf '\n'
+	if [ "$bad" = "0" ] && [ "$miss" = "0" ]; then
+		ok "$checked files verified, all intact"
+	else
+		warn "$checked checked: $bad altered, $miss missing"
+		printf '  %srepair with: alpm reins <pkg>%s\n' "$A_GREY" "$C_R"
+		return 1
+	fi
+}
+
+cmd_doctor() {
+	msg "Arctic system check"
+	probs=0
+	chk() { printf '  %s%-40s%s ' "$A_SNOW" "$1" "$C_R"; }
+	pass() { printf '%sok%s\n' "$A_MINT" "$C_R"; }
+	fail() { printf '%s%s%s\n' "$A_RED" "$1" "$C_R"; probs=$((probs+1)); }
+	nag()  { printf '%s%s%s\n' "$A_AMB" "$1" "$C_R"; }
+
+	chk "package database readable"
+	[ -d "$ALPM_DB/local" ] && pass || fail "missing $ALPM_DB/local"
+
+	chk "repositories configured"
+	c=$(alpm_repos | wc -l | tr -d ' ')
+	[ "$c" -gt 0 ] && pass || fail "none - use 'alpm add repo'"
+
+	chk "repository indexes present"
+	c=$(ls -1 "$ALPM_DB"/sync/*.idx 2>/dev/null | wc -l | tr -d ' ')
+	[ "$c" -gt 0 ] && pass || nag "none - run 'alpm fetch all'"
+
+	chk "no half-finished transactions"
+	inc=$(grep -L 'finished' "$ALPM_DB"/snapshots/*/TXINFO 2>/dev/null | wc -l | tr -d ' ')
+	[ "$inc" = "0" ] && pass || fail "$inc incomplete - consider 'alpm rollback'"
+
+	chk "no staged (-nomod) packages pending"
+	st=$(grep -l 'activated = no' "$ALPM_DB"/local/*/STATE 2>/dev/null | wc -l | tr -d ' ')
+	[ "$st" = "0" ] && pass || nag "$st waiting for 'alpm commit'"
+
+	chk "no broken dependencies"
+	broke=0
+	for f in "$ALPM_DB"/local/*/DEPS; do
+		[ -f "$f" ] || continue
+		while read -r d; do
+			[ -n "$d" ] || continue
+			is_installed "$d" || { broke=$((broke+1)); }
+		done <"$f"
+	done
+	[ "$broke" = "0" ] && pass || fail "$broke unsatisfied"
+
+	chk "no orphaned packages"
+	o=$(find_orphans | wc -l | tr -d ' ')
+	[ "$o" = "0" ] && pass || nag "$o - see 'alpm orphans'"
+
+	chk "a kernel is installed and in place"
+	k=$(ls -1 "$ALPM_ROOT"/boot/vmlinuz-* 2>/dev/null | wc -l | tr -d ' ')
+	[ "$k" -gt 0 ] && pass || fail "no kernel in /boot"
+
+	chk "bootloader present"
+	if [ -d "$ALPM_ROOT/boot/EFI" ] || [ -f "$ALPM_ROOT/boot/limine.conf" ]; then pass
+	else nag "no limine config found"; fi
+
+	chk "no GNU userland crept in"
+	gnu=""
+	for b in "$ALPM_ROOT"/bin/ls "$ALPM_ROOT"/bin/cat; do
+		[ -e "$b" ] || continue
+		"$b" --version 2>/dev/null | grep -qi 'GNU coreutils' && gnu="yes"
+	done
+	[ -z "$gnu" ] && pass || nag "GNU coreutils detected in /bin"
+
+	chk "free space on /"
+	av=$(df -k "$ALPM_ROOT" 2>/dev/null | awk 'NR==2{print $4}')
+	if [ "${av:-0}" -gt 524288 ]; then pass; else nag "$(human $((av*1024))) left"; fi
+
+	printf '\n'
+	if [ "$probs" = "0" ]; then ok "no problems found"
+	else warn "$probs problem(s) need attention"; return 1; fi
+}
+
+cmd_clean() {
+	need_root
+	sz=$(du -sk "$ALPM_CACHE/pkg" 2>/dev/null | cut -f1)
+	msg "Cache holds $(human $(( ${sz:-0} * 1024 )))"
+	confirm "Delete cached packages?" || return 1
+	rm -f "$ALPM_CACHE"/pkg/*.alpmz
+	rm -rf "$ALPM_CACHE"/build/*
+	ok "cache cleared"
+}
+
+cmd_hold() {
+	need_root; alpm_init_db
+	for p in "$@"; do
+		is_installed "$p" || die "$p is not installed"
+		: >"$ALPM_DB/hold/$p"; ok "$p held back from upgrades"
+	done
+}
+
+cmd_unhold() {
+	need_root
+	for p in "$@"; do rm -f "$ALPM_DB/hold/$p"; ok "$p no longer held"; done
+}
+
+cmd_mark() {
+	need_root
+	p=${1:-}; r=${2:-}
+	case "$r" in explicit|dep) ;; *) die "usage: alpm mark <pkg> explicit|dep" ;; esac
+	is_installed "$p" || die "$p is not installed"
+	printf '%s\n' "$r" >"$ALPM_DB/local/$p/REASON"
+	ok "$p marked as $r"
+}
+
+# -------------------------------------------------------- snapshots / rollback
+
+cmd_snapshot() {
+	need_root; alpm_init_db
+	nm=${1:-manual-$(txid)}
+	d="$ALPM_DB/snapshots/$nm"
+	mkdir -p "$d"
+	: >"$d/packages"
+	for p in "$ALPM_DB"/local/*/; do
+		[ -d "$p" ] || continue
+		n=$(basename "$p")
+		printf '%s %s %s\n' "$n" "$(installed_version "$n")" \
+			"$(cat "$p/REASON" 2>/dev/null)" >>"$d/packages"
+	done
+	printf 'id = %s\nkind = manual\ncreated = %s\n' "$nm" "$(date '+%Y-%m-%d %H:%M:%S')" \
+		>"$d/TXINFO"
+	ok "snapshot '$nm' saved ($(wc -l <"$d/packages" | tr -d ' ') packages)"
+}
+
+cmd_rollback() {
+	need_root
+	id=${1:-}
+	if [ -z "$id" ]; then
+		id=$(ls -1d "$ALPM_DB"/snapshots/*/ 2>/dev/null | sort | tail -1)
+		[ -n "$id" ] || die "no transactions to roll back"
+		id=$(basename "$id")
+	fi
+	d="$ALPM_DB/snapshots/$id"
+	[ -d "$d" ] || die "no such transaction: $id"
+
+	printf '\n  %sTransaction %s%s\n' "$C_B" "$id" "$C_R"
+	[ -f "$d/TXINFO" ] && sed 's/^/    /' "$d/TXINFO"
+	if [ -f "$d/packages" ]; then
+		printf '\n  %sPackages it touched:%s\n' "$C_B" "$C_R"
+		sed 's/^/    /' "$d/packages"
+	fi
+	na=$(wc -l <"$d/added" 2>/dev/null | tr -d ' ' || echo 0)
+	nr=$(find "$d/replaced" -type f 2>/dev/null | wc -l | tr -d ' ')
+	printf '\n  rolling back will delete %s new file(s) and restore %s replaced file(s)\n\n' \
+		"$na" "$nr"
+	confirm "Roll back transaction $id?" || { msg "aborted"; return 1; }
+
+	if [ -f "$d/added" ]; then
+		while read -r f; do
+			[ -n "$f" ] || continue
+			rm -f "$ALPM_ROOT$f" 2>/dev/null || :
+		done <"$d/added"
+	fi
+	if [ -d "$d/replaced" ]; then
+		( cd "$d/replaced" && find . -type f -o -type l ) | while read -r rf; do
+			t=$(printf '%s' "$rf" | sed 's|^\.||')
+			mkdir -p "$(dirname "$ALPM_ROOT$t")"
+			cp -a "$d/replaced/$rf" "$ALPM_ROOT$t"
+		done
+	fi
+	# Reconcile the database with what is now on disk.
+	if [ -f "$d/packages" ]; then
+		while read -r n v; do
+			[ -n "$n" ] || continue
+			if [ ! -e "$ALPM_ROOT/var/lib/alpm/local/$n/PKGINFO" ]; then :; fi
+			[ -d "$ALPM_DB/local/$n" ] && [ ! -s "$ALPM_DB/local/$n/PKGINFO" ] && \
+				rm -rf "$ALPM_DB/local/$n"
+		done <"$d/packages"
+	fi
+	alpm_log "rollback $id"
+	HOOK_KERNEL=1; NOMOD=0; run_hooks
+	ok "rolled back $id"
+}
+
+cmd_log() {
+	[ -f "$ALPM_LOG" ] || { info "no log yet"; return 0; }
+	printf '\n'
+	tail -n "${1:-40}" "$ALPM_LOG" | sed 's/^/  /'
+	printf '\n'
+	printf '  %stransactions on disk:%s\n' "$C_B" "$C_R"
+	for d in "$ALPM_DB"/snapshots/*/; do
+		[ -d "$d" ] || continue
+		printf '    %s %s\n' "$(basename "$d")" \
+			"$(meta "$d/TXINFO" command 2>/dev/null || echo '-')"
+	done
+	printf '\n'
+}
+
+# -------------------------------------------------------------------- dispatch
+
+ALPM_CMDLINE="alpm $*"
+cmd=${1:-}
+[ $# -gt 0 ] && shift
+
+# Global flag scan: -s and -nomod may appear anywhere after the subcommand.
+args=""
+for a in "$@"; do
+	case "$a" in
+	-s|--source)  SOURCE=1 ;;
+	-nomod|--nomod|--no-modify) NOMOD=1 ;;
+	-y|--yes)     ALPM_YES=1 ;;
+	--force)      ALPM_FORCE=1 ;;
+	--root=*)     ALPM_ROOT=${a#--root=} ;;
+	*)            args="$args $a" ;;
+	esac
+done
+# shellcheck disable=SC2086
+set -- $args
+
+case "$cmd" in
+ins|install|i)      cmd_ins "$@" ;;
+reins|reinstall)    cmd_reins "$@" ;;
+commit)             cmd_commit "$@" ;;
+del|remove|rm)
+	case "${1:-}" in
+	repo) shift; cmd_delrepo "$@" ;;
+	*)    do_remove 0 0 "$@" ;;
+	esac ;;
+del+deps)           do_remove 1 0 "$@" ;;
+del+junk)           do_remove 0 1 "$@" ;;
+del+deps+junk|del+junk+deps) do_remove 1 1 "$@" ;;
+autoremove)         cmd_autoremove ;;
+get)                cmd_get "$@" ;;
+fetch|sync)         cmd_fetch "$@" ;;
+update|upgrade|up)  cmd_update "$@" ;;
+add)
+	case "${1:-}" in
+	repo) shift; cmd_addrepo "$@" ;;
+	*)    die "usage: alpm add repo <url>" ;;
+	esac ;;
+mirror)             cmd_mirror "$@" ;;
+list|ls)
+	case "${1:-}" in
+	repos|repo) cmd_listrepos ;;
+	*)          cmd_list "$@" ;;
+	esac ;;
+index|avail)        cmd_index "$@" ;;
+search|find|s)      cmd_search "$@" ;;
+info|show)          cmd_info "$@" ;;
+files)              cmd_files "$@" ;;
+owns|owner)         cmd_owns "$@" ;;
+deps)               cmd_deps "$@" ;;
+rdeps)              cmd_rdeps "$@" ;;
+why)                cmd_why "$@" ;;
+orphans)            cmd_orphans ;;
+stats)              cmd_stats ;;
+verify|check)       cmd_verify "$@" ;;
+doctor)             cmd_doctor ;;
+clean)              cmd_clean ;;
+hold)               cmd_hold "$@" ;;
+unhold)             cmd_unhold "$@" ;;
+mark)               cmd_mark "$@" ;;
+snapshot|snap)      cmd_snapshot "$@" ;;
+rollback|undo)      cmd_rollback "$@" ;;
+log|history)        cmd_log "$@" ;;
+build|mkpkg)        exec alpm-build "$@" ;;
+version|--version|-V) printf 'alpm %s (format %s) - Arctic Linux\n' "$ALPM_VERSION" "$ALPM_FORMAT" ;;
+help|--help|-h|"")  usage ;;
+*)                  err "unknown command: $cmd"; printf '\n'; usage; exit 1 ;;
+esac

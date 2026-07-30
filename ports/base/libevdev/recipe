@@ -1,0 +1,32 @@
+# libevdev - Wrapper for evdev devices
+# Generated from manifest.tsv by gen-ports.py. Edit the manifest, not this file,
+# unless the package needs something the template cannot express - in which case
+# drop a `recipe.local` beside it and it will be preserved.
+name=libevdev
+version=1.13.4
+release=1
+desc="Wrapper for evdev devices"
+url="https://www.freedesktop.org/wiki/Software/libevdev/"
+license="MIT"
+depend="glibc"
+makedepend="meson ninja"
+source="https://www.freedesktop.org/software/libevdev/libevdev-1.13.4.tar.xz"
+sha256="SKIP"
+
+build() {
+	cd "libevdev-1.13.4"
+	meson setup build \
+		--prefix=/usr \
+		--libdir=/usr/lib \
+		--sysconfdir=/etc \
+		--localstatedir=/var \
+		--buildtype=release \
+		--wrap-mode=nodownload \
+		-Db_lto=true
+	ninja -C build -j"$JOBS"
+}
+
+package() {
+	cd "libevdev-1.13.4"
+	DESTDIR="$pkgdir" ninja -C build install
+}

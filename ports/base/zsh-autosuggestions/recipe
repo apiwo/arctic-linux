@@ -1,0 +1,24 @@
+# zsh-autosuggestions - Fish-like autosuggestions for zsh
+# Generated from manifest.tsv by gen-ports.py. Edit the manifest, not this file,
+# unless the package needs something the template cannot express - in which case
+# drop a `recipe.local` beside it and it will be preserved.
+name=zsh-autosuggestions
+version=0.7.1
+release=1
+desc="Fish-like autosuggestions for zsh"
+url="https://github.com/zsh-users/zsh-autosuggestions"
+license="MIT"
+depend="zsh"
+makedepend=""
+source="https://github.com/zsh-users/zsh-autosuggestions/archive/refs/tags/v0.7.1.tar.gz"
+sha256="SKIP"
+
+build() {
+	cd "zsh-autosuggestions-0.7.1"
+	make -j"$JOBS" PREFIX=/usr
+}
+
+package() {
+	cd "zsh-autosuggestions-0.7.1"
+	make PREFIX=/usr DESTDIR="$pkgdir" install
+}

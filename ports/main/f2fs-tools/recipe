@@ -1,0 +1,31 @@
+# f2fs-tools - F2FS filesystem tools
+# Generated from manifest.tsv by gen-ports.py. Edit the manifest, not this file,
+# unless the package needs something the template cannot express - in which case
+# drop a `recipe.local` beside it and it will be preserved.
+name=f2fs-tools
+version=1.16.0
+release=1
+desc="F2FS filesystem tools"
+url="https://git.kernel.org/pub/scm/linux/kernel/git/jaegeuk/f2fs-tools.git"
+license="GPL-2.0-only"
+depend="glibc util-linux-libs"
+makedepend=""
+source="https://kernel.org/pub/linux/kernel/people/jaegeuk/f2fs-tools/f2fs-tools-1.16.0.tar.gz"
+sha256="SKIP"
+
+build() {
+	cd "f2fs-tools-1.16.0"
+	./configure \
+		--prefix=/usr \
+		--sysconfdir=/etc \
+		--localstatedir=/var \
+		--libdir=/usr/lib \
+		--disable-static \
+		--disable-nls
+	make -j"$JOBS"
+}
+
+package() {
+	cd "f2fs-tools-1.16.0"
+	make DESTDIR="$pkgdir" install
+}

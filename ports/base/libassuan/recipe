@@ -1,0 +1,31 @@
+# libassuan - IPC library for GnuPG
+# Generated from manifest.tsv by gen-ports.py. Edit the manifest, not this file,
+# unless the package needs something the template cannot express - in which case
+# drop a `recipe.local` beside it and it will be preserved.
+name=libassuan
+version=3.0.2
+release=1
+desc="IPC library for GnuPG"
+url="https://gnupg.org/software/libassuan/"
+license="LGPL-2.1-or-later"
+depend="glibc libgpg-error"
+makedepend=""
+source="https://gnupg.org/ftp/gcrypt/libassuan/libassuan-3.0.2.tar.bz2"
+sha256="SKIP"
+
+build() {
+	cd "libassuan-3.0.2"
+	./configure \
+		--prefix=/usr \
+		--sysconfdir=/etc \
+		--localstatedir=/var \
+		--libdir=/usr/lib \
+		--disable-static \
+		--disable-nls
+	make -j"$JOBS"
+}
+
+package() {
+	cd "libassuan-3.0.2"
+	make DESTDIR="$pkgdir" install
+}

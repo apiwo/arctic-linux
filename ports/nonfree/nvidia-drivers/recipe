@@ -1,0 +1,65 @@
+# nvidia-drivers - the proprietary NVIDIA kernel module and userspace.
+#
+# This is in nonfree because it is. If you would rather not run a blob, install
+# mesa and xf86-video-nouveau from alt-nonfree instead; on Turing and newer the
+# open GSP path is genuinely usable now.
+name=nvidia-drivers
+version=590.48
+release=1
+desc="NVIDIA proprietary graphics driver and kernel module"
+url="https://www.nvidia.com/"
+license="NVIDIA-proprietary"
+depend="glibc"
+makedepend="clang lld linux-headers"
+provides="nvidia"
+conflicts="nouveau-drivers"
+source="NVIDIA-Linux-x86_64-$version.run::https://us.download.nvidia.com/XFree86/Linux-x86_64/$version/NVIDIA-Linux-x86_64-$version.run"
+sha256="SKIP"
+options="!strip"
+
+prepare() {
+	sh "NVIDIA-Linux-x86_64-$version.run" --extract-only
+}
+
+build() {
+	cd "NVIDIA-Linux-x86_64-$version/kernel"
+	# Build against every installed kernel, so a later kernel upgrade still has
+	# a module. alpm's post_upgrade hook rebuilds this when the kernel changes.
+	for kdir in /usr/lib/modules/*/build; do
+		[ -d "$kdir" ] || continue
+		make -j"$JOBS" SYSSRC="$kdir" modules
+	done
+}
+
+package() {
+	cd "NVIDIA-Linux-x86_64-$version"
+	for kver in $(ls /usr/lib/modules); do
+		install -d "$pkgdir/usr/lib/modules/$kver/extra/nvidia"
+		install -Dm644 kernel/*.ko \
+			"$pkgdir/usr/lib/modules/$kver/extra/nvidia/" 2>/dev/null || true
+	done
+	install -Dm644 nvidia_drv.so "$pkgdir/usr/lib/xorg/modules/drivers/nvidia_drv.so"
+	install -Dm755 nvidia-smi "$pkgdir/usr/bin/nvidia-smi"
+	# Wayland compositors need these two to use the card at all.
+	install -Dm644 libnvidia-egl-wayland.so.* "$pkgdir/usr/lib/" 2>/dev/null || true
+	install -Dm644 10_nvidia.json \
+		"$pkgdir/usr/share/glvnd/egl_vendor.d/10_nvidia.json" 2>/dev/null || true
+
+	# Arctic defaults that people otherwise spend an evening discovering.
+	mkdir -p "$(dirname $pkgdir/etc/modprobe.d/nvidia.conf)"
+cat >"$pkgdir/etc/modprobe.d/nvidia.conf" <<-'CONF'
+		# Arctic Linux NVIDIA defaults
+		# Required for suspend/resume to keep the framebuffer intact.
+		options nvidia NVreg_PreserveVideoMemoryAllocations=1
+		# Kernel modesetting: Wayland needs this.
+		options nvidia_drm modeset=1 fbdev=1
+CONF
+chmod 644 "$pkgdir/etc/modprobe.d/nvidia.conf"
+	mkdir -p "$(dirname $pkgdir/etc/modules-load.d/nvidia.conf)"
+cat >"$pkgdir/etc/modules-load.d/nvidia.conf" <<-'CONF'
+		nvidia
+		nvidia_modeset
+		nvidia_drm
+CONF
+chmod 644 "$pkgdir/etc/modules-load.d/nvidia.conf"
+}

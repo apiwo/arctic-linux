@@ -1,0 +1,25 @@
+# alpm - the Arctic Linux Package Manager itself.
+name=alpm
+version=1.0.0
+release=1
+desc="Arctic Linux Package Manager"
+url="https://github.com/apiwo/arctic-linux"
+license="BSD-2-Clause"
+# Deliberately thin: alpm has to work on a system with nothing else on it.
+depend="busybox"
+provides="package-manager"
+source="alpm alpm-build alpm-repo libalpm.sh alpm.conf"
+sha256="SKIP SKIP SKIP SKIP SKIP"
+backup="etc/alpm/alpm.conf"
+
+package() {
+	install -Dm755 alpm       "$pkgdir/usr/bin/alpm"
+	install -Dm755 alpm-build "$pkgdir/usr/bin/alpm-build"
+	install -Dm755 alpm-repo  "$pkgdir/usr/bin/alpm-repo"
+	install -Dm644 libalpm.sh "$pkgdir/usr/lib/alpm/libalpm.sh"
+	install -Dm644 alpm.conf  "$pkgdir/etc/alpm/alpm.conf"
+	install -d "$pkgdir/etc/alpm/repos.d"
+	install -d "$pkgdir/var/lib/alpm/local" "$pkgdir/var/lib/alpm/sync"
+	install -d "$pkgdir/var/lib/alpm/hold" "$pkgdir/var/lib/alpm/snapshots"
+	install -d "$pkgdir/var/cache/alpm/pkg" "$pkgdir/var/cache/alpm/src"
+}

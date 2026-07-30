@@ -1,0 +1,32 @@
+# pango - Text layout and rendering
+# Generated from manifest.tsv by gen-ports.py. Edit the manifest, not this file,
+# unless the package needs something the template cannot express - in which case
+# drop a `recipe.local` beside it and it will be preserved.
+name=pango
+version=1.58.0
+release=1
+desc="Text layout and rendering"
+url="https://pango.gnome.org/"
+license="LGPL-2.0-or-later"
+depend="glibc cairo harfbuzz fribidi glib"
+makedepend="meson ninja"
+source="https://download.gnome.org/sources/pango/1.58/pango-1.58.0.tar.xz"
+sha256="SKIP"
+
+build() {
+	cd "pango-1.58.0"
+	meson setup build \
+		--prefix=/usr \
+		--libdir=/usr/lib \
+		--sysconfdir=/etc \
+		--localstatedir=/var \
+		--buildtype=release \
+		--wrap-mode=nodownload \
+		-Db_lto=true
+	ninja -C build -j"$JOBS"
+}
+
+package() {
+	cd "pango-1.58.0"
+	DESTDIR="$pkgdir" ninja -C build install
+}

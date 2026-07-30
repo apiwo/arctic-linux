@@ -1,0 +1,24 @@
+# ath9k-htc-open - Free firmware for Atheros ath9k_htc devices
+# Generated from manifest.tsv by gen-ports.py. Edit the manifest, not this file,
+# unless the package needs something the template cannot express - in which case
+# drop a `recipe.local` beside it and it will be preserved.
+name=ath9k-htc-open
+version=1.4.0
+release=1
+desc="Free firmware for Atheros ath9k_htc devices"
+url="https://github.com/qca/open-ath9k-htc-firmware"
+license="BSD-3-Clause"
+depend=""
+makedepend=""
+source="https://github.com/qca/open-ath9k-htc-firmware/archive/refs/tags/1.4.0.tar.gz"
+sha256="SKIP"
+
+options="!strip"
+
+package() {
+	cd "1.4.0"
+	install -d "$pkgdir/usr/lib/firmware"
+	cp -a . "$pkgdir/usr/lib/firmware/"
+	find "$pkgdir/usr/lib/firmware" -name 'Makefile' -delete
+	true
+}

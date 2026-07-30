@@ -1,0 +1,31 @@
+# less - Terminal pager
+# Generated from manifest.tsv by gen-ports.py. Edit the manifest, not this file,
+# unless the package needs something the template cannot express - in which case
+# drop a `recipe.local` beside it and it will be preserved.
+name=less
+version=679
+release=1
+desc="Terminal pager"
+url="https://greenwoodsoftware.com/less/"
+license="GPL-3.0-or-later BSD-2-Clause"
+depend="glibc netbsd-curses"
+makedepend=""
+source="https://www.greenwoodsoftware.com/less/less-679.tar.gz"
+sha256="SKIP"
+
+build() {
+	cd "less-679"
+	./configure \
+		--prefix=/usr \
+		--sysconfdir=/etc \
+		--localstatedir=/var \
+		--libdir=/usr/lib \
+		--disable-static \
+		--disable-nls
+	make -j"$JOBS"
+}
+
+package() {
+	cd "less-679"
+	make DESTDIR="$pkgdir" install
+}

@@ -1,0 +1,24 @@
+# libudev-zero - libudev without systemd, paired with mdev
+# Generated from manifest.tsv by gen-ports.py. Edit the manifest, not this file,
+# unless the package needs something the template cannot express - in which case
+# drop a `recipe.local` beside it and it will be preserved.
+name=libudev-zero
+version=1.0.3
+release=1
+desc="libudev without systemd, paired with mdev"
+url="https://github.com/illiliti/libudev-zero"
+license="ISC"
+depend="glibc"
+makedepend=""
+source="https://github.com/illiliti/libudev-zero/archive/refs/tags/1.0.3.tar.gz"
+sha256="SKIP"
+
+build() {
+	cd "1.0.3"
+	make -j"$JOBS" PREFIX=/usr
+}
+
+package() {
+	cd "1.0.3"
+	make PREFIX=/usr DESTDIR="$pkgdir" install
+}

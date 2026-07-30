@@ -1,0 +1,31 @@
+# libyaml - YAML parser
+# Generated from manifest.tsv by gen-ports.py. Edit the manifest, not this file,
+# unless the package needs something the template cannot express - in which case
+# drop a `recipe.local` beside it and it will be preserved.
+name=libyaml
+version=0.2.5
+release=1
+desc="YAML parser"
+url="https://pyyaml.org/wiki/LibYAML"
+license="MIT"
+depend="glibc"
+makedepend=""
+source="https://github.com/yaml/libyaml/releases/download/0.2.5/yaml-0.2.5.tar.gz"
+sha256="SKIP"
+
+build() {
+	cd "yaml-0.2.5"
+	./configure \
+		--prefix=/usr \
+		--sysconfdir=/etc \
+		--localstatedir=/var \
+		--libdir=/usr/lib \
+		--disable-static \
+		--disable-nls
+	make -j"$JOBS"
+}
+
+package() {
+	cd "yaml-0.2.5"
+	make DESTDIR="$pkgdir" install
+}

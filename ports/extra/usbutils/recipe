@@ -1,0 +1,32 @@
+# usbutils - lsusb
+# Generated from manifest.tsv by gen-ports.py. Edit the manifest, not this file,
+# unless the package needs something the template cannot express - in which case
+# drop a `recipe.local` beside it and it will be preserved.
+name=usbutils
+version=019
+release=1
+desc="lsusb"
+url="https://github.com/gregkh/usbutils"
+license="GPL-2.0-or-later"
+depend="glibc libusb"
+makedepend="meson ninja"
+source="https://kernel.org/pub/linux/utils/usb/usbutils/usbutils-019.tar.xz"
+sha256="SKIP"
+
+build() {
+	cd "usbutils-019"
+	meson setup build \
+		--prefix=/usr \
+		--libdir=/usr/lib \
+		--sysconfdir=/etc \
+		--localstatedir=/var \
+		--buildtype=release \
+		--wrap-mode=nodownload \
+		-Db_lto=true
+	ninja -C build -j"$JOBS"
+}
+
+package() {
+	cd "usbutils-019"
+	DESTDIR="$pkgdir" ninja -C build install
+}

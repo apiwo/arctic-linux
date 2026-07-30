@@ -1,0 +1,32 @@
+# libxkbcommon - Keyboard handling library
+# Generated from manifest.tsv by gen-ports.py. Edit the manifest, not this file,
+# unless the package needs something the template cannot express - in which case
+# drop a `recipe.local` beside it and it will be preserved.
+name=libxkbcommon
+version=1.11.0
+release=1
+desc="Keyboard handling library"
+url="https://xkbcommon.org/"
+license="MIT"
+depend="glibc xkeyboard-config libxml2"
+makedepend="meson ninja"
+source="https://xkbcommon.org/download/libxkbcommon-1.11.0.tar.xz"
+sha256="SKIP"
+
+build() {
+	cd "libxkbcommon-1.11.0"
+	meson setup build \
+		--prefix=/usr \
+		--libdir=/usr/lib \
+		--sysconfdir=/etc \
+		--localstatedir=/var \
+		--buildtype=release \
+		--wrap-mode=nodownload \
+		-Db_lto=true
+	ninja -C build -j"$JOBS"
+}
+
+package() {
+	cd "libxkbcommon-1.11.0"
+	DESTDIR="$pkgdir" ninja -C build install
+}
