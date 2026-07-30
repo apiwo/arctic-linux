@@ -25,6 +25,12 @@ usage() {
 	cat <<EOF
 ${A_TEAL}${C_B}alpm${C_R} ${A_GREY}${ALPM_VERSION} - Arctic Linux Package Manager${C_R}
 
+${C_B}OPTIONS${C_R}
+  -y, --yes, --noconfirm     answer every prompt and warning with yes
+  -s, --source               build from source instead of installing a binary
+  -nomod                     install without putting the package into place
+  --root=<dir>               operate on another root instead of /
+
 ${C_B}INSTALLING${C_R}
   alpm ins <pkg>...          install binary packages
   alpm ins -s <pkg>...       build and install from source
@@ -124,6 +130,17 @@ txid() { date '+%Y%m%d-%H%M%S'; }
 
 TX=""
 TX_DIR=""
+
+# A btrfs snapshot before the transaction, if the system is set up for it.
+# This is separate from alpm's own rollback: that restores the files alpm
+# replaced, whereas this catches anything a package's install script did too.
+tx_snapshot() {
+	[ "${ALPM_SNAPSHOT:-auto}" = "off" ] && return 0
+	[ "$ALPM_ROOT" = "/" ] || return 0          # never for --root installs
+	have arctic-snapshot || return 0
+	[ "$(stat -f -c %T / 2>/dev/null)" = "btrfs" ] || return 0
+	arctic-snapshot create "$1" >/dev/null 2>&1 || :
+}
 
 tx_begin() {
 	TX=$(txid)
@@ -421,6 +438,7 @@ cmd_ins() {
 	printf '\n'
 	confirm "Proceed with installation?" || { msg "aborted"; return 1; }
 
+	tx_snapshot "before installing:$(printf '%s' "$todo" | cut -c1-60)"
 	tx_begin
 	msg "Retrieving packages"
 	i=0
@@ -585,6 +603,7 @@ do_remove() {
 	printf '\n\n  %sFreed:%s %s\n\n' "$A_GREY" "$C_R" "$(human $tot)"
 	confirm "Remove these packages?" || { msg "aborted"; return 1; }
 
+	tx_snapshot "before removing: $*"
 	tx_begin
 	for p in "$@"; do
 		msg2 "removing $p"
@@ -1299,7 +1318,11 @@ for a in "$@"; do
 	case "$a" in
 	-s|--source)  SOURCE=1 ;;
 	-nomod|--nomod|--no-modify) NOMOD=1 ;;
-	-y|--yes)     ALPM_YES=1 ;;
+	-y|--yes|--noconfirm)
+		# Answer every prompt with yes: the install confirmation, the removal
+		# confirmation, and the "no binary, compile?" warning. Exported so the
+		# source-build path, which re-enters alpm and alpm-build, inherits it.
+		ALPM_YES=1; export ALPM_YES ;;
 	--force)      ALPM_FORCE=1 ;;
 	--root=*)     ALPM_ROOT=${a#--root=} ;;
 	*)            args="$args $a" ;;

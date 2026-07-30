@@ -61,6 +61,9 @@ A_FSTAB="yes"
 A_DISK_READY=""
 A_ESP=""
 A_ROOTDEV=""
+A_FS="ext4"
+A_SNAPSHOT="timeshift"
+A_BTRFS_OPTS=""
 
 bail() { tui_done 2>/dev/null; printf '\033[38;5;203merror:\033[0m %s\n' "$*" >&2; exit 1; }
 logit() { printf '[%s] %s\n' "$(date '+%H:%M:%S')" "$*" >>"$LOGF"; }
@@ -238,6 +241,65 @@ screen_wifi() {
 
 
 # ------------------------------------------------------------------ disk setup
+screen_filesystem() {
+	# Only offer what this image can actually create.
+	items=""
+	have mkfs.ext4  && items="$items ext4|ext4|The safe default. Journalled, well understood."
+	have mkfs.btrfs && items="$items btrfs|btrfs|Subvolumes, compression and snapshots"
+	have mkfs.xfs   && items="$items xfs|xfs|Fast on large files, no snapshots"
+	have mkfs.f2fs  && items="$items f2fs|f2fs|Made for flash storage"
+	[ -n "$items" ] || { tui_msgbox "Filesystem" "No mkfs tools are available."; return 1; }
+
+	# shellcheck disable=SC2086
+	tui_menu "Root filesystem" "for $1" $items || return 1
+	A_FS=$TUI_CHOICE
+
+	[ "$A_FS" = btrfs ] || return 0
+
+	# btrfs is the only one here that can snapshot, so the question only makes
+	# sense for it.
+	tui_menu "Snapshots" "btrfs" \
+		"timeshift|Timeshift|Snapshot before every package change. The default." \
+		"snapper|Snapper|Same, in snapper's /.snapshots layout" \
+		"none|No snapshots|Plain subvolumes, nothing automatic" \
+	|| return 1
+	A_SNAPSHOT=$TUI_CHOICE
+	return 0
+}
+
+# Make the filesystem chosen above, and lay out btrfs subvolumes when asked.
+make_root_fs() {
+	dev=$1
+	case "$A_FS" in
+	btrfs)
+		mkfs.btrfs -f -L arctic-root "$dev" >>"$LOGF" 2>&1 || return 1
+		# The @ / @home layout is what both timeshift and snapper expect: the
+		# root subvolume can then be rolled back without taking home with it.
+		mount "$dev" "$TARGET" >>"$LOGF" 2>&1 || return 1
+		btrfs subvolume create "$TARGET/@"          >>"$LOGF" 2>&1 || return 1
+		btrfs subvolume create "$TARGET/@home"      >>"$LOGF" 2>&1 || return 1
+		btrfs subvolume create "$TARGET/@snapshots" >>"$LOGF" 2>&1 || return 1
+		btrfs subvolume create "$TARGET/@log"       >>"$LOGF" 2>&1 || :
+		umount "$TARGET" >>"$LOGF" 2>&1 || return 1
+
+		A_BTRFS_OPTS="rw,noatime,compress=zstd:3,space_cache=v2"
+		mount -o "$A_BTRFS_OPTS,subvol=@" "$dev" "$TARGET" >>"$LOGF" 2>&1 || return 1
+		mkdir -p "$TARGET/home" "$TARGET/.snapshots" "$TARGET/var/log"
+		mount -o "$A_BTRFS_OPTS,subvol=@home"      "$dev" "$TARGET/home"      >>"$LOGF" 2>&1 || :
+		mount -o "$A_BTRFS_OPTS,subvol=@snapshots" "$dev" "$TARGET/.snapshots" >>"$LOGF" 2>&1 || :
+		mount -o "$A_BTRFS_OPTS,subvol=@log"       "$dev" "$TARGET/var/log"   >>"$LOGF" 2>&1 || :
+		;;
+	xfs)   mkfs.xfs -f -L arctic-root "$dev" >>"$LOGF" 2>&1 || return 1
+	       mount "$dev" "$TARGET" >>"$LOGF" 2>&1 || return 1 ;;
+	f2fs)  mkfs.f2fs -f -l arctic-root "$dev" >>"$LOGF" 2>&1 || return 1
+	       mount "$dev" "$TARGET" >>"$LOGF" 2>&1 || return 1 ;;
+	*)     mkfs.ext4 -q -F -L arctic-root "$dev" >>"$LOGF" 2>&1 || return 1
+	       mount "$dev" "$TARGET" >>"$LOGF" 2>&1 || return 1 ;;
+	esac
+	return 0
+}
+
+
 
 list_disks() {
 	for d in /sys/block/*; do
@@ -333,14 +395,15 @@ auto_partition() {
 		p1=""; p2=$(part_name "$disk" 2)
 	fi
 
-	say_step "formatting $p2 as ext4"
-	mkfs.ext4 -q -F -L arctic-root "$p2" >>"$LOGF" 2>&1 || {
-		tui_msgbox "Disk" "mkfs.ext4 failed on $p2."; return 1; }
+	screen_filesystem "$p2" || return 1
+	tui_clear; tui_header "Disk" "$disk"; r=4
 
-	say_step "mounting $p2 on $TARGET"
+	say_step "formatting $p2 as $A_FS"
 	mkdir -p "$TARGET"
-	mount "$p2" "$TARGET" >>"$LOGF" 2>&1 || {
-		tui_msgbox "Disk" "Could not mount $p2 on $TARGET."; return 1; }
+	make_root_fs "$p2" || {
+		tui_msgbox "Disk" "Could not create the $A_FS filesystem on $p2. See $LOGF."
+		return 1; }
+	[ "$A_FS" = btrfs ] && say_step "created subvolumes @ @home @snapshots @log"
 
 	if [ -n "${p1:-}" ]; then
 		say_step "mounting $p1 on $TARGET/boot"
@@ -582,6 +645,7 @@ screen_review() {
 		row "Locale"        "$A_LOCALE  keymap $A_KEYMAP"
 		row "Time zone"     "$A_TZ$([ "$A_NTP" = yes ] && echo ' (NTP on)')"
 		row "Network"       "$A_NET${A_WIFI_SSID:+ ($A_WIFI_SSID)}"
+		row "Filesystem"    "$A_FS$([ "$A_FS" = btrfs ] && printf ' (subvolumes, snapshots: %s)' "${A_SNAPSHOT:-none}")"
 		row "Swap"          "$A_SWAP $([ "$A_SWAP" = partition ] && echo "$A_SWAPDEV" || echo "$A_SWAPSIZE")"
 		row "Graphics"      "$A_GPU"
 		row "Microcode"     "$(detect_microcode)"
@@ -621,6 +685,8 @@ A_TZ='$A_TZ'
 A_NTP='$A_NTP'
 A_NET='$A_NET'
 A_WIFI_SSID='$A_WIFI_SSID'
+A_FS='$A_FS'
+A_SNAPSHOT='$A_SNAPSHOT'
 A_SWAP='$A_SWAP'
 A_SWAPSIZE='$A_SWAPSIZE'
 A_SWAPDEV='$A_SWAPDEV'
@@ -822,6 +888,16 @@ do_install() {
 	[ "$A_SSH" = yes ] && target_alpm ins openssh || :
 	[ "$A_FIREWALL" = yes ] && target_alpm ins nftables || :
 
+	step "Installing filesystem tools" "$A_FS"
+	case "$A_FS" in
+	btrfs) target_alpm ins btrfs-progs || : ;;
+	xfs)   target_alpm ins xfsprogs || : ;;
+	f2fs)  target_alpm ins f2fs-tools || : ;;
+	esac
+
+	step "Setting up snapshots" "${A_SNAPSHOT:-none}"
+	setup_snapshots
+
 	step "Writing fstab" "/etc/fstab"
 	write_fstab
 
@@ -888,6 +964,33 @@ EOF
 
 warn_soft() { logit "warning: $*"; }
 
+# Snapshots only mean anything on btrfs, so everything here is conditional on it.
+setup_snapshots() {
+	[ "$A_FS" = btrfs ] || { logit "not btrfs, skipping snapshot setup"; return 0; }
+	case "${A_SNAPSHOT:-none}" in none|"") logit "snapshots declined"; return 0 ;; esac
+
+	mkdir -p "$TARGET/etc/arctic" "$TARGET/.snapshots"
+	cat >"$TARGET/etc/arctic/snapshot.conf" <<-EOF
+		# Written by arctic-strap.
+		# Which tool arctic-snapshot hands over to when it is installed. Until
+		# then it drives btrfs directly, which is what both of them do anyway.
+		TOOL=$A_SNAPSHOT
+		SUBVOL_DIR=/.snapshots
+		# How many automatic snapshots to keep before the oldest are pruned.
+		KEEP=20
+	EOF
+
+	# The real tool, if we have a package for it. Neither is built yet, so this
+	# is expected to be a no-op today - arctic-snapshot covers the job meanwhile.
+	case "$A_SNAPSHOT" in
+	timeshift) target_alpm ins timeshift 2>/dev/null || \
+		logit "timeshift package not available; arctic-snapshot will drive btrfs directly" ;;
+	snapper)   target_alpm ins snapper 2>/dev/null || \
+		logit "snapper package not available; arctic-snapshot will drive btrfs directly" ;;
+	esac
+	logit "snapshots configured: $A_SNAPSHOT"
+}
+
 chroot_run() {
 	[ -x "$TARGET/usr/bin/env" ] || [ -x "$TARGET/bin/sh" ] || return 1
 	mount --bind /dev "$TARGET/dev" 2>/dev/null || :
@@ -910,12 +1013,22 @@ write_fstab() {
 		if [ -n "$rootdev" ]; then
 			uuid=$(blkid -s UUID -o value "$rootdev" 2>/dev/null)
 			dev=${uuid:+UUID=$uuid}; dev=${dev:-$rootdev}
-			opts="rw,relatime"
-			[ "$(detect_rotational)" = ssd ] && opts="rw,noatime"
-			printf '%s\t/\t%s\t%s\t0\t1\n' "$dev" "${roottype:-ext4}" "$opts"
+			if [ "${roottype:-}" = btrfs ]; then
+				# Every btrfs line needs its subvolume, or the machine mounts
+				# the top level and the @ / @home split does nothing.
+				bo=${A_BTRFS_OPTS:-rw,noatime,compress=zstd:3,space_cache=v2}
+				printf '%s\t/\tbtrfs\t%s,subvol=@\t0\t0\n' "$dev" "$bo"
+				printf '%s\t/home\tbtrfs\t%s,subvol=@home\t0\t0\n' "$dev" "$bo"
+				printf '%s\t/.snapshots\tbtrfs\t%s,subvol=@snapshots\t0\t0\n' "$dev" "$bo"
+				printf '%s\t/var/log\tbtrfs\t%s,subvol=@log\t0\t0\n' "$dev" "$bo"
+			else
+				opts="rw,relatime"
+				[ "$(detect_rotational)" = ssd ] && opts="rw,noatime"
+				printf '%s\t/\t%s\t%s\t0\t1\n' "$dev" "${roottype:-ext4}" "$opts"
+			fi
 		fi
 		# Anything mounted under the target, boot included.
-		awk -v t="$TARGET" 'index($2, t"/")==1 {print $1, substr($2, length(t)+1), $3}' \
+		awk -v t="$TARGET" 'index($2, t"/")==1 && $3!="btrfs" {print $1, substr($2, length(t)+1), $3}' \
 			/proc/mounts | while read -r d m ty; do
 			uuid=$(blkid -s UUID -o value "$d" 2>/dev/null)
 			dd=${uuid:+UUID=$uuid}; dd=${dd:-$d}
