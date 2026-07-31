@@ -263,12 +263,48 @@ if [ ! -f "$DEPS/usr/lib/libcurses.so" ]; then
 		# Anything that asks for -lncurses gets netbsd-curses instead. Note
 		# that libterminfo.so is a real library here, not an alias: it holds
 		# the ti_* symbols libcurses.so itself depends on.
+		#
+		# libtinfow.so (the wide-char name) has to be here too, not just
+		# libtinfo.so: autoconf's tinfo probe (UL_TINFO_CHECK, used by
+		# util-linux and others) tries "-ltinfow" before "-ltinfo", and
+		# without this symlink that search finds nothing under $DEPS and
+		# falls through to the build host's real libtinfow.so instead -
+		# which Arctic does not ship, so the resulting binary fails on the
+		# target with "libtinfow.so.6: cannot open shared object file".
 		for base in "$DEPS" "$R"; do
 			[ -f "$base/usr/lib/libcurses.so" ] || continue
 			ln -sf libcurses.so   "$base/usr/lib/libncurses.so"
 			ln -sf libcurses.so   "$base/usr/lib/libncursesw.so"
 			ln -sf libterminfo.so "$base/usr/lib/libtinfo.so"
+			ln -sf libterminfo.so "$base/usr/lib/libtinfow.so"
 			ln -sf libterminfo.so "$base/usr/lib/libtermcap.so"
+			# Packages written against GNU ncurses probe for headers under an
+			# "ncursesw/" subdirectory before falling back to a flat ncurses.h.
+			# netbsd-curses has no such subdirectory, so that probe walks past
+			# $DEPS/usr/include entirely and picks up the build host's real
+			# ncursesw headers instead - compiled against those, then linked
+			# against netbsd-curses above, a binary like cfdisk ends up wanting
+			# a literal `acs_map` symbol (how GNU ncurses.h declares it) when
+			# netbsd-curses only exports it as `_acs_char`, aliased to
+			# `acs_map` by a #define that never gets seen because the wrong
+			# header won. Shimming the subdirectory closes that gap.
+			mkdir -p "$base/usr/include/ncursesw"
+			for hdr in curses.h ncurses.h term.h unctrl.h; do
+				[ -f "$base/usr/include/$hdr" ] || continue
+				ln -sf "../$hdr" "$base/usr/include/ncursesw/$hdr"
+			done
+			# Same story one layer down, for pkg-config instead of the C
+			# preprocessor: netbsd-curses' own install names this file
+			# terminfo.pc, but UL_TINFO_CHECK (util-linux and others) asks
+			# pkg-config for "tinfow" and then "tinfo" - neither of which
+			# exists under $DEPS, so the query falls through to the build
+			# host's real tinfo/tinfow.pc and quietly pulls in host paths.
+			# The content doesn't need to differ, pkg-config just matches on
+			# the filename, so an alias is enough.
+			if [ -f "$base/usr/lib/pkgconfig/terminfo.pc" ]; then
+				ln -sf terminfo.pc "$base/usr/lib/pkgconfig/tinfo.pc"
+				ln -sf terminfo.pc "$base/usr/lib/pkgconfig/tinfow.pc"
+			fi
 		done
 	fi
 else

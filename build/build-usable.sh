@@ -41,7 +41,32 @@ export CXXFLAGS="$CFLAGS"
 step "building util-linux 2.41.5 (cfdisk, sfdisk, wipefs, lsblk, blkid)"
 if [ ! -x "$R/usr/bin/cfdisk" ]; then
 	unpack util-linux-2.41.5 util-linux-2.41.5.tar.xz
+	# cfdisk needs a curses library and libsmartcols (lsblk, findmnt, ...) wants
+	# terminfo for column widths. Without PKG_CONFIG_PATH pointing at $DEPS,
+	# configure happily finds the build host's GNU ncurses instead - Arctic
+	# ships none of that, only netbsd-curses (README: "terminal library:
+	# netbsd-curses, not ncurses") - and the result is a cfdisk/lsblk that
+	# fail on the target with "error while loading shared libraries:
+	# libncursesw.so.6 / libtinfow.so.6: cannot open shared object file".
+	# $DEPS/usr/lib/pkgconfig/ncursesw.pc points back at netbsd-curses, whose
+	# real SONAME is plain "libcurses.so" - already shipped in the base image -
+	# so linking against it here resolves cleanly on the target.
+	#
+	# util-linux's ncurses probe (UL_NCURSES_CHECK) tries ncursesw6-config
+	# before pkg-config, and this build host has one: it hands back the
+	# host's own "-I/usr/include/ncursesw", bypassing PKG_CONFIG_PATH for the
+	# header side while the library side still resolves through pkg-config to
+	# Arctic's libs. Host headers plus Arctic's library disagree on how
+	# curses globals like acs_map are exposed, and cfdisk fails to link with
+	# "undefined reference to acs_map". Forcing the *_CONFIG tools to "false"
+	# pushes the probe straight to pkg-config, so header and library come
+	# from the same (Arctic) place.
 	( cd "$W/util-linux-2.41.5" && \
+	  PKG_CONFIG_PATH="$DEPS/usr/lib/pkgconfig" \
+	  CFLAGS="$CFLAGS -I$DEPS/usr/include" \
+	  LDFLAGS="-L$DEPS/usr/lib -Wl,-rpath-link,$DEPS/usr/lib" \
+	  NCURSESW6_CONFIG=false NCURSESW5_CONFIG=false \
+	  NCURSES6_CONFIG=false NCURSES5_CONFIG=false \
 	  ./configure --prefix=/usr --bindir=/usr/bin --sbindir=/usr/bin \
 		--libdir=/usr/lib --disable-static --disable-nls --disable-rpath \
 		--without-python --without-systemd --without-udev \
@@ -50,19 +75,32 @@ if [ ! -x "$R/usr/bin/cfdisk" ]; then
 		--enable-cfdisk --enable-fdisk --enable-sfdisk --enable-wipefs \
 		--enable-lsblk --enable-blkid --enable-findmnt --enable-partx \
 		--disable-login --disable-su --disable-runuser --disable-chfn-chsh \
-		--disable-write --disable-wall --disable-mesg \
+		--disable-write --disable-wall --disable-mesg --disable-sulogin \
+		--disable-setterm --disable-more --disable-ul --disable-scriptutils \
+		--disable-last --disable-utmpdump --without-readline \
 	  && make -j"$J" \
 	) >"$L/util-linux.log" 2>&1 && {
 		d=$W/util-linux-2.41.5
 		# Copy the built artefacts directly. "make install" relinks with libtool
 		# and fails on libmount.la; the binaries are already correct, and Arctic
 		# only wants the partitioning and block-device tools anyway.
+		#
+		# Every one of these links against an uninstalled libtool library
+		# (libmount.la, libblkid.la, ...), so the file libtool leaves at the top
+		# of the build directory - $d/$t - is not the binary. It is a shell
+		# script: "temporary wrapper script for .libs/$t ... should never be
+		# moved out of the build directory." Moving it anyway is exactly what
+		# happened here, and it is why cfdisk and friends failed on a booted
+		# image with a wrapper-script error instead of running. The real ELF is
+		# at $d/.libs/$t.
 		for t in cfdisk sfdisk fdisk wipefs lsblk blkid findmnt partx \
 		         mkswap swapon swapoff losetup; do
-			[ -f "$d/$t" ] || continue
+			src="$d/.libs/$t"
+			[ -f "$src" ] || src="$d/$t"
+			[ -f "$src" ] || continue
 			# busybox owns some of these names as symlinks; the real tool wins.
 			[ -L "$R/usr/bin/$t" ] && rm -f "$R/usr/bin/$t"
-			install -Dm755 "$d/$t" "$R/usr/bin/$t"
+			install -Dm755 "$src" "$R/usr/bin/$t"
 		done
 		for lib in "$d"/.libs/lib*.so.*; do
 			[ -f "$lib" ] || continue
@@ -139,6 +177,28 @@ else
 	ok "ell already built"
 fi
 
+step "building libedit (so iwctl links against it instead of GNU readline)"
+if [ ! -f "$DEPS/usr/lib/libedit.so" ]; then
+	unpack libedit-20260512-3.1 libedit-20260512-3.1.tar.gz
+	( cd "$W/libedit-20260512-3.1" && \
+	  PKG_CONFIG_PATH="$DEPS/usr/lib/pkgconfig" \
+	  CFLAGS="$CFLAGS -I$DEPS/usr/include" \
+	  LDFLAGS="-L$DEPS/usr/lib" \
+	  ./configure --prefix=/usr --libdir=/usr/lib --disable-static \
+	  && make -j"$J" \
+	  && make DESTDIR="$DEPS" install && make DESTDIR="$R" install \
+	) >"$L/libedit.log" 2>&1 && ok "libedit" || bad "libedit (see logs/libedit.log)"
+else
+	ok "libedit already built"
+fi
+
+# iwctl's configure.ac picks GNU readline unless --enable-libedit is passed, and
+# whichever one it picks becomes a hard NEEDED entry in the binary - readline
+# has no fallback and Arctic does not ship it (BSD userland: libedit is the
+# readline replacement everywhere else too). Left at the default, iwctl links
+# against the build host's readline and then fails to start on the target with
+# "error while loading shared libraries: libreadline.so.8: cannot open shared
+# object file" - the "missing linker error" this fixes.
 step "building iwd 3.12 (iwctl - this is what wireless needs)"
 if [ ! -x "$R/usr/bin/iwctl" ]; then
 	unpack iwd-3.12 iwd-3.12.tar.xz
@@ -149,6 +209,7 @@ if [ ! -x "$R/usr/bin/iwctl" ]; then
 	  ./configure --prefix=/usr --libexecdir=/usr/lib \
 		--sysconfdir=/etc --localstatedir=/var \
 		--disable-systemd-service --enable-external-ell \
+		--enable-libedit \
 	  && make -j"$J" \
 	  && make DESTDIR="$R" install \
 	) >"$L/iwd.log" 2>&1 && {

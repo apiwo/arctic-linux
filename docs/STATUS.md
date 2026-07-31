@@ -151,6 +151,59 @@ that, and every one of them would have blocked a real install:
    the top of `mediatek/`, so no MediaTek firmware shipped at all - on a machine
    whose wireless card is an MT7922.
 
+## Fixes from the second real install attempt
+
+Fix 2 above shipped real `cfdisk`, `sfdisk`, `wipefs` and `lsblk` binaries, but
+`build-usable.sh` built them the way a native, non-cross build on this host
+naturally comes out - and that quietly linked several of them against the build
+host's own libraries instead of Arctic's. Booting the result reproduced almost
+the same failure the fix was supposed to solve, plus a new one in `iwctl`.
+
+1. **`cfdisk` and `lsblk` printed "This is a wrapper script" instead of
+   running, and most of the rest of the disk toolkit (`sfdisk`, `wipefs`,
+   `blkid`, `findmnt`, `partx`, `mkswap`, `swapon`, `swapoff`, `losetup`) did
+   nothing at all.** libtool leaves the real binary at `.libs/$t` and puts a
+   "temporary wrapper script ... should never be moved out of the build
+   directory" at the top-level `$t` - `build-usable.sh` was copying the
+   wrapper. It now copies `.libs/$t`.
+
+2. **`cfdisk` and `lsblk` then failed with `error while loading shared
+   libraries: libncursesw.so.6` / `libtinfow.so.6: cannot open shared object
+   file`.** With the wrapper-script bug fixed, the real binaries turned out to
+   be linked against the build host's GNU ncurses - Arctic ships netbsd-curses
+   and none of that. Getting util-linux to build against netbsd-curses instead
+   took three separate fixes, each a different tool finding the host's copy of
+   something by a different route:
+   - `PKG_CONFIG_PATH`, `CFLAGS` and `LDFLAGS` now point at `$DEPS`, Arctic's
+     staging prefix, so `-lncursesw` resolves to netbsd-curses.
+   - util-linux's ncurses probe tries `ncursesw6-config` *before* pkg-config,
+     and this host has one; it was handing back the host's own
+     `-I/usr/include/ncursesw` regardless of `PKG_CONFIG_PATH`, so header and
+     library came from two different curses implementations that disagree on
+     how globals like `acs_map` are exposed. `NCURSESW6_CONFIG=false` (and the
+     5-config/non-w variants) forces the probe to fall through to pkg-config.
+   - netbsd-curses' own install only provided `libtinfo.so`/`tinfo.pc`, not
+     the wide-char `libtinfow.so`/`tinfow.pc` name that the same probe tries
+     first, so *that* lookup alone still fell through to the host. Both are
+     now aliased in `build-rootfs.sh` alongside the existing ncurses symlinks.
+   - GNU-ncurses-style packages also expect headers under an `ncursesw/`
+     subdirectory that netbsd-curses doesn't have; `build-rootfs.sh` now
+     shims one that redirects back to Arctic's own flat headers.
+
+3. **`iwctl` failed with `error while loading shared libraries:
+   libreadline.so.8: cannot open shared object file`.** Left to its own
+   defaults, iwd's client links GNU readline for line editing, and Arctic
+   ships none. iwd also supports `--enable-libedit` as a drop-in alternative;
+   `build-usable.sh` now builds libedit first and passes that flag. util-linux
+   hit the same readline issue in `sfdisk`/`fdisk`'s interactive prompt, but
+   has no libedit option there, so that build now passes `--without-readline`
+   instead.
+
+Verified by booting the rebuilt image in QEMU and running `lsblk`, `cfdisk
+--version`, `sfdisk --version` and `iwctl --version` for real, plus checking
+every `NEEDED` entry of every shipped binary against what the rootfs actually
+ships - nothing points outside it.
+
 ## Bugs found and fixed while building
 
 Kept because each one is a trap worth remembering.
