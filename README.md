@@ -233,10 +233,7 @@ fails with `EROFS` instead of taking the machine down.
 ```sh
 build/arctic-sandbox --check          # prove the sandbox holds, first
 
-build/arctic-sandbox build/build-kernel.sh base     # or libre / small
-build/arctic-sandbox build/build-rootfs.sh
-build/arctic-sandbox build/mkpkgs.sh
-build/arctic-sandbox iso/mkiso minimal
+build/build.sh                        # fetch, kernel, rootfs, tools, package, ISO
 ```
 
 It uses bubblewrap: the whole host is bind-mounted read-only, and only the build

@@ -14,11 +14,11 @@ source="https://github.com/michaelforney/reflex/archive/refs/tags/20260210.tar.g
 sha256="SKIP"
 
 build() {
-	cd "20260210"
+	cd "reflex-20260210"
 	make -j"$JOBS" PREFIX=/usr
 }
 
 package() {
-	cd "20260210"
+	cd "reflex-20260210"
 	make PREFIX=/usr DESTDIR="$pkgdir" install
 }

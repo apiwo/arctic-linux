@@ -6,15 +6,21 @@ free. Paths default to `/home/apiwo/arctic-build`; override with `ARCTIC_BUILD`
 where the scripts honour it, or edit `B=` at the top.
 
 ```sh
-./fetch.sh              # download every upstream tarball named in sources.list
-./build-kernel.sh base  # or: libre / small
-./build-rootfs.sh       # glibc, busybox, toybox, zsh, doas, and the rest
-./mkpkgs.sh             # turn the results into .alpmz and index the repos
-../iso/mkiso minimal    # or: live
+./build.sh               # fetch, kernel, rootfs, usable tools, package, ISO
+./build.sh rootfs iso    # or run just the steps you need, in order
 ```
 
-Each step is idempotent: anything already built is skipped, so a failed run can
-be fixed and re-run without starting over.
+`build.sh` is the one script to run; it drives everything else in `build/`
+through `arctic-sandbox` for you. Its steps, in order: `fetch` (every upstream
+tarball named in `sources.list`), `kernel`, `rootfs` (glibc, busybox, toybox,
+zsh, doas, and the rest), `usable` (the disk-partitioning and wireless tools
+layered on top - see `docs/STATUS.md`), `pkgs` (turn everything into `.alpmz`
+and index the repos), `iso` (master the bootable image). Each step is
+idempotent: anything already built is skipped, so a failed run can be fixed
+and re-run without starting over.
+
+To build one extra package for the repo directly: `build/arctic-sandbox
+build/build-batch.sh <name>`.
 
 ## A note on the toolchain
 

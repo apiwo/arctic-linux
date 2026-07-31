@@ -14,7 +14,7 @@ source="https://github.com/benhoyt/inih/archive/refs/tags/r60.tar.gz"
 sha256="SKIP"
 
 build() {
-	cd "r60"
+	cd "inih-r60"
 	meson setup build \
 		--prefix=/usr \
 		--libdir=/usr/lib \
@@ -27,6 +27,6 @@ build() {
 }
 
 package() {
-	cd "r60"
+	cd "inih-r60"
 	DESTDIR="$pkgdir" ninja -C build install
 }

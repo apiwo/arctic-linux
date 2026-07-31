@@ -14,11 +14,11 @@ source="https://github.com/P-H-C/phc-winner-argon2/archive/refs/tags/20190702.ta
 sha256="SKIP"
 
 build() {
-	cd "20190702"
+	cd "phc-winner-argon2-20190702"
 	make -j"$JOBS" PREFIX=/usr
 }
 
 package() {
-	cd "20190702"
+	cd "phc-winner-argon2-20190702"
 	make PREFIX=/usr DESTDIR="$pkgdir" install
 }

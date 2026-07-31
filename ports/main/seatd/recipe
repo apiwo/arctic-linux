@@ -14,7 +14,7 @@ source="https://git.sr.ht/~kennylevinsen/seatd/archive/0.9.1.tar.gz"
 sha256="SKIP"
 
 build() {
-	cd "0.9.1"
+	cd "seatd-0.9.1"
 	meson setup build \
 		--prefix=/usr \
 		--libdir=/usr/lib \
@@ -27,6 +27,6 @@ build() {
 }
 
 package() {
-	cd "0.9.1"
+	cd "seatd-0.9.1"
 	DESTDIR="$pkgdir" ninja -C build install
 }

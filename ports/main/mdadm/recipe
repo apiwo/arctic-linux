@@ -15,6 +15,12 @@ sha256="SKIP"
 
 build() {
 	cd "mdadm-4.4"
+	# The Intel IMSM/VMD platform code initializes a 4-byte signature field
+	# with a 4-character string literal, which newer GCC now treats as an
+	# error (no room for the NUL terminator) rather than a warning, and this
+	# Makefile builds with -Werror. Not a real bug worth patching upstream
+	# source for here - just stop treating it as fatal.
+	export CWFLAGS="-Wall -Wno-error -fstack-protector-strong -fPIE -O2"
 	make -j"$JOBS" PREFIX=/usr
 }
 

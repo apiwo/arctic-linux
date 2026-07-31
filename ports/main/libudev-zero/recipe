@@ -14,11 +14,11 @@ source="https://github.com/illiliti/libudev-zero/archive/refs/tags/1.0.3.tar.gz"
 sha256="SKIP"
 
 build() {
-	cd "1.0.3"
+	cd "libudev-zero-1.0.3"
 	make -j"$JOBS" PREFIX=/usr
 }
 
 package() {
-	cd "1.0.3"
+	cd "libudev-zero-1.0.3"
 	make PREFIX=/usr DESTDIR="$pkgdir" install
 }
