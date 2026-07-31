@@ -50,6 +50,17 @@ write_limine_conf() {
 	[ -n "$initrd" ] && mods="$mods
     module_path: boot():/$(basename "$initrd")"
 
+	# An encrypted root needs the initramfs to unlock it before "root=" means
+	# anything - rd.luks.uuid= is what arctic-mkinitramfs's /init looks for
+	# to trigger the passphrase prompt. crypttab (written by arctic-strap) is
+	# the one place that UUID is recorded, so read it back from there rather
+	# than needing a separate answer-file variable to stay in sync with it.
+	luks=""
+	if [ -s "$ROOTDIR/etc/crypttab" ]; then
+		cu=$(awk '$1=="cryptroot"{print $2}' "$ROOTDIR/etc/crypttab" | sed 's/^UUID=//' | head -1)
+		[ -n "$cu" ] && luks="rd.luks.uuid=$cu "
+	fi
+
 	# Limine 9+ configuration syntax.
 	cat >"$bd/limine.conf" <<EOF
 # Arctic Linux - Limine configuration
@@ -66,17 +77,17 @@ backdrop: 5f5bc6
 /Arctic linux
     protocol: linux
     kernel_path: boot():/$kname
-    kernel_cmdline: root=$rootspec rw quiet loglevel=3 arctic.splash$mods
+    kernel_cmdline: ${luks}root=$rootspec rw quiet loglevel=3 arctic.splash$mods
 
 /Arctic linux (verbose)
     protocol: linux
     kernel_path: boot():/$kname
-    kernel_cmdline: root=$rootspec rw loglevel=7$mods
+    kernel_cmdline: ${luks}root=$rootspec rw loglevel=7$mods
 
 /Arctic linux (recovery shell)
     protocol: linux
     kernel_path: boot():/$kname
-    kernel_cmdline: root=$rootspec rw single init=/bin/sh$mods
+    kernel_cmdline: ${luks}root=$rootspec rw single init=/bin/sh$mods
 EOF
 	# Older Limine reads limine.cfg; ship both so either version boots.
 	sed 's|^/Arctic|:Arctic|; s|^    \([a-z_]*\): |    \1=|' "$bd/limine.conf" \
@@ -134,18 +145,27 @@ install_grub() {
 	disk=$(printf '%s' "$dev" | sed 's|p\?[0-9]*$||')
 	run grub-install --target=i386-pc --boot-directory="$bd" "$disk" || \
 		{ echo "arctic-boot-strap: grub-install failed" >&2; exit 1; }
+
+	# Same reasoning as write_limine_conf's $luks - read from crypttab so an
+	# encrypted root gets the initramfs the passphrase prompt it needs.
+	luks=""
+	if [ -s "$rd/etc/crypttab" ]; then
+		cu=$(awk '$1=="cryptroot"{print $2}' "$rd/etc/crypttab" | sed 's/^UUID=//' | head -1)
+		[ -n "$cu" ] && luks="rd.luks.uuid=$cu "
+	fi
+
 	mkdir -p "$bd/grub"
 	cat >"$bd/grub/grub.cfg" <<EOF
 set timeout=3
 set default=0
 insmod all_video
 menuentry "Arctic linux" {
-	linux /$(basename "$(ls "$bd"/vmlinuz-* | head -1)") root=$(awk '$2=="/"{print $1; exit}' "$rd/etc/fstab") rw quiet
+	linux /$(basename "$(ls "$bd"/vmlinuz-* | head -1)") ${luks}root=$(awk '$2=="/"{print $1; exit}' "$rd/etc/fstab") rw quiet
 $( [ -f "$(ls "$bd"/initramfs-* 2>/dev/null | head -1)" ] && \
 	printf '\tinitrd /%s\n' "$(basename "$(ls "$bd"/initramfs-* | head -1)")" )
 }
 menuentry "Arctic linux (recovery shell)" {
-	linux /$(basename "$(ls "$bd"/vmlinuz-* | head -1)") root=$(awk '$2=="/"{print $1; exit}' "$rd/etc/fstab") rw single init=/bin/sh
+	linux /$(basename "$(ls "$bd"/vmlinuz-* | head -1)") ${luks}root=$(awk '$2=="/"{print $1; exit}' "$rd/etc/fstab") rw single init=/bin/sh
 }
 EOF
 }
@@ -210,9 +230,19 @@ fi
 K=Arctic-base-kernel
 [ -f "$CONF" ] && . "$CONF" 2>/dev/null && K=${A_KERNEL:-$K}
 
-# Work out the root of the install from the boot directory.
-ROOTDIR=$(printf '%s' "$BOOTDIR" | sed 's|/boot/*$||')
-[ -n "$ROOTDIR" ] || ROOTDIR=/mnt
+# Work out the root of the install from the boot directory. Arctic's own
+# auto-partitioner mounts the whole ESP straight at $TARGET/boot, so
+# stripping one trailing "/boot" is normally enough - but someone who
+# partitioned by hand may well have used the more common separate
+# /boot + /boot/efi layout instead, where that strip lands on
+# ".../boot/efi" and leaves the "/boot/efi" tail in place, pointing at the
+# ESP itself rather than the installed root. Walk upward until a directory
+# actually has etc/fstab in it, which works for either layout.
+ROOTDIR=$BOOTDIR
+while [ "$ROOTDIR" != "/" ] && [ "$ROOTDIR" != "." ] && [ ! -f "$ROOTDIR/etc/fstab" ]; do
+	ROOTDIR=$(dirname "$ROOTDIR")
+done
+[ -f "$ROOTDIR/etc/fstab" ] || ROOTDIR=/mnt
 [ -d "$ROOTDIR" ] || { echo "arctic-boot-strap: cannot locate the installed system near $BOOTDIR" >&2; exit 1; }
 
 tui_init

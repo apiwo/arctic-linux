@@ -34,7 +34,7 @@ toolchain, busybox init, zsh, doas, and its own package manager.
 | libc | glibc 2.44 |
 | userland | toybox 0BSD (235 commands, static) + busybox for init and networking |
 | shell | zsh 5.9.2 |
-| init | busybox init, with shell rc scripts and `arctic-service` |
+| init | busybox init, with shell rc scripts and `service` |
 | toolchain | LLVM: clang, lld, libc++ |
 | privileges | doas — there is no sudo |
 | terminal library | netbsd-curses, not ncurses |

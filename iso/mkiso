@@ -85,7 +85,7 @@ install -Dm644 "$SRCTREE/installer/lib/tui.sh"        "$S/usr/lib/arctic/tui.sh"
 cp -a "$SRCTREE/skel/etc/." "$S/etc/"
 cp -a "$SRCTREE/skel/usr/." "$S/usr/"
 chmod +x "$S/etc/rc.boot" "$S/etc/rc.shutdown" "$S/etc/rc.d"/* \
-	"$S/usr/bin/arctic-service" "$S/usr/bin/arcticfetch" "$S/usr/bin/arctic-firstboot"
+	"$S/usr/bin/service" "$S/usr/bin/arcticfetch" "$S/usr/bin/arctic-firstboot"
 
 # Branding: logos, wallpapers, the boot splash, the ascii art.
 mkdir -p "$S/usr/share/arctic"

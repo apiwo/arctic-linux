@@ -1,10 +1,10 @@
 #!/bin/sh
-# arctic-service - start, stop and enable Arctic services
+# service - start, stop and enable Arctic services
 #
-#   arctic-service list                 show every service and its state
-#   arctic-service status <name>        is it running?
-#   arctic-service start|stop|restart <name>
-#   arctic-service enable|disable <name>
+#   service list                 show every service and its state
+#   service status <name>        is it running?
+#   service start|stop|restart <name>
+#   service enable|disable <name>
 #
 # A service is a script in /etc/rc.d taking start/stop/status. Enabling one
 # creates a marker in /etc/arctic/services, which rc.boot reads in order.
@@ -42,7 +42,7 @@ list|ls)
 	done
 	printf '\n' ;;
 status)
-	n=${2:?usage: arctic-service status <name>}
+	n=${2:?usage: service status <name>}
 	exists "$n" || { echo "no such service: $n" >&2; exit 1; }
 	if running "$n"; then
 		printf '  %s%s%s is %srunning%s%s\n' "$_SNOW" "$n" "$_R" "$_MINT" "$_R" \
@@ -53,17 +53,17 @@ status)
 	fi ;;
 start)
 	need_root
-	n=${2:?usage: arctic-service start <name>}
+	n=${2:?usage: service start <name>}
 	exists "$n" || { echo "no such service: $n" >&2; exit 1; }
 	begin "starting $n"; "$RCD/$n" start >/dev/null 2>&1 && good || { bad; exit 1; } ;;
 stop)
 	need_root
-	n=${2:?usage: arctic-service stop <name>}
+	n=${2:?usage: service stop <name>}
 	exists "$n" || { echo "no such service: $n" >&2; exit 1; }
 	begin "stopping $n"; "$RCD/$n" stop >/dev/null 2>&1 && good || { bad; exit 1; } ;;
 restart)
 	need_root
-	n=${2:?usage: arctic-service restart <name>}
+	n=${2:?usage: service restart <name>}
 	exists "$n" || { echo "no such service: $n" >&2; exit 1; }
 	begin "restarting $n"
 	"$RCD/$n" stop >/dev/null 2>&1
@@ -71,13 +71,13 @@ restart)
 	"$RCD/$n" start >/dev/null 2>&1 && good || { bad; exit 1; } ;;
 enable)
 	need_root
-	n=${2:?usage: arctic-service enable <name>}
+	n=${2:?usage: service enable <name>}
 	exists "$n" || { echo "no such service: $n" >&2; exit 1; }
 	mkdir -p "$ENA"; : >"$ENA/$n"
 	printf '  %s%s%s will start at boot\n' "$_SNOW" "$n" "$_R" ;;
 disable)
 	need_root
-	n=${2:?usage: arctic-service disable <name>}
+	n=${2:?usage: service disable <name>}
 	rm -f "$ENA/$n"
 	printf '  %s%s%s will no longer start at boot\n' "$_SNOW" "$n" "$_R" ;;
 *)

@@ -10,11 +10,11 @@ url="https://github.com/json-c/json-c"
 license="MIT"
 depend="glibc"
 makedepend="cmake ninja"
-source="https://github.com/json-c/json-c/archive/refs/tags/json-c-0.19-20250101.tar.gz"
+source="https://github.com/json-c/json-c/archive/refs/tags/json-c-0.19-20260627.tar.gz"
 sha256="SKIP"
 
 build() {
-	cmake -S "json-c-0.19-20250101" -B build -G Ninja \
+	cmake -S "json-c-json-c-0.19-20260627" -B build -G Ninja \
 		-DCMAKE_INSTALL_PREFIX=/usr \
 		-DCMAKE_INSTALL_LIBDIR=lib \
 		-DCMAKE_BUILD_TYPE=Release \

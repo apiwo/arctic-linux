@@ -45,7 +45,7 @@ main	expat	2.8.2	autotools	MIT	glibc	-	https://libexpat.github.io/	https://githu
 main	libffi	3.5.2	autotools	MIT	glibc	-	https://sourceware.org/libffi/	https://github.com/libffi/libffi/releases/download/v{version}/libffi-{version}.tar.gz	Foreign function interface
 main	libedit	20260512	autotools	BSD-3-Clause	glibc,netbsd-curses	-	https://thrysoee.dk/editline/	https://thrysoee.dk/editline/libedit-{version}-3.1.tar.gz	BSD line editing, replacing readline
 main	sqlite	3.52.0	autotools	blessing	glibc,netbsd-curses,libedit	-	https://sqlite.org/	https://sqlite.org/2026/sqlite-autoconf-3520000.tar.gz	Embedded SQL database
-main	json-c	0.19	cmake	MIT	glibc	cmake,ninja	https://github.com/json-c/json-c	https://github.com/json-c/json-c/archive/refs/tags/json-c-{version}-20250101.tar.gz	JSON parsing library
+main	json-c	0.19	cmake	MIT	glibc	cmake,ninja	https://github.com/json-c/json-c	https://github.com/json-c/json-c/archive/refs/tags/json-c-{version}-20260627.tar.gz	JSON parsing library
 main	libxml2	2.15.2	autotools	MIT	glibc,zlib,xz,libressl	-	https://gitlab.gnome.org/GNOME/libxml2	https://download.gnome.org/sources/libxml2/2.15/libxml2-{version}.tar.xz	XML parsing library
 main	libyaml	0.2.5	autotools	MIT	glibc	-	https://pyyaml.org/wiki/LibYAML	https://github.com/yaml/libyaml/releases/download/{version}/yaml-{version}.tar.gz	YAML parser
 main	attr	2.6.0	autotools	LGPL-2.1-or-later	glibc	-	https://savannah.nongnu.org/projects/attr	https://download.savannah.nongnu.org/releases/attr/attr-{version}.tar.gz	Extended attribute tools
@@ -68,7 +68,8 @@ main	xfsprogs	6.19.0	autotools	GPL-2.0-only LGPL-2.1-only	glibc,util-linux-libs,
 main	f2fs-tools	1.16.0	autotools	GPL-2.0-only	glibc,util-linux-libs	-	https://git.kernel.org/pub/scm/linux/kernel/git/jaegeuk/f2fs-tools.git	https://kernel.org/pub/linux/kernel/people/jaegeuk/f2fs-tools/f2fs-tools-{version}.tar.gz	F2FS filesystem tools
 main	util-linux-libs	2.42.1	autotools	LGPL-2.1-or-later	glibc	-	https://github.com/util-linux/util-linux	https://kernel.org/pub/linux/utils/util-linux/v2.42/util-linux-{version}.tar.xz	libblkid, libmount and libuuid only
 main	inih	60	meson	BSD-3-Clause	glibc	meson,ninja	https://github.com/benhoyt/inih	https://github.com/benhoyt/inih/archive/refs/tags/r{version}.tar.gz	Simple INI file parser
-main	cryptsetup	2.8.1	autotools	GPL-2.0-or-later	glibc,libressl,util-linux-libs,json-c,argon2	-	https://gitlab.com/cryptsetup/cryptsetup	https://kernel.org/pub/linux/utils/cryptsetup/v2.8/cryptsetup-{version}.tar.xz	LUKS disk encryption
+main	popt	1.19	autotools	MIT	glibc	-	http://rpm5.org/files/popt/	https://ftp.osuosl.org/pub/rpm/popt/releases/popt-1.x/popt-{version}.tar.gz	Command-line option parsing library
+main	cryptsetup	2.8.1	autotools	GPL-2.0-or-later	glibc,libressl,util-linux-libs,json-c,argon2,popt	-	https://gitlab.com/cryptsetup/cryptsetup	https://kernel.org/pub/linux/utils/cryptsetup/v2.8/cryptsetup-{version}.tar.xz	LUKS disk encryption
 main	argon2	20190702	make	Apache-2.0 CC0-1.0	glibc	-	https://github.com/P-H-C/phc-winner-argon2	https://github.com/P-H-C/phc-winner-argon2/archive/refs/tags/{version}.tar.gz	Argon2 password hashing
 main	lvm2	2.03.36	autotools	GPL-2.0-only LGPL-2.1-only	glibc,util-linux-libs	-	https://sourceware.org/lvm2/	https://sourceware.org/pub/lvm2/LVM2.{version}.tgz	Logical volume management
 main	mdadm	4.4	make	GPL-2.0-or-later	glibc,util-linux-libs	-	https://git.kernel.org/pub/scm/utils/mdadm/mdadm.git	https://kernel.org/pub/linux/utils/raid/mdadm/mdadm-{version}.tar.xz	Software RAID administration

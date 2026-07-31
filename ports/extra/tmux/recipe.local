@@ -1,0 +1,3 @@
+# Needs CPPFLAGS/LDFLAGS/PKG_CONFIG_PATH pointed at the Arctic staging deps
+# prefix so it picks up staged libevent/netbsd-curses instead of the host's.
+# Do not let gen-ports.py regenerate this file.

@@ -59,6 +59,8 @@ A_WIFI_IFACE=""
 A_FS="ext4"
 A_SNAPSHOT="none"
 A_BTRFS_OPTS=""
+A_ENCRYPT="no"
+A_ENCRYPT_PASS=""
 A_SWAP="none"
 A_SWAPSIZE="4G"
 A_SWAPDEV=""
@@ -69,6 +71,8 @@ A_SSH="no"
 A_FIREWALL="yes"
 A_TRIM="auto"
 A_EXTRA=""
+A_FONTS=""
+A_PKGS=""
 
 bail() { tui_done 2>/dev/null; printf '\033[38;5;203merror:\033[0m %s\n' "$*" >&2; exit 1; }
 logit() { printf '[%s] %s\n' "$(date '+%H:%M:%S')" "$*" >>"$LOGF"; }
@@ -136,7 +140,7 @@ target_alpm() {
 
 do_install() {
 	: >"$LOGF"
-	total=22
+	total=24
 	tui_gauge_init "$total"
 
 	step "Checking the target" "$TARGET"
@@ -231,6 +235,10 @@ do_install() {
 
 	step "Installing extra packages" "${A_EXTRA:-none}"
 	[ -n "$A_EXTRA" ] && target_alpm ins $A_EXTRA || :
+	step "Installing fonts" "${A_FONTS:-none}"
+	[ -n "$A_FONTS" ] && target_alpm ins $A_FONTS || :
+	step "Installing selected packages" "${A_PKGS:-none}"
+	[ -n "$A_PKGS" ] && target_alpm ins $A_PKGS || :
 	[ "$A_AUDIO" = yes ] && target_alpm ins pipewire wireplumber pipewire-alsa || :
 	[ "$A_BLUETOOTH" = yes ] && target_alpm ins bluez bluez-utils || :
 	[ "$A_SSH" = yes ] && target_alpm ins openssh || :
@@ -244,12 +252,19 @@ do_install() {
 	zfs)   logit "zfs userspace tools are not packaged for Arctic yet" ;;
 	*)     target_alpm ins e2fsprogs || : ;;  # ext4, ext3, ext2
 	esac
+	if [ "$A_ENCRYPT" = yes ]; then
+		step "Installing cryptsetup" "LUKS"
+		target_alpm ins cryptsetup || warn_soft "cryptsetup did not install"
+	fi
 
 	step "Setting up snapshots" "${A_SNAPSHOT:-none}"
 	setup_snapshots
 
 	step "Writing fstab" "/etc/fstab"
 	write_fstab
+
+	step "Writing crypttab" "/etc/crypttab"
+	write_crypttab
 
 	step "Setting up swap" "$A_SWAP"
 	setup_swap
@@ -394,6 +409,21 @@ write_fstab() {
 		printf 'sysfs\t/sys\tsysfs\trw,nosuid,nodev,noexec\t0\t0\n'
 		printf 'devpts\t/dev/pts\tdevpts\trw,nosuid,noexec,gid=5,mode=620\t0\t0\n'
 	} >"$f"
+}
+
+# /etc/crypttab is the one thing arctic-mkinitramfs actually reads to decide
+# whether to bundle cryptsetup and the dm-crypt/essiv modules at all - see
+# that script for why. A_ROOTDEV is the raw partition auto_partition laid
+# LUKS onto (kept separate from the /dev/mapper/cryptroot path that actually
+# got formatted and mounted), so its LUKS UUID is what both this and the
+# boot loader's kernel command line need.
+write_crypttab() {
+	[ "$A_ENCRYPT" = yes ] || return 0
+	[ -n "$A_ROOTDEV" ] || { warn_soft "encryption chosen but no root device recorded"; return 0; }
+	uuid=$(blkid -s UUID -o value "$A_ROOTDEV" 2>/dev/null)
+	[ -n "$uuid" ] || { warn_soft "could not read the LUKS UUID of $A_ROOTDEV"; return 0; }
+	printf 'cryptroot\tUUID=%s\tnone\tluks\n' "$uuid" >"$TARGET/etc/crypttab"
+	chmod 600 "$TARGET/etc/crypttab"
 }
 
 setup_swap() {

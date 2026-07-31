@@ -214,7 +214,7 @@ if [ ! -x "$R/usr/bin/iwctl" ]; then
 	  && make DESTDIR="$R" install \
 	) >"$L/iwd.log" 2>&1 && {
 		# iwd is a daemon and lands in libexec; put it on PATH so the installer
-		# and "arctic-service start iwd" can just call it.
+		# and "service start iwd" can just call it.
 		[ -f "$R/usr/lib/iwd" ] && ln -sf ../lib/iwd "$R/usr/bin/iwd"
 		ok "iwd + iwctl"
 	} || bad "iwd (see logs/iwd.log)"

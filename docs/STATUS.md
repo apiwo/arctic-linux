@@ -395,6 +395,73 @@ should fail) instead of silently defaulting away from `--efi`, and
 `/etc/rc.d/pipewire status` now correctly exits 1 on a fresh boot instead of
 always exiting 0.
 
+## Disk encryption, a real initramfs, and Slackware-style package selection
+
+`arctic-conf` now offers full-disk LUKS2 encryption as a step in the disk
+screen, plus two new steps: a fonts checklist and a Slackware-style extra
+package browser split into nine categories (terminals, editors, browsers,
+media, developer tools, virtualisation, gaming, CLI utilities, office).
+
+Getting encryption to actually boot needed three separate pieces that did
+not exist before:
+
+1. **`arctic-mkinitramfs`** (`skel/usr/bin/arctic-mkinitramfs`) did not
+   exist at all, despite being referenced from four call sites (alpm's
+   post-kernel-install hook, the NVIDIA driver install hook, and
+   `arctic-strap`). Arctic's kernel builds its storage/filesystem/USB
+   drivers directly in rather than as modules, so a plain unencrypted
+   install never needed an initramfs and the gap went unnoticed - but an
+   encrypted root needs a passphrase prompt before anything else can run,
+   and dm-crypt is one of the few things this kernel does build as a
+   module. Wrote it: busybox-based, bundles cryptsetup plus every
+   `kernel/crypto/*.ko` and `kernel/drivers/md/dm-*.ko` (~5 MiB) only when
+   `/etc/crypttab` has a real entry, resolves shared library dependencies
+   with Arctic's own `ldd`, and generates an `/init` that parses
+   `rd.luks.uuid=`/`cryptdevice=` off the kernel command line, retries the
+   passphrase up to 5 times, then `switch_root`s.
+2. **`cryptsetup` could not actually run.** It builds fine, but
+   `readelf -d` on the real binary showed a `libpopt.so.0` dependency that
+   nothing in the manifest provided - popt was never packaged anywhere in
+   Arctic. Exactly the same class of bug as the native-build-links-against-
+   the-host issue fixed earlier for iwctl/cfdisk, just caught this time
+   before it shipped rather than after. Added `popt` as its own port,
+   built it, added it to cryptsetup's `depend=`, and rebuilt cryptsetup.
+   Verified for real, not just by name-matching: extracted both packages,
+   ran `usr/sbin/cryptsetup --version` through Arctic's own dynamic linker
+   with only the staged libraries on `--library-path`, then did a full
+   `luksFormat` → `open` → `status` → `close` cycle against a loopback
+   file, including confirming a wrong passphrase is correctly rejected.
+3. **cryptsetup was not available during the live install session at
+   all** - only `target_alpm` (chrooted, for the just-installed system)
+   existed as a way to pull it from the bundled repo; the live-session
+   partitioning code that actually calls `cryptsetup luksFormat` had no
+   equivalent and would have just failed with "cryptsetup is not on this
+   image" on every real ISO. Added `ensure_cryptsetup()`, which
+   self-installs it live via `alpm ins cryptsetup` (same `file://` medium
+   repo `target_alpm` already uses, just without a chroot) before falling
+   back to that error.
+
+The `A_ENCRYPT`/`A_FONTS`/`A_PKGS` answers all round-trip through
+`save_conf`'s `shq()`-quoted format and are installed by `arctic-strap` via
+`target_alpm`, the same path every other package selection already used.
+`arctic-boot-strap` reads the LUKS UUID back out of the installed
+`/etc/crypttab` and prepends `rd.luks.uuid=` to every kernel command line it
+writes, for both Limine and GRUB.
+
+Also renamed `arctic-service` to `service` throughout (script itself,
+`README.md`, `iso/mkiso`, `build/build-usable.sh`, `skel/etc/inittab`,
+`skel/etc/arctic/rc.lib`, `skel/etc/zsh/zshrc`, `skel/etc/rc.d/fstrim`,
+`skel/usr/bin/arctic-firstboot`) - shorter, and nothing else on the system
+uses the `arctic-` prefix for a command a user types directly.
+
+One regeneration hazard found and closed while adding the `popt` port:
+running `ports/gen-ports.py` after a manifest edit silently overwrote
+`ports/extra/tmux/recipe`'s hand-fix (staged `CPPFLAGS`/`LDFLAGS`/
+`PKG_CONFIG_PATH` pointing at the Arctic deps prefix instead of the host's),
+because it had never been given a `recipe.local` marker. Restored it and
+added the marker. `cryptsetup` and `json-c` already had theirs from earlier
+fixes and were correctly left alone by the same regeneration.
+
 ## Known rough edges
 
 - `alpm rollback` restores files but does not fully reconcile the package
@@ -404,3 +471,20 @@ always exiting 0.
   from most recipes yet.
 - `arcticfetch` reports the terminal as empty on a bare console, which is
   correct but looks odd.
+- `btrfs-progs`/`xfsprogs`/`f2fs-tools` are not baked into the live rootfs
+  the way `e2fsprogs`/`dosfstools` are (see `build/build-usable.sh`) - only
+  built as installable `.alpmz` packages. `arctic-conf`'s filesystem screen
+  already guards this correctly (`have mkfs.btrfs && ...` only lists a
+  filesystem if the live session can actually format it), so picking one of
+  these on a real ISO today just means it will not appear in the menu at
+  all rather than failing partway through. Giving the live session the same
+  `ensure_cryptsetup()`-style self-install (`alpm ins btrfs-progs` etc.
+  before the `have` check) rather than only listing what already happens to
+  be on the medium would close this the same way it was closed for
+  cryptsetup.
+- Disk encryption has been verified at the binary level (a real
+  `luksFormat`/`open`/`close` cycle against a loopback file with both the
+  right and a wrong passphrase) and the generated initramfs `/init` has
+  been read through and syntax-checked, but a full interactive
+  `arctic-conf` → `arctic-strap` → reboot → passphrase-prompt run in QEMU
+  has not been done in this session.

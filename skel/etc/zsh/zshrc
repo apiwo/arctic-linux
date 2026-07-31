@@ -65,7 +65,7 @@ _alpm() {
 }
 compdef _alpm alpm 2>/dev/null
 
-compdef _gnu_generic arctic-service 2>/dev/null
+compdef _gnu_generic service 2>/dev/null
 
 # ----------------------------------------------------------------------- keys
 bindkey -e                                  # emacs keys; set -o vi if you prefer

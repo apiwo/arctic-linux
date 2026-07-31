@@ -6,7 +6,7 @@ case "${1:-}" in
 start) fstrim -a 2>/dev/null || fstrim / 2>/dev/null; exit 0 ;;
 stop|restart) exit 0 ;;
 # A oneshot has no process to report, so it is never "running". Saying otherwise
-# makes 'arctic-service list' lie about it.
+# makes 'service list' lie about it.
 status) exit 3 ;;
 *) echo "usage: $0 start|stop|restart|status" >&2; exit 2 ;;
 esac

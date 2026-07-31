@@ -1,6 +1,6 @@
 #!/bin/sh
 # Arctic Linux - boot output helpers, shared by rc.boot, rc.shutdown and
-# arctic-service. Sourced, never executed.
+# service. Sourced, never executed.
 # shellcheck shell=sh disable=SC2039
 
 # Console width. stty only answers when stdin is the terminal, which it is not

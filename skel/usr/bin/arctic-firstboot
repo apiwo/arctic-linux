@@ -36,7 +36,7 @@ if [ "${1:-}" != "-q" ]; then
 	printf '  %spackages%s %s installed\n' "$GREY" "$R" \
 		"$(ls -1 /var/lib/alpm/local 2>/dev/null | wc -l | tr -d ' ')"
 	printf '\n'
-	printf '  %salpm%s to install things, %sarctic-service%s to run them,\n' \
+	printf '  %salpm%s to install things, %sservice%s to run them,\n' \
 		"$SNOW" "$R" "$SNOW" "$R"
 	printf '  %sdoas%s when you need root.\n\n' "$SNOW" "$R"
 fi

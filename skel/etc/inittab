@@ -2,7 +2,7 @@
 #
 # Arctic keeps PID 1 boring on purpose: busybox init, a shell script for boot,
 # a shell script for shutdown, and getty on the consoles. Everything else is a
-# service under /etc/rc.d, managed with arctic-service.
+# script under /etc/rc.d, managed with the `service` command.
 
 # Bring the system up.
 ::sysinit:/etc/rc.boot
