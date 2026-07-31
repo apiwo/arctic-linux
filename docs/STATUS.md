@@ -32,7 +32,10 @@ Written at the end of the first build so nothing here is overstated.
 - **arctic-strap** installs onto a mounted target and has been read through, but
   a full install-to-disk run has not been done in this session; the pieces it
   drives (alpm with `--root`, the package set, fstab and bootloader writing) have
-  been tested individually.
+  been tested individually. Configuring and installing are two separate tools
+  now - `arctic-conf`/`arctic-boot-conf` only ask questions and save an answer
+  file, `arctic-strap`/`arctic-boot-strap` only do the work, non-interactively,
+  from whatever was last saved.
 - **There is no desktop image, by design.** Arctic ships one ISO that boots to a
   TTY running zsh. Desktop packages exist as recipes in `base` for anyone who
   wants to install one afterwards, but no graphical image is built or shipped.
@@ -262,6 +265,78 @@ Kept because each one is a trap worth remembering.
     was no way to run a repair from inside. This is why builds are sandboxed
     now, and why a static busybox is worth keeping around - it was the only
     thing that still ran.
+
+## Installer split, and a networking bug that made DHCP a no-op
+
+`arctic-strap` used to ask every question and then install, in one run. It is
+now two tools each, on purpose: `arctic-conf`/`arctic-boot-conf` only ask
+questions and save an answer file; `arctic-strap`/`arctic-boot-strap` only do
+the work, non-interactively, from whatever was last saved (or from built-in
+defaults, if nothing was - the same way `pacstrap` does not ask you anything
+either). `arctic-conf`'s menus picked up real fixes along the way, not just
+the split:
+
+1. **The filesystem menu rendered as `ext4` / `Its` / `really` / `fast` -
+   each word of the description on its own broken row.** Several menus built
+   their item list by concatenating `items="$items key|label|description"`
+   and then expanding `$items` unquoted. Shell word-splitting does not know
+   about the `|` fields; it splits on every space, so any description longer
+   than one word became several separate (broken) menu entries - the wireless
+   network list, the disk list, the swap-partition list and the timezone
+   region list all had the same bug, not just the filesystem one. Fixed by
+   building each list with `set -- "$@" "item"` instead, which POSIX sh never
+   word-splits. The filesystem menu additionally lost its descriptions
+   entirely rather than relying on every future edit remembering to quote
+   correctly, and grew from 4 choices to 7: ext4, btrfs, xfs, f2fs, ext3,
+   ext2, and zfs (gated on `have zpool` - Arctic has no zfs-utils package yet,
+   so this one is plumbing for later, not a tested path).
+2. **DHCP obtained a lease and then configured nothing at all.** `udhcpc`
+   only speaks the DHCP protocol; a `-s script` is what actually applies the
+   lease (sets the address, the default route, `/etc/resolv.conf`), and
+   Arctic had never shipped one - not on the ISO, not on an install, not in
+   the installer's own network screens. Every DHCP-based network, wired or
+   wireless, looked like it came up and never actually worked. Added
+   `/usr/share/udhcpc/default.script` (matching busybox's own compiled-in
+   default path) and pass `-s` explicitly wherever `udhcpc` is invoked.
+3. **A wifi-only install could bring up the wrong interface on first boot.**
+   `arctic-conf` never recorded which wireless device it associated on, so
+   `rc.d/network`'s `pick_iface()` fell through to "whatever is first" on a
+   machine with more than one interface. Now saved as `A_WIFI_IFACE` /
+   `NET_IFACE`.
+4. **A file placed anywhere under `skel/usr` other than `skel/usr/bin` was
+   silently missing from every real install**, though present on the live
+   ISO - `mkpkgs.sh`'s arctic-base packaging step only copied `skel/usr/bin`,
+   while `mkiso` copies all of `skel/usr`. Found via the udhcpc script above,
+   which lives at `skel/usr/share/udhcpc/`. Both now copy the whole tree.
+
+The btrfs-snapshot request that prompted a look at all this - a checkpoint
+before every package install/removal, timeshift or snapper, user's choice -
+turned out to already be built: `alpm`'s `tx_snapshot()` calls
+`arctic-snapshot create` before every transaction when `/` is btrfs, and
+`arctic-snapshot` (shipped in arctic-base) delegates to timeshift or snapper
+per `/etc/arctic/snapshot.conf`'s `TOOL=`, falling back to driving btrfs
+subvolume snapshots directly when neither is installed. `arctic-conf`'s
+filesystem screen already writes that config when btrfs is chosen. Nothing
+new was needed there, only confirmed end to end.
+
+Boot-testing the new split (in QEMU, with an attached blank disk) caught one
+more, unrelated to any of the above and much nastier: **`alpm ins` of more
+than two or three packages corrupted the entire screen**, the download
+progress bar's percentage climbing to absurd values like `2350%` and
+`213700%` and its fill string growing long enough to wrap and repeat down the
+whole terminal. `libalpm.sh`'s `bar()` used a plain `i` for its own fill-loop
+counter - and so does the package-fetch loop in `alpm`'s `cmd_ins` that calls
+it (`for p in $todo; do i=$((i+1)); bar "$i" "$n" "$p"; ...; done`). POSIX sh
+has no real variable scoping, so they were the same variable: each call to
+`bar()` ran its drawing loop up to `$width` and left the caller's `i` sitting
+there instead of at the package index, so the *next* call computed its
+percentage from that leaked value instead of the real one - growing further
+out of bounds with every package in the transaction. Exactly the same class
+of bug as "recursion without local" above, in a function that bug had not
+reached. Fixed by prefixing every variable `bar()` touches with `_bar_`, so
+it can no longer collide with whatever a caller happens to also call `i`.
+Verified by installing an 8-package transaction and watching the bar reach a
+clean `100%` instead.
 
 ## Known rough edges
 

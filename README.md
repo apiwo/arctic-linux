@@ -96,6 +96,10 @@ A desktop is something you install afterwards, with `alpm`.
 
 You mount the target yourself. Nothing is done behind your back.
 
+Configuring and installing are two separate tools, on purpose: the `-conf`
+ones only ask questions and write an answer file, the plain ones only do the
+work, non-interactively, from whatever was last answered.
+
 ```sh
 # get online — wired is automatic, for wireless:
 iwctl station wlan0 connect YOUR-NETWORK
@@ -103,12 +107,15 @@ iwctl station wlan0 connect YOUR-NETWORK
 # partition, then mount the target
 mount /dev/nvme0n1p1 /mnt
 
-# the installer opens a configuration menu before it touches anything
+# arctic-conf opens a configuration menu and writes the answers; arctic-strap
+# does the actual install from them, no menus, no questions
+arctic-conf /mnt
 arctic-strap /mnt
 
-# then the bootloader
+# same split for the bootloader
 mount /dev/nvme0n1p2 /mnt/boot
-arctic-strap boot /mnt/boot     # asks EFI or BIOS
+arctic-boot-conf /mnt/boot
+arctic-boot-strap /mnt/boot --efi     # or --bios [--loader=grub]
 
 # optionally poke around inside the new system
 arctic-chroot
@@ -116,10 +123,13 @@ arctic-chroot
 reboot
 ```
 
-`arctic-strap` asks about network, desktop or window manager, kernel flavour,
+`arctic-conf` asks about network, desktop or window manager, kernel flavour,
 user account, root password, locale and keymap, time zone, swap, hostname,
 graphics driver, and a handful of extras — then shows you everything for review
-before it writes a single file.
+before it saves a single file. `arctic-strap` takes that answer file and
+installs; run it alone (no `arctic-conf` first) and it installs a console-only
+system with sane defaults, the same way `pacstrap` does not ask you anything
+either.
 
 Kernel choices are `Arctic-base-kernel` (broad hardware support),
 `Arctic-libre-kernel` (no blob loading at all) and `Arctic-small-kernel`
@@ -252,7 +262,8 @@ bubblewrap is available, use it.
 
 ```
 alpm/         the package manager: alpm, alpm-build, alpm-repo, libalpm.sh
-installer/    arctic-strap, arctic-chroot, and the pure-shell TUI toolkit
+installer/    arctic-conf/-strap, arctic-boot-conf/-strap, arctic-chroot,
+              and the pure-shell TUI toolkit
 skel/         /etc and /usr skeleton: inittab, rc.boot, rc.d, zsh config
 ports/        502 package recipes, the manifest, and the generator
 branding/     logo, icon theme, wallpapers, boot splash, ascii art

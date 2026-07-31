@@ -134,11 +134,13 @@ install)
      mkfs.ext4 /dev/vda2
 
      mount /dev/vda2 /mnt
+     arctic-conf /mnt
      arctic-strap /mnt
 
      mkdir -p /mnt/boot
      mount /dev/vda1 /mnt/boot
-     arctic-strap boot /mnt/boot      # choose EFI
+     arctic-boot-conf /mnt/boot
+     arctic-boot-strap /mnt/boot --efi
 
      poweroff
 

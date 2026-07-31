@@ -50,19 +50,30 @@ alpm_log() {
 }
 
 # A progress bar that degrades gracefully on a dumb tty.
+#
+# Every local here is prefixed _bar_: this is POSIX sh with no real variable
+# scoping, and the plain name "i" used to double as this function's own
+# fill-loop counter *and* leak back into whatever loop variable the caller
+# happened to also call "i" - which alpm's own package-fetch loop does
+# ("for p in $todo; do i=$((i+1)); bar "$i" "$n" "$p"; ...; done"). bar()
+# would run its drawing loop up to $width and leave the caller's "i" sitting
+# there instead of at the package index, so the next call's percentage was
+# computed from that leaked value - cur*100/tot growing to several thousand
+# percent by the second or third package, and the stray '#'/'-' fill string
+# growing long enough to wrap the whole screen with it.
 bar() {
-	cur=$1 tot=$2 label=$3
+	_bar_cur=$1 _bar_tot=$2 _bar_label=$3
 	[ -t 1 ] || return 0
-	[ "$tot" -gt 0 ] 2>/dev/null || return 0
-	width=$(( ${COLUMNS:-80} - 34 )); [ "$width" -lt 10 ] && width=10
-	fill=$(( cur * width / tot ))
-	pct=$(( cur * 100 / tot ))
-	b=""; i=0
-	while [ "$i" -lt "$fill" ]; do b="$b#"; i=$((i+1)); done
-	while [ "$i" -lt "$width" ]; do b="$b-"; i=$((i+1)); done
+	[ "$_bar_tot" -gt 0 ] 2>/dev/null || return 0
+	_bar_width=$(( ${COLUMNS:-80} - 34 )); [ "$_bar_width" -lt 10 ] && _bar_width=10
+	_bar_fill=$(( _bar_cur * _bar_width / _bar_tot ))
+	_bar_pct=$(( _bar_cur * 100 / _bar_tot ))
+	_bar_b=""; _bar_i=0
+	while [ "$_bar_i" -lt "$_bar_fill" ]; do _bar_b="$_bar_b#"; _bar_i=$((_bar_i+1)); done
+	while [ "$_bar_i" -lt "$_bar_width" ]; do _bar_b="$_bar_b-"; _bar_i=$((_bar_i+1)); done
 	printf '\r  %s%-22.22s%s %s[%s]%s %3d%%' \
-		"$A_SNOW" "$label" "$C_R" "$A_TEAL" "$b" "$C_R" "$pct"
-	[ "$cur" -ge "$tot" ] && printf '\n'
+		"$A_SNOW" "$_bar_label" "$C_R" "$A_TEAL" "$_bar_b" "$C_R" "$_bar_pct"
+	[ "$_bar_cur" -ge "$_bar_tot" ] && printf '\n'
 }
 
 # --------------------------------------------------------------------- helpers

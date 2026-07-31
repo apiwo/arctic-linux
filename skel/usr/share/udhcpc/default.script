@@ -1,0 +1,75 @@
+#!/bin/sh
+# default.script - busybox udhcpc's hook script, run on every deconfig, bound
+# and renew event with the lease's fields as environment variables ($ip,
+# $subnet, $router, $dns, $domain, $broadcast, $interface, ...).
+#
+# Without this script (or an equivalent passed via -s) udhcpc still talks the
+# DHCP protocol and obtains a lease just fine, but nothing ever applies it: no
+# address goes on the interface, no default route, no resolv.conf. That is
+# udhcpc's whole design - the applet handles the protocol, this script is what
+# actually configures anything - and Arctic did not ship one, so every
+# DHCP-based network (the default for both wired and wireless) looked like it
+# came up but never actually worked.
+#
+# Uses iproute2's ip, which Arctic ships, not the ifconfig-era tools this
+# script is traditionally written against.
+set -u
+
+RESOLV_CONF=/etc/resolv.conf
+
+# iproute2 wants a prefix length (0-32), udhcpc gives $subnet as a dotted
+# mask (255.255.255.0). Count the set bits the portable way: no ip2cidr,
+# no bc, just table lookups per octet.
+dotted_to_prefix() {
+	_p_bits=0
+	_p_ifs=$IFS; IFS=.
+	# shellcheck disable=SC2086
+	set -- $1
+	IFS=$_p_ifs
+	for _p_oct in "$@"; do
+		case $_p_oct in
+		255) _p_bits=$((_p_bits + 8)) ;;
+		254) _p_bits=$((_p_bits + 7)) ;;
+		252) _p_bits=$((_p_bits + 6)) ;;
+		248) _p_bits=$((_p_bits + 5)) ;;
+		240) _p_bits=$((_p_bits + 4)) ;;
+		224) _p_bits=$((_p_bits + 3)) ;;
+		192) _p_bits=$((_p_bits + 2)) ;;
+		128) _p_bits=$((_p_bits + 1)) ;;
+		0) ;;
+		*) _p_bits=$((_p_bits + 4)) ;;  # an odd mask; a reasonable guess beats none
+		esac
+	done
+	echo "$_p_bits"
+}
+
+case "${1:-}" in
+deconfig)
+	ip addr flush dev "$interface" 2>/dev/null
+	ip link set "$interface" up 2>/dev/null
+	;;
+bound|renew)
+	prefix=$(dotted_to_prefix "${subnet:-255.255.255.0}")
+	ip addr flush dev "$interface" 2>/dev/null
+	ip addr add "$ip/$prefix" broadcast "${broadcast:-+}" dev "$interface" 2>/dev/null
+	ip link set "$interface" up 2>/dev/null
+
+	ip route del default dev "$interface" 2>/dev/null || :
+	for r in ${router:-}; do
+		ip route add default via "$r" dev "$interface" 2>/dev/null && break
+	done
+
+	{
+		[ -n "${domain:-}" ] && printf 'search %s\n' "$domain"
+		for d in ${dns:-}; do printf 'nameserver %s\n' "$d"; done
+	} >"$RESOLV_CONF.tmp"
+	# Only replace resolv.conf if the lease actually carried DNS servers -
+	# an empty file is worse than the one already there.
+	if [ -s "$RESOLV_CONF.tmp" ]; then
+		mv -f "$RESOLV_CONF.tmp" "$RESOLV_CONF"
+	else
+		rm -f "$RESOLV_CONF.tmp"
+	fi
+	;;
+leases|nak) ;;
+esac

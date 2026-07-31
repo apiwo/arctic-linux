@@ -29,9 +29,11 @@ start() {
 		printf 'nameserver %s\n' "$NET_DNS" >/etc/resolv.conf ;;
 	wifi)
 		# iwd owns the link; it only needs an address once associated.
-		udhcpc -b -i "$iface" -p "/run/udhcpc.$iface.pid" >/dev/null 2>&1 ;;
+		udhcpc -b -i "$iface" -p "/run/udhcpc.$iface.pid" \
+			-s /usr/share/udhcpc/default.script >/dev/null 2>&1 ;;
 	*)
-		udhcpc -b -i "$iface" -p "/run/udhcpc.$iface.pid" >/dev/null 2>&1 \
+		udhcpc -b -i "$iface" -p "/run/udhcpc.$iface.pid" \
+			-s /usr/share/udhcpc/default.script >/dev/null 2>&1 \
 			|| dhcpcd "$iface" >/dev/null 2>&1 ;;
 	esac
 }

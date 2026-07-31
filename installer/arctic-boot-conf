@@ -1,0 +1,82 @@
+#!/bin/sh
+# arctic-boot-conf - choose how to boot an Arctic Linux install
+#
+#   arctic-boot-conf /mnt/boot     ask EFI/BIOS and, for BIOS, which loader
+#
+# Saves the answer and hands off to arctic-boot-strap, which does the actual
+# work:
+#
+#   mount /dev/nvme0n1p2 /mnt/boot
+#   arctic-boot-conf /mnt/boot
+#
+# shellcheck shell=sh disable=SC2039,SC2059
+
+set -u
+
+LIB=/usr/lib/arctic
+for d in "$LIB" "$(dirname "$0")/lib" ./lib; do
+	[ -f "$d/tui.sh" ] && { . "$d/tui.sh"; TUILIB=$d; break; }
+done
+[ -n "${c_teal:-}" ] || { echo "arctic-boot-conf: cannot find tui.sh" >&2; exit 1; }
+
+for d in /usr/lib/alpm "$(dirname "$0")/../alpm" ./alpm; do
+	[ -f "$d/libalpm.sh" ] && { . "$d/libalpm.sh"; break; }
+done
+
+BOOTCONF=/tmp/arctic-boot-strap.conf
+
+detect_firmware() { [ -d /sys/firmware/efi ] && echo efi || echo bios; }
+
+need_root 2>/dev/null || { echo "Must be run as root." >&2; exit 1; }
+
+case "${1:-}" in
+-h|--help|help)
+	sed -n '2,10p' "$0" | sed 's/^# \?//'; exit 0 ;;
+esac
+
+BOOTDIR=${1:?usage: arctic-boot-conf /mnt/boot}
+[ -d "$BOOTDIR" ] || { echo "arctic-boot-conf: $BOOTDIR does not exist - mount the boot partition first" >&2; exit 1; }
+
+tui_init
+tui_header "Bootloader" "$BOOTDIR"
+fw=$(detect_firmware)
+
+tui_menu "Boot method" "detected: $fw" \
+	"efi|EFI / UEFI|Limine, registered as 'Arctic linux'" \
+	"bios|BIOS (legacy)|Limine in the MBR, or GRUB if you prefer" \
+|| { tui_done; echo "nothing was saved."; exit 1; }
+method=$TUI_CHOICE
+
+loader=limine
+if [ "$method" = bios ]; then
+	tui_menu "BIOS bootloader" "legacy boot" \
+		"limine|Limine BIOS|The Arctic default, small and quick" \
+		"grub|GRUB|Use this if you multi-boot something awkward" \
+	|| { tui_done; echo "nothing was saved."; exit 1; }
+	loader=$TUI_CHOICE
+fi
+
+cat >"$BOOTCONF" <<EOF
+# arctic-boot-strap answers, written by arctic-boot-conf $(date '+%Y-%m-%d %H:%M:%S')
+BOOTDIR='$BOOTDIR'
+BOOT_METHOD='$method'
+BOOT_LOADER='$loader'
+EOF
+
+tui_yesno "Install now" "Run arctic-boot-strap on $BOOTDIR now?" yes
+go=$?
+tui_done
+printf '\n  Saved to %s.\n\n' "$BOOTCONF"
+
+if [ "$method" = bios ]; then
+	cmdline="arctic-boot-strap $BOOTDIR --bios --loader=$loader"
+else
+	cmdline="arctic-boot-strap $BOOTDIR --efi"
+fi
+
+if [ "$go" = 0 ]; then
+	# shellcheck disable=SC2086
+	exec $cmdline
+fi
+printf '  Install with:\n\n'
+printf '      %s\n\n' "$cmdline"

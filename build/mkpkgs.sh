@@ -248,15 +248,22 @@ emit "$pd" alpm 1.0.0 main "Arctic Linux Package Manager" "BSD-2-Clause" \
 step "packaging arctic-base"
 pd=$PKGDIRS/arctic-base; rm -rf "$pd"; mkdir -p "$pd/usr/share/arctic" "$pd/var/lib/arctic"
 cp -a "$SRCTREE/skel/etc" "$pd/etc"
-cp -a "$SRCTREE/skel/usr/bin" "$pd/usr/bin"
+# The whole skel/usr tree, not just bin/ - mkiso already does this for the
+# live image (cp -a skel/usr/. ), and a file placed anywhere else under
+# skel/usr (skel/usr/share/udhcpc/default.script, for one) was silently
+# absent from every real install while still being on the ISO.
+cp -a "$SRCTREE/skel/usr/." "$pd/usr/"
 rm -rf "$pd/etc/alpm"   # alpm owns those files
 chmod +x "$pd/etc/rc.boot" "$pd/etc/rc.shutdown" "$pd/etc/rc.d"/* "$pd/usr/bin"/*
 for d in ascii limine plasma wallpaper icons sddm misc; do
 	[ -d "$SRCTREE/branding/$d" ] && cp -a "$SRCTREE/branding/$d" "$pd/usr/share/arctic/"
 done
-install -Dm755 "$SRCTREE/installer/arctic-strap"  "$pd/usr/bin/arctic-strap"
-install -Dm755 "$SRCTREE/installer/arctic-chroot" "$pd/usr/bin/arctic-chroot"
-install -Dm644 "$SRCTREE/installer/lib/tui.sh"    "$pd/usr/lib/arctic/tui.sh"
+install -Dm755 "$SRCTREE/installer/arctic-conf"       "$pd/usr/bin/arctic-conf"
+install -Dm755 "$SRCTREE/installer/arctic-strap"      "$pd/usr/bin/arctic-strap"
+install -Dm755 "$SRCTREE/installer/arctic-boot-conf"  "$pd/usr/bin/arctic-boot-conf"
+install -Dm755 "$SRCTREE/installer/arctic-boot-strap" "$pd/usr/bin/arctic-boot-strap"
+install -Dm755 "$SRCTREE/installer/arctic-chroot"     "$pd/usr/bin/arctic-chroot"
+install -Dm644 "$SRCTREE/installer/lib/tui.sh"        "$pd/usr/lib/arctic/tui.sh"
 emit "$pd" arctic-base 1.0.0 main \
 	"Arctic base configuration, init scripts and branding" "BSD-2-Clause" \
 	"https://github.com/apiwo/arctic-linux" "busybox toybox zsh doas alpm libxcrypt"

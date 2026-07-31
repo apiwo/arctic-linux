@@ -74,9 +74,12 @@ install -Dm755 "$SRCTREE/alpm/alpm"        "$S/usr/bin/alpm"
 install -Dm755 "$SRCTREE/alpm/alpm-build"  "$S/usr/bin/alpm-build"
 install -Dm755 "$SRCTREE/alpm/alpm-repo"   "$S/usr/bin/alpm-repo"
 install -Dm644 "$SRCTREE/alpm/libalpm.sh"  "$S/usr/lib/alpm/libalpm.sh"
-install -Dm755 "$SRCTREE/installer/arctic-strap"  "$S/usr/bin/arctic-strap"
-install -Dm755 "$SRCTREE/installer/arctic-chroot" "$S/usr/bin/arctic-chroot"
-install -Dm644 "$SRCTREE/installer/lib/tui.sh"    "$S/usr/lib/arctic/tui.sh"
+install -Dm755 "$SRCTREE/installer/arctic-conf"       "$S/usr/bin/arctic-conf"
+install -Dm755 "$SRCTREE/installer/arctic-strap"      "$S/usr/bin/arctic-strap"
+install -Dm755 "$SRCTREE/installer/arctic-boot-conf"  "$S/usr/bin/arctic-boot-conf"
+install -Dm755 "$SRCTREE/installer/arctic-boot-strap" "$S/usr/bin/arctic-boot-strap"
+install -Dm755 "$SRCTREE/installer/arctic-chroot"     "$S/usr/bin/arctic-chroot"
+install -Dm644 "$SRCTREE/installer/lib/tui.sh"        "$S/usr/lib/arctic/tui.sh"
 
 # The base system skeleton: inittab, rc.boot, rc.d, zsh config, profile.
 cp -a "$SRCTREE/skel/etc/." "$S/etc/"
@@ -267,23 +270,30 @@ ARCTIC
 	printf '%s\n' "$R"
 	printf '  %sArctic Linux is already installed on %s.%s\n\n' "$GREY" "$found" "$R"
 	printf '  Run %sarctic-chroot%s after mounting it to make changes,\n' "$SNOW" "$R"
-	printf '  or %sarctic-strap /mnt%s to install again.\n\n' "$SNOW" "$R"
+	printf '  or %sarctic-conf /mnt%s then %sarctic-strap /mnt%s to install again.\n\n' \
+		"$SNOW" "$R" "$SNOW" "$R"
 else
 	arcticfetch 2>/dev/null || true
 	printf '  %sWelcome to the Arctic Linux installer.%s\n\n' "$SNOW$B" "$R"
+	printf '  Configuring and installing are separate: %sarctic-conf%s only asks\n' "$SNOW" "$R"
+	printf '  questions and saves them, %sarctic-strap%s only installs, from what was\n' \
+		"$SNOW" "$R"
+	printf '  saved. Same split for the bootloader, with %s-boot-%s in the name.\n\n' "$SNOW" "$R"
 	printf '  %s1.%s Get online (optional - the ISO can install without a network):\n' "$TEAL" "$R"
 	printf '       %siwctl station wlan0 connect YOUR-NETWORK%s   (wireless)\n' "$SNOW" "$R"
 	printf '       %sudhcpc -i eth0%s                              (wired)\n\n' "$SNOW" "$R"
-	printf '  %s2.%s Install. arctic-strap can partition and format the disk for\n' "$TEAL" "$R"
-	printf '       you - step 1 of its menu - so you do not have to mount anything\n'
-	printf '       first:\n'
+	printf '  %s2.%s Configure, then install. arctic-conf can partition and format\n' "$TEAL" "$R"
+	printf '       the disk for you - step 1 of its menu - so you do not have to\n'
+	printf '       mount anything first:\n'
+	printf '       %sarctic-conf /mnt%s\n' "$SNOW" "$R"
 	printf '       %sarctic-strap /mnt%s\n\n' "$SNOW" "$R"
 	printf '  %s3.%s Then the bootloader:\n' "$TEAL" "$R"
-	printf '       %sarctic-strap boot /mnt/boot%s\n\n' "$SNOW" "$R"
+	printf '       %sarctic-boot-conf /mnt/boot%s\n' "$SNOW" "$R"
+	printf '       %sarctic-boot-strap /mnt/boot --efi%s   (or --bios)\n\n' "$SNOW" "$R"
 	printf '  %sPrefer to do the disk yourself?  cfdisk  mkfs.ext4  mkfs.vfat  lsblk%s\n' \
 		"$GREY" "$R"
 	printf '  %sare all here.%s\n\n' "$GREY" "$R"
-	printf '  %sType %sarctic-strap /mnt%s%s to begin, or %sarctic-install%s for this reminder.%s\n\n' \
+	printf '  %sType %sarctic-conf /mnt%s%s to begin, or %sarctic-install%s for this reminder.%s\n\n' \
 		"$GREY" "$SNOW$B" "$R" "$GREY" "$SNOW" "$GREY" "$R"
 fi
 exec /bin/zsh -l

@@ -1,0 +1,253 @@
+#!/bin/sh
+# arctic-boot-strap - install the bootloader for an Arctic Linux install
+#
+#   arctic-boot-strap /mnt/boot --efi                 UEFI, Limine
+#   arctic-boot-strap /mnt/boot --bios                BIOS, Limine (default)
+#   arctic-boot-strap /mnt/boot --bios --loader=grub  BIOS, GRUB instead
+#
+# This does the install and nothing else - no menus. Choose first:
+#
+#   mount /dev/nvme0n1p2 /mnt/boot
+#   arctic-boot-conf /mnt/boot
+#   arctic-boot-strap /mnt/boot --efi
+#
+# With no --efi/--bios given it reads /tmp/arctic-boot-strap.conf, the answer
+# file arctic-boot-conf writes; failing that it detects the firmware itself
+# and defaults to Limine.
+#
+# shellcheck shell=sh disable=SC2039,SC2059
+
+set -u
+
+LIB=/usr/lib/arctic
+for d in "$LIB" "$(dirname "$0")/lib" ./lib; do
+	[ -f "$d/tui.sh" ] && { . "$d/tui.sh"; TUILIB=$d; break; }
+done
+[ -n "${c_teal:-}" ] || { echo "arctic-boot-strap: cannot find tui.sh" >&2; exit 1; }
+
+for d in /usr/lib/alpm "$(dirname "$0")/../alpm" ./alpm; do
+	[ -f "$d/libalpm.sh" ] && { . "$d/libalpm.sh"; break; }
+done
+
+CONF=/tmp/arctic-strap.conf
+BOOTCONF=/tmp/arctic-boot-strap.conf
+LOGF=/tmp/arctic-strap.log
+
+detect_firmware() { [ -d /sys/firmware/efi ] && echo efi || echo bios; }
+logit() { printf '[%s] %s\n' "$(date '+%H:%M:%S')" "$*" >>"$LOGF"; }
+run() {
+	logit "+ $*"
+	if "$@" >>"$LOGF" 2>&1; then return 0; fi
+	rc=$?; logit "! failed ($rc): $*"; return $rc
+}
+step() { TUI_GAUGE_NOTE="$2"; tui_gauge "$1"; logit "$1"; }
+
+write_limine_conf() {
+	bd=$1 kname=$2 rootspec=$3 initrd=$4 ucode=$5
+	mods=""
+	[ -n "$ucode" ]  && mods="$mods
+    module_path: boot():/$(basename "$ucode")"
+	[ -n "$initrd" ] && mods="$mods
+    module_path: boot():/$(basename "$initrd")"
+
+	# Limine 9+ configuration syntax.
+	cat >"$bd/limine.conf" <<EOF
+# Arctic Linux - Limine configuration
+timeout: 3
+default_entry: 1
+interface_branding: Arctic Linux
+term_palette: 1e1e2e;f38ba8;a6e3a1;f9e2af;89b4fa;cba6f7;94e2d5;bac2de
+term_background: 1a1b26
+graphics: yes
+wallpaper: boot():/arctic-splash.png
+wallpaper_style: centered
+backdrop: 5f5bc6
+
+/Arctic linux
+    protocol: linux
+    kernel_path: boot():/$kname
+    kernel_cmdline: root=$rootspec rw quiet loglevel=3 arctic.splash$mods
+
+/Arctic linux (verbose)
+    protocol: linux
+    kernel_path: boot():/$kname
+    kernel_cmdline: root=$rootspec rw loglevel=7$mods
+
+/Arctic linux (recovery shell)
+    protocol: linux
+    kernel_path: boot():/$kname
+    kernel_cmdline: root=$rootspec rw single init=/bin/sh$mods
+EOF
+	# Older Limine reads limine.cfg; ship both so either version boots.
+	sed 's|^/Arctic|:Arctic|; s|^    \([a-z_]*\): |    \1=|' "$bd/limine.conf" \
+		>"$bd/limine.cfg" 2>/dev/null || :
+	[ -f /usr/share/arctic/limine/splash.png ] && \
+		cp -f /usr/share/arctic/limine/splash.png "$bd/arctic-splash.png" || :
+}
+
+install_limine_efi() {
+	bd=$1
+	mkdir -p "$bd/EFI/BOOT" "$bd/EFI/arctic"
+	src=""
+	for c in /usr/share/limine /usr/lib/limine "$TUILIB/../limine"; do
+		[ -f "$c/BOOTX64.EFI" ] && { src=$c; break; }
+	done
+	[ -n "$src" ] || { echo "arctic-boot-strap: limine EFI binaries are missing (install the limine package)" >&2; exit 1; }
+	cp -f "$src/BOOTX64.EFI" "$bd/EFI/BOOT/BOOTX64.EFI"
+	cp -f "$src/BOOTX64.EFI" "$bd/EFI/arctic/arcticx64.efi"
+	[ -f "$src/BOOTIA32.EFI" ] && cp -f "$src/BOOTIA32.EFI" "$bd/EFI/BOOT/BOOTIA32.EFI"
+
+	# Register an NVRAM entry named exactly "Arctic linux".
+	if have efibootmgr; then
+		esp=$(awk -v b="$bd" '$2==b{print $1}' /proc/mounts | tail -1)
+		if [ -n "$esp" ]; then
+			disk=$(printf '%s' "$esp" | sed 's|p\?[0-9]*$||')
+			part=$(printf '%s' "$esp" | sed 's|.*[^0-9]||')
+			efibootmgr --quiet --create --disk "$disk" --part "$part" \
+				--loader '\EFI\arctic\arcticx64.efi' --label 'Arctic linux' \
+				>>"$LOGF" 2>&1 || logit "efibootmgr could not add the entry"
+		fi
+	else
+		logit "efibootmgr absent; relying on the fallback path EFI/BOOT/BOOTX64.EFI"
+	fi
+}
+
+install_limine_bios() {
+	bd=$1
+	src=""
+	for c in /usr/share/limine /usr/lib/limine; do
+		[ -f "$c/limine-bios.sys" ] && { src=$c; break; }
+	done
+	[ -n "$src" ] || { echo "arctic-boot-strap: limine BIOS files are missing (install the limine package)" >&2; exit 1; }
+	cp -f "$src/limine-bios.sys" "$bd/limine-bios.sys"
+	dev=$(awk -v b="$bd" '$2==b{print $1}' /proc/mounts | tail -1)
+	disk=$(printf '%s' "$dev" | sed 's|p\?[0-9]*$||')
+	[ -n "$disk" ] || { echo "arctic-boot-strap: cannot work out which disk to write the MBR to" >&2; exit 1; }
+	have limine || { echo "arctic-boot-strap: the limine tool is not installed" >&2; exit 1; }
+	run limine bios-install "$disk" || { echo "arctic-boot-strap: writing the Limine MBR to $disk failed" >&2; exit 1; }
+}
+
+install_grub() {
+	bd=$1 rd=$2
+	have grub-install || { echo "arctic-boot-strap: GRUB is not installed - alpm ins grub" >&2; exit 1; }
+	dev=$(awk -v b="$bd" '$2==b{print $1}' /proc/mounts | tail -1)
+	disk=$(printf '%s' "$dev" | sed 's|p\?[0-9]*$||')
+	run grub-install --target=i386-pc --boot-directory="$bd" "$disk" || \
+		{ echo "arctic-boot-strap: grub-install failed" >&2; exit 1; }
+	mkdir -p "$bd/grub"
+	cat >"$bd/grub/grub.cfg" <<EOF
+set timeout=3
+set default=0
+insmod all_video
+menuentry "Arctic linux" {
+	linux /$(basename "$(ls "$bd"/vmlinuz-* | head -1)") root=$(awk '$2=="/"{print $1; exit}' "$rd/etc/fstab") rw quiet
+$( [ -f "$(ls "$bd"/initramfs-* 2>/dev/null | head -1)" ] && \
+	printf '\tinitrd /%s\n' "$(basename "$(ls "$bd"/initramfs-* | head -1)")" )
+}
+menuentry "Arctic linux (recovery shell)" {
+	linux /$(basename "$(ls "$bd"/vmlinuz-* | head -1)") root=$(awk '$2=="/"{print $1; exit}' "$rd/etc/fstab") rw single init=/bin/sh
+}
+EOF
+}
+
+finished_banner() {
+	cat <<EOF
+
+$(printf '%s' "$c_teal$t_bold")  Arctic Linux is installed.$(printf '%s' "$t_reset")
+
+  Next, if you want to change anything inside the new system:
+
+      $(printf '%s' "$c_snow")arctic-chroot$(printf '%s' "$t_reset")
+
+  Otherwise:
+
+      $(printf '%s' "$c_snow")reboot$(printf '%s' "$t_reset")
+
+EOF
+}
+
+# ----------------------------------------------------------------------- main
+
+need_root 2>/dev/null || { echo "Must be run as root." >&2; exit 1; }
+
+method="" loader=""
+while [ $# -gt 0 ]; do
+	case "$1" in
+	--efi)  method=efi; shift ;;
+	--bios) method=bios; shift ;;
+	--loader=*) loader=${1#--loader=}; shift ;;
+	--loader) shift; loader=${1:?usage: --loader limine|grub}; shift ;;
+	-h|--help|help) sed -n '2,17p' "$0" | sed 's/^# \?//'; exit 0 ;;
+	--version) printf 'arctic-boot-strap 1.0.0\n'; exit 0 ;;
+	-*) echo "arctic-boot-strap: unknown option $1" >&2; exit 1 ;;
+	*) break ;;
+	esac
+done
+
+BOOTDIR=${1:?usage: arctic-boot-strap /mnt/boot --efi|--bios}
+[ -d "$BOOTDIR" ] || { echo "arctic-boot-strap: $BOOTDIR does not exist - mount the boot partition first" >&2; exit 1; }
+
+# Fill in whatever --efi/--bios/--loader did not give us, from
+# arctic-boot-conf's saved answer, then from what this machine actually is.
+if [ -z "$method" ] && [ -f "$BOOTCONF" ]; then
+	# shellcheck disable=SC1090
+	. "$BOOTCONF"
+	method=${BOOT_METHOD:-}
+	[ -z "$loader" ] && loader=${BOOT_LOADER:-}
+fi
+[ -n "$method" ] || method=$(detect_firmware)
+[ -n "$loader" ] || loader=limine
+
+# The kernel choice is remembered from arctic-strap's run, if there was one.
+K=Arctic-base-kernel
+[ -f "$CONF" ] && . "$CONF" 2>/dev/null && K=${A_KERNEL:-$K}
+
+# Work out the root of the install from the boot directory.
+ROOTDIR=$(printf '%s' "$BOOTDIR" | sed 's|/boot/*$||')
+[ -n "$ROOTDIR" ] || ROOTDIR=/mnt
+[ -d "$ROOTDIR" ] || { echo "arctic-boot-strap: cannot locate the installed system near $BOOTDIR" >&2; exit 1; }
+
+tui_init
+tui_gauge_init 6
+
+step "Locating the kernel" "$K"
+vmlinuz=$(ls "$ROOTDIR"/boot/vmlinuz-* 2>/dev/null | head -1)
+[ -n "$vmlinuz" ] || vmlinuz=$(ls "$BOOTDIR"/vmlinuz-* 2>/dev/null | head -1)
+[ -n "$vmlinuz" ] || { tui_done; echo "arctic-boot-strap: no kernel image found - install $K first" >&2; exit 1; }
+
+step "Activating $K" "alpm commit"
+ALPM_ROOT="$ROOTDIR" ALPM_YES=1 alpm commit "$K" >>"$LOGF" 2>&1 || \
+	logit "alpm commit reported a problem"
+
+step "Copying the kernel into place" "$BOOTDIR"
+kname=$(basename "$vmlinuz")
+[ "$(dirname "$vmlinuz")" = "$BOOTDIR" ] || cp -f "$vmlinuz" "$BOOTDIR/$kname"
+for extra in "$ROOTDIR"/boot/initramfs-* "$ROOTDIR"/boot/*-ucode.img; do
+	[ -f "$extra" ] && cp -f "$extra" "$BOOTDIR/" || :
+done
+
+step "Finding the root device" "fstab"
+rootspec=$(awk '$2=="/"{print $1; exit}' "$ROOTDIR/etc/fstab" 2>/dev/null)
+[ -n "$rootspec" ] || {
+	rd=$(awk -v t="$ROOTDIR" '$2==t{print $1}' /proc/mounts | tail -1)
+	u=$(blkid -s UUID -o value "$rd" 2>/dev/null)
+	rootspec=${u:+UUID=$u}; rootspec=${rootspec:-$rd}
+}
+initrd=$(ls "$BOOTDIR"/initramfs-* 2>/dev/null | head -1)
+ucode=$(ls "$BOOTDIR"/*-ucode.img 2>/dev/null | head -1)
+
+step "Writing the Limine configuration" "Arctic linux"
+write_limine_conf "$BOOTDIR" "$kname" "$rootspec" "$initrd" "$ucode"
+
+step "Installing the bootloader" "$loader / $method"
+case "$method:$loader" in
+efi:*)       install_limine_efi "$BOOTDIR" ;;
+bios:limine) install_limine_bios "$BOOTDIR" ;;
+bios:grub)   install_grub "$BOOTDIR" "$ROOTDIR" ;;
+*)           tui_done; echo "arctic-boot-strap: unknown method/loader: $method/$loader" >&2; exit 1 ;;
+esac
+
+tui_gauge "Bootloader installed" 100
+sleep 1
+tui_done
+finished_banner
