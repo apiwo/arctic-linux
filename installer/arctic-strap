@@ -571,6 +571,7 @@ need_root 2>/dev/null || { echo "Must be run as root." >&2; exit 1; }
 
 FORCE=""
 CFFILE="$CONF"
+ARGTARGET=""
 while [ $# -gt 0 ]; do
 	case "$1" in
 	-c|--config) shift; CFFILE=${1:?usage: arctic-strap -c <file> <target>}; shift ;;
@@ -580,12 +581,20 @@ while [ $# -gt 0 ]; do
 	--version)
 		printf 'arctic-strap %s\n' "$VERSION"; exit 0 ;;
 	-*) echo "arctic-strap: unknown option $1" >&2; exit 1 ;;
-	*) break ;;
+	*)
+		# TARGET can come before or after -c/-f (typing the target first,
+		# then a flag, is just as natural as the documented order) - a plain
+		# "break" here on the first non-flag argument would stop the loop
+		# before it ever saw a flag that came after TARGET, silently
+		# discarding it.
+		if [ -z "$ARGTARGET" ]; then ARGTARGET=$1; shift
+		else echo "arctic-strap: unexpected argument: $1" >&2; exit 1
+		fi ;;
 	esac
 done
 
-[ -n "${1:-}" ] || { echo "usage: arctic-strap /mnt" >&2; exit 1; }
-TARGET=$1
+[ -n "$ARGTARGET" ] || { echo "usage: arctic-strap /mnt" >&2; exit 1; }
+TARGET=$ARGTARGET
 case "$TARGET" in
 /*) ;;
 *) TARGET="$(pwd)/$TARGET" ;;
@@ -605,8 +614,8 @@ if [ -f "$CFFILE" ]; then
 	# shellcheck disable=SC1090
 	. "$CFFILE"
 	# The command line always wins over whatever TARGET the answer file
-	# happened to record - re-deriving it from the raw $1 here instead would
-	# throw away the pwd-prefix/trailing-slash normalization done above.
+	# happened to record - re-deriving it from the raw argument here instead
+	# would throw away the pwd-prefix/trailing-slash normalization above.
 	TARGET=$cli_target
 elif [ "$CFFILE" != "$CONF" ]; then
 	bail "no such answer file: $CFFILE"

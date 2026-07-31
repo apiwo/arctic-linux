@@ -338,6 +338,63 @@ it can no longer collide with whatever a caller happens to also call `i`.
 Verified by installing an 8-package transaction and watching the bar reach a
 clean `100%` instead.
 
+## A second bug-hunting pass
+
+Asked for another pass after the above, specifically over the new installer
+split and anything of the same shape. Audited every shared function in
+`alpm`/`libalpm.sh`/`alpm-build`/`alpm-repo` for the `bar()`-style unscoped-
+variable collision (nothing else was found - `bar()` really was the one)
+and re-read the four new installer scripts and the service layer they call
+into. Five more real bugs, all fixed and re-verified live:
+
+1. **`arctic-boot-strap /mnt/boot --efi` silently ignored `--efi`.** The
+   documented (and requested) calling convention puts the path before the
+   flag, but the argument-parsing loop `break`-ed out on the first non-flag
+   token, so it never looked at anything after the path. Rewrote the loop to
+   pick out the first non-flag argument as BOOTDIR while continuing to scan
+   the rest for flags, so either order works. Gave `arctic-strap` the same
+   treatment for `-f`/`-c` - it happened to match its own documented
+   flags-first usage so wasn't broken yet, but a user typing the target
+   first would have hit the identical trap.
+2. **A password or wifi passphrase containing an apostrophe corrupted the
+   saved answer file and silently emptied itself.** `save_conf` (and
+   `arctic-boot-conf`'s config write) built the file with
+   `A_USERPASS='$A_USERPASS'`-style heredoc interpolation; a literal `'` in
+   the value closes the quote early and breaks every line after it, which
+   `arctic-strap` then fails to source at all. Added a `shq()` helper
+   (replace `'` with `'\''`) and quote every interpolated value through it.
+3. **A service running without a pidfile could never actually be stopped.**
+   `svc_running()` has a fallback that finds a daemon by scanning
+   `/proc/*/exe` when there is no pidfile (started outside `svc_start`, or
+   the pidfile was lost) - but `svc_stop()` only ever tried to read a PID
+   from the pidfile, so in exactly that situation it reported the service
+   as running and then did nothing. Gave `svc_stop()` the same `/proc/*/exe`
+   fallback.
+4. **`rc.d/pipewire status` reported "running" unconditionally**, the same
+   bug already documented and fixed elsewhere in this file
+   ("`pgrep -x <name>` cannot detect a daemon from a service script of the
+   same name") - just not applied here, since this script is a standalone
+   case statement rather than a `svc.lib` user. A script named `pipewire`
+   gets `comm=pipewire` while it runs, so its own `pgrep -x pipewire` check
+   matched itself. Switched to the same `/proc/*/exe` comparison
+   `svc_running` uses.
+5. **A failure in `hostname -F /etc/hostname` silently renamed the machine
+   to the literal string `arctic`.** `[ -f /etc/hostname ] && hostname -F
+   /etc/hostname || hostname arctic` is the classic `A && B || C` trap: if
+   `A` is true and `B` fails for any reason unrelated to the file's
+   existence, `C` runs too. Replaced with an actual if/then/else, with a
+   second, more direct attempt before giving up.
+
+Every other `A && B || C` occurrence in the tree was checked and left alone:
+they are all the safe ternary shape, where the middle command is a plain
+`echo`/`printf`/assignment that cannot itself fail for an unrelated reason.
+
+Verified live: `arctic-boot-strap /tmp/fakeboot --efi` now reaches "no
+kernel image found" (past argument parsing, exactly where a bad target
+should fail) instead of silently defaulting away from `--efi`, and
+`/etc/rc.d/pipewire status` now correctly exits 1 on a fresh boot instead of
+always exiting 0.
+
 ## Known rough edges
 
 - `alpm rollback` restores files but does not fully reconcile the package

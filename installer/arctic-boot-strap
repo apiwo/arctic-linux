@@ -170,7 +170,7 @@ EOF
 
 need_root 2>/dev/null || { echo "Must be run as root." >&2; exit 1; }
 
-method="" loader=""
+method="" loader="" BOOTDIR=""
 while [ $# -gt 0 ]; do
 	case "$1" in
 	--efi)  method=efi; shift ;;
@@ -180,11 +180,19 @@ while [ $# -gt 0 ]; do
 	-h|--help|help) sed -n '2,17p' "$0" | sed 's/^# \?//'; exit 0 ;;
 	--version) printf 'arctic-boot-strap 1.0.0\n'; exit 0 ;;
 	-*) echo "arctic-boot-strap: unknown option $1" >&2; exit 1 ;;
-	*) break ;;
+	*)
+		# BOOTDIR can come before or after --efi/--bios (the documented usage
+		# is "arctic-boot-strap /mnt/boot --efi", flag *after* the path) - a
+		# plain "break" here on the first non-flag argument would stop the
+		# loop before it ever saw a flag that came after BOOTDIR, silently
+		# discarding it.
+		if [ -z "$BOOTDIR" ]; then BOOTDIR=$1; shift
+		else echo "arctic-boot-strap: unexpected argument: $1" >&2; exit 1
+		fi ;;
 	esac
 done
 
-BOOTDIR=${1:?usage: arctic-boot-strap /mnt/boot --efi|--bios}
+[ -n "$BOOTDIR" ] || { echo "usage: arctic-boot-strap /mnt/boot --efi|--bios" >&2; exit 1; }
 [ -d "$BOOTDIR" ] || { echo "arctic-boot-strap: $BOOTDIR does not exist - mount the boot partition first" >&2; exit 1; }
 
 # Fill in whatever --efi/--bios/--loader did not give us, from

@@ -679,41 +679,51 @@ screen_review() {
 	done
 }
 
+# Quote a value for safe use inside single quotes in a shell file. Needed
+# because the answers below include free-typed text - passwords, wifi
+# passphrases and SSIDs, a hand-typed locale/keymap/hostname - and any of
+# those containing an apostrophe (a thoroughly ordinary thing to put in a
+# password) would otherwise close the quote early and corrupt the rest of
+# the file. A password with one silently truncated to empty and the file
+# failed to source at all before this existed.
+shq() { printf '%s' "$1" | sed "s/'/'\\\\''/g"; }
+
 save_conf() {
-	cat >"$CONF" <<EOF
-# arctic-strap answers, written by arctic-conf $(date '+%Y-%m-%d %H:%M:%S')
-TARGET='$TARGET'
-A_KERNEL='$A_KERNEL'
-A_DESKTOP='$A_DESKTOP'
-A_DM='${A_DM:-none}'
-A_HOSTNAME='$A_HOSTNAME'
-A_USER='$A_USER'
-A_USERPASS='$A_USERPASS'
-A_ROOTPASS='$A_ROOTPASS'
-A_SHELL='$A_SHELL'
-A_LOCALE='$A_LOCALE'
-A_LANG='$A_LANG'
-A_KEYMAP='$A_KEYMAP'
-A_TZ='$A_TZ'
-A_NTP='$A_NTP'
-A_NET='$A_NET'
-A_WIFI_SSID='$A_WIFI_SSID'
-A_WIFI_PSK='$A_WIFI_PSK'
-A_WIFI_IFACE='$A_WIFI_IFACE'
-A_FS='$A_FS'
-A_SNAPSHOT='$A_SNAPSHOT'
-A_BTRFS_OPTS='$A_BTRFS_OPTS'
-A_SWAP='$A_SWAP'
-A_SWAPSIZE='$A_SWAPSIZE'
-A_SWAPDEV='$A_SWAPDEV'
-A_GPU='$A_GPU'
-A_AUDIO='$A_AUDIO'
-A_BLUETOOTH='$A_BLUETOOTH'
-A_SSH='$A_SSH'
-A_FIREWALL='$A_FIREWALL'
-A_TRIM='$A_TRIM'
-A_EXTRA='$A_EXTRA'
-EOF
+	{
+		printf '# arctic-strap answers, written by arctic-conf %s\n' \
+			"$(date '+%Y-%m-%d %H:%M:%S')"
+		printf "TARGET='%s'\n"       "$(shq "$TARGET")"
+		printf "A_KERNEL='%s'\n"     "$(shq "$A_KERNEL")"
+		printf "A_DESKTOP='%s'\n"    "$(shq "$A_DESKTOP")"
+		printf "A_DM='%s'\n"         "$(shq "${A_DM:-none}")"
+		printf "A_HOSTNAME='%s'\n"   "$(shq "$A_HOSTNAME")"
+		printf "A_USER='%s'\n"       "$(shq "$A_USER")"
+		printf "A_USERPASS='%s'\n"   "$(shq "$A_USERPASS")"
+		printf "A_ROOTPASS='%s'\n"   "$(shq "$A_ROOTPASS")"
+		printf "A_SHELL='%s'\n"      "$(shq "$A_SHELL")"
+		printf "A_LOCALE='%s'\n"     "$(shq "$A_LOCALE")"
+		printf "A_LANG='%s'\n"       "$(shq "$A_LANG")"
+		printf "A_KEYMAP='%s'\n"     "$(shq "$A_KEYMAP")"
+		printf "A_TZ='%s'\n"         "$(shq "$A_TZ")"
+		printf "A_NTP='%s'\n"        "$(shq "$A_NTP")"
+		printf "A_NET='%s'\n"        "$(shq "$A_NET")"
+		printf "A_WIFI_SSID='%s'\n"  "$(shq "$A_WIFI_SSID")"
+		printf "A_WIFI_PSK='%s'\n"   "$(shq "$A_WIFI_PSK")"
+		printf "A_WIFI_IFACE='%s'\n" "$(shq "$A_WIFI_IFACE")"
+		printf "A_FS='%s'\n"         "$(shq "$A_FS")"
+		printf "A_SNAPSHOT='%s'\n"   "$(shq "$A_SNAPSHOT")"
+		printf "A_BTRFS_OPTS='%s'\n" "$(shq "$A_BTRFS_OPTS")"
+		printf "A_SWAP='%s'\n"       "$(shq "$A_SWAP")"
+		printf "A_SWAPSIZE='%s'\n"   "$(shq "$A_SWAPSIZE")"
+		printf "A_SWAPDEV='%s'\n"    "$(shq "$A_SWAPDEV")"
+		printf "A_GPU='%s'\n"        "$(shq "$A_GPU")"
+		printf "A_AUDIO='%s'\n"      "$(shq "$A_AUDIO")"
+		printf "A_BLUETOOTH='%s'\n"  "$(shq "$A_BLUETOOTH")"
+		printf "A_SSH='%s'\n"        "$(shq "$A_SSH")"
+		printf "A_FIREWALL='%s'\n"   "$(shq "$A_FIREWALL")"
+		printf "A_TRIM='%s'\n"       "$(shq "$A_TRIM")"
+		printf "A_EXTRA='%s'\n"      "$(shq "$A_EXTRA")"
+	} >"$CONF"
 	chmod 600 "$CONF"
 }
 

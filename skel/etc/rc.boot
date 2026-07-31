@@ -96,7 +96,15 @@ good
 
 # ------------------------------------------------------------------------- system
 begin "setting the hostname"
-[ -f /etc/hostname ] && hostname -F /etc/hostname 2>/dev/null || hostname arctic
+# Not "A && B || C": if /etc/hostname exists but "hostname -F" itself fails
+# for any reason (an empty file, a trailing-whitespace quirk), that pattern
+# runs the fallback too and silently renames the machine to the literal
+# string "arctic" instead of leaving the real, configured name in place.
+if [ -f /etc/hostname ]; then
+	hostname -F /etc/hostname 2>/dev/null || hostname "$(cat /etc/hostname 2>/dev/null)" 2>/dev/null
+else
+	hostname arctic
+fi
 good
 
 begin "setting the console font and keymap"

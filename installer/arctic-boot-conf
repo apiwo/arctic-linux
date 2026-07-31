@@ -56,12 +56,19 @@ if [ "$method" = bios ]; then
 	loader=$TUI_CHOICE
 fi
 
-cat >"$BOOTCONF" <<EOF
-# arctic-boot-strap answers, written by arctic-boot-conf $(date '+%Y-%m-%d %H:%M:%S')
-BOOTDIR='$BOOTDIR'
-BOOT_METHOD='$method'
-BOOT_LOADER='$loader'
-EOF
+# Quote for safe use inside single quotes - BOOTDIR is a path a human chose,
+# and an apostrophe in it would otherwise close the quote early and corrupt
+# the rest of the file (method/loader are fixed menu choices, never need
+# this, but there is no cost to being consistent).
+shq() { printf '%s' "$1" | sed "s/'/'\\\\''/g"; }
+
+{
+	printf '# arctic-boot-strap answers, written by arctic-boot-conf %s\n' \
+		"$(date '+%Y-%m-%d %H:%M:%S')"
+	printf "BOOTDIR='%s'\n"     "$(shq "$BOOTDIR")"
+	printf "BOOT_METHOD='%s'\n" "$(shq "$method")"
+	printf "BOOT_LOADER='%s'\n" "$(shq "$loader")"
+} >"$BOOTCONF"
 
 tui_yesno "Install now" "Run arctic-boot-strap on $BOOTDIR now?" yes
 go=$?

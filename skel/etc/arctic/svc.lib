@@ -46,8 +46,21 @@ svc_start() {
 
 svc_stop() {
 	svc_running || { echo "$NAME is not running"; return 0; }
-	start-stop-daemon --stop --quiet --pidfile "$PIDFILE" --retry 10 2>/dev/null \
-	|| { p=$(cat "$PIDFILE" 2>/dev/null); [ -n "$p" ] && kill "$p" 2>/dev/null; }
+	if [ -f "$PIDFILE" ]; then
+		start-stop-daemon --stop --quiet --pidfile "$PIDFILE" --retry 10 2>/dev/null \
+		|| { p=$(cat "$PIDFILE" 2>/dev/null); [ -n "$p" ] && kill "$p" 2>/dev/null; }
+	else
+		# No pidfile - svc_running only found this one by scanning /proc for a
+		# process whose exe is $CMD (started outside svc_start, or the
+		# pidfile was lost some other way). Without this, a service in that
+		# state could be reported as running but could never actually be
+		# stopped: start-stop-daemon --pidfile and the kill fallback above
+		# both need a pidfile that does not exist.
+		for d in /proc/[0-9]*; do
+			[ "$(readlink "$d/exe" 2>/dev/null)" = "$CMD" ] || continue
+			kill "${d#/proc/}" 2>/dev/null
+		done
+	fi
 	rm -f "$PIDFILE"
 	[ -n "${POSTSTOP:-}" ] && eval "$POSTSTOP"
 	return 0
