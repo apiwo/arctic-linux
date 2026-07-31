@@ -20,6 +20,20 @@
 #   ARCTIC_BUILD   writable build tree   (default /home/apiwo/arctic-build)
 #   ARCTIC_TREE    writable source tree  (default /home/apiwo/arctic)
 #
+# WITHOUT BUBBLEWRAP
+#   bwrap is not a hard requirement of the build - a host without it (an
+#   old kernel with no unprivileged user namespaces, a container that
+#   already can't nest one, whatever) can still build Arctic. Set
+#   ARCTIC_UNSANDBOXED=i-accept-the-risk and this script will run the
+#   command directly, with a warning, instead of refusing. Nothing else
+#   changes: build-rootfs.sh and friends still only check for
+#   ARCTIC_SANDBOX=1, which this sets either way.
+#
+#   That switch is for a human who has read the WHY THIS EXISTS note above
+#   and decided the risk is theirs to take on their own machine. An agent
+#   building on someone else's behalf should not flip it on its own
+#   initiative - ask first, the same as any other unsandboxed build.
+#
 # shellcheck shell=sh
 
 set -u
@@ -27,40 +41,64 @@ set -u
 : "${ARCTIC_BUILD:=/home/apiwo/arctic-build}"
 : "${ARCTIC_TREE:=/home/apiwo/arctic}"
 
-command -v bwrap >/dev/null 2>&1 || {
-	echo "arctic-sandbox: bubblewrap (bwrap) is required" >&2
-	echo "  without it a build can write to the host, which is how the host" >&2
-	echo "  libc got replaced last time. Refusing to run unsandboxed." >&2
-	exit 1
-}
+HAVE_BWRAP=1
+command -v bwrap >/dev/null 2>&1 || HAVE_BWRAP=0
+
+if [ "$HAVE_BWRAP" = 0 ]; then
+	if [ "${ARCTIC_UNSANDBOXED:-}" != "i-accept-the-risk" ]; then
+		echo "arctic-sandbox: bubblewrap (bwrap) is not installed" >&2
+		echo "  without it a build can write to the host, which is how the host" >&2
+		echo "  libc got replaced last time. Refusing to run unsandboxed." >&2
+		echo "  Install bubblewrap, or if you understand the risk and accept it" >&2
+		echo "  on this machine, set ARCTIC_UNSANDBOXED=i-accept-the-risk." >&2
+		exit 1
+	fi
+	echo "arctic-sandbox: WARNING - no bubblewrap, running UNSANDBOXED" >&2
+	echo "  a recipe that forgets DESTDIR can overwrite this host's own libc." >&2
+fi
 
 mkdir -p "$ARCTIC_BUILD" "$ARCTIC_BUILD/tmp"
 
 # --ro-bind / / makes the entire host read-only. Everything writable is listed
 # explicitly below, and nothing outside those paths can be modified.
 sandbox() {
-	bwrap \
-		--ro-bind / / \
-		--dev /dev \
-		--proc /proc \
-		--tmpfs /run \
-		--bind "$ARCTIC_BUILD" "$ARCTIC_BUILD" \
-		--bind "$ARCTIC_TREE" "$ARCTIC_TREE" \
-		--bind "$ARCTIC_BUILD/tmp" /tmp \
-		--unshare-pid \
-		--unshare-uts \
-		--unshare-ipc \
-		--die-with-parent \
-		--new-session \
-		--setenv TMPDIR /tmp \
-		--setenv ARCTIC_SANDBOX 1 \
-		--setenv ARCTIC_BUILD "$ARCTIC_BUILD" \
-		--setenv ARCTIC_TREE "$ARCTIC_TREE" \
-		--chdir "$ARCTIC_BUILD" \
-		"$@"
+	if [ "$HAVE_BWRAP" = 1 ]; then
+		bwrap \
+			--ro-bind / / \
+			--dev /dev \
+			--proc /proc \
+			--tmpfs /run \
+			--bind "$ARCTIC_BUILD" "$ARCTIC_BUILD" \
+			--bind "$ARCTIC_TREE" "$ARCTIC_TREE" \
+			--bind "$ARCTIC_BUILD/tmp" /tmp \
+			--unshare-pid \
+			--unshare-uts \
+			--unshare-ipc \
+			--die-with-parent \
+			--new-session \
+			--setenv TMPDIR /tmp \
+			--setenv ARCTIC_SANDBOX 1 \
+			--setenv ARCTIC_BUILD "$ARCTIC_BUILD" \
+			--setenv ARCTIC_TREE "$ARCTIC_TREE" \
+			--chdir "$ARCTIC_BUILD" \
+			"$@"
+	else
+		# No isolation at all here - this only runs after the explicit
+		# ARCTIC_UNSANDBOXED opt-in above. Just set what build-rootfs.sh and
+		# friends check for and run in place.
+		( cd "$ARCTIC_BUILD" && \
+		  TMPDIR="$ARCTIC_BUILD/tmp" ARCTIC_SANDBOX=1 \
+		  ARCTIC_BUILD="$ARCTIC_BUILD" ARCTIC_TREE="$ARCTIC_TREE" \
+		  "$@" )
+	fi
 }
 
 if [ "${1:-}" = "--check" ]; then
+	if [ "$HAVE_BWRAP" = 0 ]; then
+		printf 'no bubblewrap on this host - running ARCTIC_UNSANDBOXED, nothing to check.\n'
+		printf 'there is no isolation: a build can write anywhere on this machine.\n'
+		exit 1
+	fi
 	printf 'checking that the sandbox actually holds...\n\n'
 	fail=0
 

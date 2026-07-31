@@ -240,6 +240,14 @@ It uses bubblewrap: the whole host is bind-mounted read-only, and only the build
 tree, the source tree and `/tmp` are writable. Sources are fetched from upstream;
 nothing is vendored.
 
+Bubblewrap is not a hard requirement of Arctic itself, only of building safely.
+A host without it (no unprivileged user namespaces, a container that can't
+nest one) can still build by setting `ARCTIC_UNSANDBOXED=i-accept-the-risk` -
+`build/arctic-sandbox` warns loudly and then runs with no isolation at all.
+Do this only if you understand that a recipe forgetting `DESTDIR` can then
+overwrite your own machine's libc, which is exactly what happened once. When
+bubblewrap is available, use it.
+
 ## Layout
 
 ```
