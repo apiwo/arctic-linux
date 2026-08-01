@@ -1,0 +1,6 @@
+# Built with musl-gcc, dynamically linked against musl (see the build()
+# comments for why not static), installed under /usr/musl so it never
+# collides with the glibc busybox package. Proof-of-concept - a minimal
+# applet set (allnoconfig + a handful), not Arctic's own busybox.config.
+# Needs musl-gcc already on disk, which needs musl staged first - see
+# build(). Do not regenerate.

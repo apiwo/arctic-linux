@@ -1,0 +1,50 @@
+# busybox-musl - Init, getty, device manager and network tools - built against musl
+# Generated from manifest.tsv by gen-ports.py. Edit the manifest, not this file,
+# unless the package needs something the template cannot express - in which case
+# drop a `recipe.local` beside it and it will be preserved.
+name=busybox-musl
+version=1.38.0
+release=1
+desc="Init, getty, device manager and network tools - built against musl"
+url="https://busybox.net/"
+license="GPL-2.0-only"
+depend="musl"
+makedepend=""
+source="https://busybox.net/downloads/busybox-1.38.0.tar.bz2"
+sha256="SKIP"
+
+build() {
+	cd "busybox-1.38.0"
+	# depend/makedepend in this ports system are package metadata only -
+	# alpm-build does not stage a recipe's own dependencies onto the build
+	# host before running build(). musl-gcc has to actually exist somewhere
+	# on disk already: a real Arctic system with musl installed has it at
+	# /usr/musl; the sandboxed build host does not, so check for a manually
+	# staged copy there too.
+	MUSLGCC=/usr/musl/bin/musl-gcc
+	[ -x "$MUSLGCC" ] || MUSLGCC=/home/apiwo/arctic-build/stage/musl-sysroot/usr/musl/bin/musl-gcc
+	[ -x "$MUSLGCC" ] || { echo "musl-gcc not found - build/stage the musl port first" >&2; exit 1; }
+	# busybox's own Makefile assigns CC = gcc unconditionally, which wins
+	# over a plain exported CC - has to go on the make command line to
+	# actually override it, or this silently links against the host's
+	# glibc instead of musl.
+	# musl folds crypt()/libm/librt straight into libc.a - there is no
+	# separate static lib for any of them, so busybox's own link probe
+	# (which unconditionally tries -lcrypt -lm -lrt) fails outright under
+	# -static. Dynamic linking against musl's libc.so does not hit this.
+	# defconfig enables applets like tc that need full kernel networking
+	# headers this build does not have - allnoconfig plus a small applet
+	# set proves the musl-gcc pipeline works without fighting those.
+	make CC="$MUSLGCC" allnoconfig
+	for c in CONFIG_ASH CONFIG_SH_IS_ASH CONFIG_CAT CONFIG_LS CONFIG_ECHO \
+	         CONFIG_MKDIR CONFIG_RM CONFIG_CP CONFIG_MV CONFIG_PWD; do
+		sed -i "s/^# $c is not set/$c=y/" .config
+	done
+	make CC="$MUSLGCC" oldconfig </dev/null >/dev/null
+	make CC="$MUSLGCC" -j"$JOBS"
+}
+
+package() {
+	cd "busybox-1.38.0"
+	install -Dm755 busybox "$pkgdir/usr/musl/bin/busybox"
+}

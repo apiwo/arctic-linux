@@ -87,7 +87,24 @@ A_EXTRA=""
 A_FONTS=""
 A_PKGS=""
 
-bail() { tui_done 2>/dev/null; printf '\033[38;5;203merror:\033[0m %s\n' "$*" >&2; exit 1; }
+bail() {
+	tui_done 2>/dev/null
+	{
+		printf 'error: %s\n' "$*"
+		cat <<'EOF'
+   \
+    \
+        .--.
+       |o_o |
+       |:_/ |
+      //   \ \
+     (|     | )
+    /'\_   _/`\
+    \___)=(___/
+EOF
+	} >&2
+	exit 1
+}
 logit() { printf '[%s] %s\n' "$(date '+%H:%M:%S')" "$*" >>"$LOGF"; }
 
 detect_gpu() {

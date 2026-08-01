@@ -45,7 +45,27 @@ msg()   { printf '%s::%s %s%s%s\n' "$A_TEAL$C_B" "$C_R$C_B" "$*" "$C_R" ""; }
 msg2()  { printf '  %s->%s %s\n' "$A_ICE$C_B" "$C_R" "$*"; }
 info()  { printf '  %s*%s  %s\n' "$A_IND" "$C_R" "$*"; }
 warn()  { printf '%s::%s %s%s\n' "$A_AMB$C_B" "$C_B" "$*" "$C_R" >&2; }
-err()   { printf '%serror:%s %s\n' "$A_RED$C_B" "$C_R" "$*" >&2; }
+# tux says what went wrong. Not a real cowsay bubble - some of these
+# messages span several lines (a checksum mismatch prints three), which a
+# fixed-width bubble does not degrade well for.
+tux_say() {
+	{
+		printf '%s\n' "$*"
+		cat <<'EOF'
+   \
+    \
+        .--.
+       |o_o |
+       |:_/ |
+      //   \ \
+     (|     | )
+    /'\_   _/`\
+    \___)=(___/
+EOF
+	} >&2
+}
+
+err()   { tux_say "error: $*"; }
 die()   { err "$*"; exit 1; }
 ok()    { printf '  %sok%s  %s\n' "$A_MINT$C_B" "$C_R" "$*"; }
 
@@ -90,6 +110,33 @@ bar() {
 # --------------------------------------------------------------------- helpers
 
 have() { command -v "$1" >/dev/null 2>&1; }
+
+# True on a musl root (a musl-edition install, or ALPM_ROOT pointed at one) -
+# Arctic's own binary repo is always built against glibc regardless of which
+# root alpm is pointed at, so a binary install there would just fail at
+# runtime with an unresolvable dynamic linker.
+is_musl_root() {
+	[ -e "$ALPM_ROOT/lib/ld-musl-x86_64.so.1" ] && [ ! -e "$ALPM_ROOT/usr/lib/libc.so.6" ]
+}
+
+musl_binary_warning() {
+	cat >&2 <<'EOF'
+ _______________________________________
+/ Musl libc can only use source pkgs on \
+| Arctic. Binaries are compiled via     |
+\ glibc.                                /
+ ---------------------------------------
+   \
+    \
+        .--.
+       |o_o |
+       |:_/ |
+      //   \ \
+     (|     | )
+    /'\_   _/`\
+    \___)=(___/
+EOF
+}
 
 sha256() {
 	if have sha256sum; then sha256sum "$1" | cut -d' ' -f1

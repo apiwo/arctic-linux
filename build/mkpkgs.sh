@@ -31,7 +31,7 @@ DATE=$(date '+%s')
 SRC_EXTRA=$B/src
 
 mkdir -p "$PKGDIRS" "$REPO"
-for r in main extra base kernels source nonfree alt-nonfree multilib; do
+for r in main extra base kernels source nonfree alt-nonfree multilib musl; do
 	mkdir -p "$REPO/$r/$ARCH"
 done
 
@@ -467,7 +467,7 @@ step "laying out the source repository"
 SR=$REPO/source
 mkdir -p "$SR/recipes"
 n=0
-for r in main extra base kernels nonfree alt-nonfree multilib; do
+for r in main extra base kernels nonfree alt-nonfree multilib musl; do
 	for d in "$SRCTREE/ports/$r"/*/; do
 		[ -f "$d/recipe" ] || continue
 		p=$(basename "$d")
@@ -505,7 +505,7 @@ ok "source INDEX: $(grep -vc '^#' "$SR/$ARCH/INDEX") packages"
 # ------------------------------------------------------- index the binary repos
 step "generating repository indexes"
 export ALPM_ROOT=/ ALPM_COLOR=never
-for r in main extra base kernels nonfree alt-nonfree multilib; do
+for r in main extra base kernels nonfree alt-nonfree multilib musl; do
 	c=$(ls -1 "$REPO/$r/$ARCH"/*.alpmz 2>/dev/null | wc -l | tr -d ' ')
 	if [ "$c" = "0" ]; then
 		# An empty repo still needs a valid index so 'alpm fetch' succeeds.
@@ -523,7 +523,7 @@ for r in main extra base kernels nonfree alt-nonfree multilib; do
 done
 
 printf '\n\033[1;36m=== REPOSITORIES ===\033[0m\n'
-for r in main extra base kernels source nonfree alt-nonfree multilib; do
+for r in main extra base kernels source nonfree alt-nonfree multilib musl; do
 	c=$(grep -vc '^#' "$REPO/$r/$ARCH/INDEX" 2>/dev/null || echo 0)
 	s=$(du -sh "$REPO/$r" 2>/dev/null | cut -f1)
 	printf '%-14s %5s packages  %s\n' "$r" "$c" "$s"

@@ -12,10 +12,12 @@
 # Everything needed to install Arctic and boot it.
 main	glibc	2.44	autotools	LGPL-2.1-or-later	linux-headers	gcc,bison,python	https://www.gnu.org/software/libc/	https://ftp.gnu.org/gnu/glibc/glibc-{version}.tar.xz	The GNU C library, the only GNU component in Arctic
 main	linux-headers	7.1.3	make	GPL-2.0-only WITH Linux-syscall-note	-	-	https://kernel.org/	https://cdn.kernel.org/pub/linux/kernel/v7.x/linux-{version}.tar.xz	Kernel headers for userspace
+main	musl	1.2.5	autotools	MIT	linux-headers	-	https://musl.libc.org/	https://musl.libc.org/releases/musl-{version}.tar.gz	musl libc, the small alternative to glibc
 main	gcc-libs	15.3.0	autotools	GPL-3.0-or-later WITH GCC-exception-3.1	glibc	-	https://gcc.gnu.org/	https://ftp.gnu.org/gnu/gcc/gcc-{version}/gcc-{version}.tar.xz	libstdc++ and libgcc_s runtime only, required by the NVIDIA driver
 main	gmake	4.4.1	autotools	GPL-3.0-or-later	glibc	-	https://www.gnu.org/software/make/	https://ftp.gnu.org/gnu/make/make-{version}.tar.gz	GNU make as gmake, for kernel modules; /usr/bin/make is still bmake
 main	libglvnd	1.7.0	meson	MIT	glibc	meson,ninja	https://gitlab.freedesktop.org/glvnd/libglvnd	https://gitlab.freedesktop.org/glvnd/libglvnd/-/archive/v{version}/libglvnd-v{version}.tar.gz	GL vendor dispatch, so mesa and NVIDIA can both provide GL
 main	busybox	1.38.0	make	GPL-2.0-only	glibc	-	https://busybox.net/	https://busybox.net/downloads/busybox-{version}.tar.bz2	Init, getty, device manager and network tools
+musl	busybox-musl	1.38.0	make	GPL-2.0-only	musl	-	https://busybox.net/	https://busybox.net/downloads/busybox-{version}.tar.bz2	Init, getty, device manager and network tools - built against musl
 main	toybox	0.8.14	make	0BSD	glibc	-	https://landley.net/toybox/	https://landley.net/toybox/downloads/toybox-{version}.tar.gz	The classic Unix commands, BSD licensed
 main	zsh	5.9.2	autotools	MIT-Modern-Variant	glibc,netbsd-curses	clang,lld	https://www.zsh.org/	https://www.zsh.org/pub/zsh-{version}.tar.xz	The Z shell, Arctic's login shell
 main	doas	6.8.2	autotools	ISC	glibc,libxcrypt	clang	https://github.com/Duncaen/OpenDoas	https://github.com/Duncaen/OpenDoas/archive/refs/tags/v{version}.tar.gz	Run commands as another user

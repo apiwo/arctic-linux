@@ -38,7 +38,7 @@ DEFAULT="bzip2 lz4 expat libffi pcre2 attr libcap libedit sqlite less
 TARGETS=${*:-$DEFAULT}
 
 find_recipe() {
-	for r in main extra base kernels nonfree alt-nonfree multilib profile; do
+	for r in main extra base kernels nonfree alt-nonfree multilib profile musl; do
 		[ -f "$TREE/ports/$r/$1/recipe" ] && { printf '%s|%s' "$r" "$TREE/ports/$r/$1/recipe"; return 0; }
 	done
 	return 1
@@ -83,7 +83,7 @@ for pkg in $TARGETS; do
 done
 
 # Reindex everything we touched.
-for r in main extra base kernels nonfree alt-nonfree multilib profile; do
+for r in main extra base kernels nonfree alt-nonfree multilib profile musl; do
 	[ -d "$B/repo/$r/x86_64" ] || continue
 	ls "$B/repo/$r/x86_64"/*.alpmz >/dev/null 2>&1 || continue
 	sh "$TREE/alpm/alpm-repo" gen "$B/repo/$r" x86_64 >/dev/null 2>&1 || :
@@ -92,7 +92,7 @@ done
 printf '\n  %s built, %s failed, %s skipped\n' "$built" "$failed" "$skipped"
 [ -n "$FAILED_LIST" ] && printf '  still source-only:%s\n' "$FAILED_LIST"
 printf '\n'
-for r in main extra base kernels profile; do
+for r in main extra base kernels profile musl; do
 	c=$(ls -1 "$B/repo/$r/x86_64"/*.alpmz 2>/dev/null | wc -l | tr -d ' ')
 	printf '  %-12s %s binaries\n' "$r" "$c"
 done

@@ -338,6 +338,12 @@ cmd_ins() {
 
 	if [ "$SOURCE" = "1" ]; then cmd_ins_source "$@"; return; fi
 
+	if is_musl_root; then
+		musl_binary_warning
+		cmd_ins_source "$@"
+		return
+	fi
+
 	# Check the requested names before resolving. resolve_targets runs in a
 	# command substitution, so a die() inside it only exits that subshell and
 	# alpm would carry on with an empty list and report success.
