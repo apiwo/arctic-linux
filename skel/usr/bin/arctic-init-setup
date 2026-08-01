@@ -5,16 +5,10 @@
 #
 #   busybox openrc sysvinit runit dinit systemd-libre
 #
-# Arctic declares services once, in /etc/rc.d - a handful of variables
-# (NAME, CMD, ARGS, BACKGROUND) and a call to svc_main. That is the single
-# source of truth, and this generates the equivalent definition for whichever
-# init is actually running: an OpenRC init.d script, a runit run script, a
-# dinit service file, an s6 service directory, a systemd unit.
-#
-# Writing them out per-init rather than shipping eight hand-maintained copies
-# of every service means adding a service to Arctic stays one file, and no
-# init can silently drift out of step with the others.
-#
+# Arctic declares services once, in /etc/rc.d - NAME/CMD/ARGS/BACKGROUND and
+# a call to svc_main. This generates the equivalent for whichever init is
+# actually running, so a service stays a one-file change instead of five
+# hand-maintained copies drifting apart.
 # shellcheck shell=sh disable=SC2039
 
 set -u
@@ -49,15 +43,11 @@ each_service() {
 	done
 }
 
-# Is this service one the config asked to have enabled at boot?
 is_enabled() { [ -e "$SVCDIR/$1" ]; }
 
-# Not every service is a daemon with a CMD. network, nftables, fstrim and
-# pipewire define start()/stop() in the script itself instead, and they were
-# being skipped entirely by every generator here - a machine would come up
-# with no networking configured and no firewall. Anything without a CMD is
-# treated as a one-shot that delegates to the rc.d script, which is exactly
-# what those scripts are already shaped to do.
+# network, nftables, fstrim and pipewire's bring-up have no CMD - they
+# define start()/stop() in the rc.d script itself, and become a one-shot
+# that calls it directly instead of a supervised process.
 is_scripted() { [ -z "$(svc_field "$RCD/$1" CMD)" ]; }
 
 # ------------------------------------------------------------------- busybox

@@ -36,15 +36,10 @@ mountpoint -q /dev/shm || mount -t tmpfs  -o nosuid,nodev,mode=1777 shm /dev/shm
 good
 
 # --------------------------------------------------------------------- the log
-# A service that fails at boot used to print its complaint into a screen that
-# had already scrolled past, or into /dev/null - which is exactly how "iwd
-# will not start" turned into a guessing game with no evidence to look at.
-# rc_log() appends to a file that survives the boot; begin/good/bad in
-# rc.lib call it, and the services loop below records why a service failed.
-#
-# Deliberately not a tee through a fifo: `exec >fifo` blocks until a reader
-# has the other end open, and if that reader has not started yet, sysinit
-# hangs before it has done anything at all. Appending cannot deadlock.
+# rc_log() appends to a file that survives the boot, so a service that fails
+# leaves a trace instead of vanishing into /dev/null. Appends only - not a
+# tee through a fifo, which blocks until something opens the other end and
+# can hang sysinit before anything has started.
 RC_LOG=/run/arctic/boot.log
 export RC_LOG
 mkdir -p /run/arctic 2>/dev/null || :

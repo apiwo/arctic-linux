@@ -10,16 +10,11 @@
 #   arctic-generation prune [keep]         keep only the newest N (default 10)
 #   arctic-generation current              print the current generation id
 #
-# A generation is a complete record of what the system was declared to be at
-# one moment: system.conf, the explicit package set with exact versions, the
-# enabled services, and which kernel was in use. Every arctic-rebuild writes
-# one before it changes anything.
-#
-# This is what makes a bad edit recoverable. `arctic-generation switch 3`
-# puts system.conf back to what generation 3 said and reconciles the machine
-# to it, and the bootloader lists the recent ones so a configuration that
-# will not boot can be escaped from the boot menu instead of a rescue USB.
-#
+# A generation is a snapshot of what the system was declared to be:
+# system.conf, the exact package versions, enabled services, and kernel.
+# Every arctic-rebuild writes one before changing anything, so
+# `arctic-generation switch N` can always put system.conf back and
+# reconcile to it - from the shell or the boot menu.
 # shellcheck shell=sh disable=SC2039
 
 set -u
@@ -104,12 +99,9 @@ gen_exists() { [ -d "$GENDIR/$1" ]; }
 
 # ------------------------------------------------------------------ commands
 
-# Every variable here is underscore-prefixed on purpose. There is no `local`
-# in POSIX sh, so a bare `id` or `d` set in here would overwrite the caller's
-# - and cmd_switch calls this in the middle of its own work. That bug was
-# real: `arctic-generation switch 1` recorded a pre-switch generation, had
-# its own `id` and `d` replaced by the new one's, and then "rolled back" to
-# the generation it had just created, leaving system.conf untouched.
+# Underscore-prefixed variables on purpose - no `local` in POSIX sh, and
+# cmd_switch calls this mid-work, so a bare `id`/`d` would overwrite its
+# caller's and switch would silently roll back to the wrong generation.
 cmd_create() {
 	need_root
 	_c_desc=${1:-manual}
