@@ -35,6 +35,25 @@ mountpoint -q /dev/shm || mount -t tmpfs  -o nosuid,nodev,mode=1777 shm /dev/shm
 [ -d /sys/firmware/efi ] && mount -t efivarfs efivarfs /sys/firmware/efi/efivars 2>/dev/null
 good
 
+# --------------------------------------------------------------------- the log
+# A service that fails at boot used to print its complaint into a screen that
+# had already scrolled past, or into /dev/null - which is exactly how "iwd
+# will not start" turned into a guessing game with no evidence to look at.
+# rc_log() appends to a file that survives the boot; begin/good/bad in
+# rc.lib call it, and the services loop below records why a service failed.
+#
+# Deliberately not a tee through a fifo: `exec >fifo` blocks until a reader
+# has the other end open, and if that reader has not started yet, sysinit
+# hangs before it has done anything at all. Appending cannot deadlock.
+RC_LOG=/run/arctic/boot.log
+export RC_LOG
+mkdir -p /run/arctic 2>/dev/null || :
+: >"$RC_LOG" 2>/dev/null || RC_LOG=/dev/null
+rc_log() { printf '%s\n' "$*" >>"$RC_LOG" 2>/dev/null || :; }
+export -n RC_LOG 2>/dev/null || :
+rc_log "=== Arctic boot $(date '+%Y-%m-%d %H:%M:%S' 2>/dev/null) ==="
+rc_log "kernel: $(uname -r 2>/dev/null)"
+
 # ------------------------------------------------------------------------ devices
 begin "starting the device manager"
 # Arctic uses busybox mdev with libudev-zero, so there is no systemd-derived
@@ -66,10 +85,19 @@ begin "checking filesystems"
 if [ -f /forcefsck ] || grep -q ' forcefsck' /proc/cmdline 2>/dev/null; then
 	fsck -A -T -a 2>/dev/null; rm -f /forcefsck
 else
+	# Only drop to a repair shell when there is a console to type at. During
+	# sysinit stdin is not a terminal, so this would otherwise read EOF and
+	# fall straight through - or worse, block the whole boot before any
+	# service has started, with nothing on screen explaining why.
 	fsck -A -T -a -P 2>/dev/null || {
+		rc_log "fsck reported errors"
 		bad "fsck wants attention"
-		printf '\n  Dropping to a repair shell. Run fsck, then exit to continue.\n\n'
-		sh
+		if [ -t 0 ] && [ -c /dev/console ]; then
+			printf '\n  Dropping to a repair shell. Run fsck, then exit to continue.\n\n'
+			sh </dev/console >/dev/console 2>&1
+		else
+			printf '  continuing; run fsck by hand once booted\n'
+		fi
 	}
 fi
 good
@@ -172,7 +200,17 @@ good
 
 begin "cleaning up /tmp and /run"
 rm -rf /tmp/.[!.]* /tmp/* 2>/dev/null || :
-rm -f /run/*.pid /run/arctic/* 2>/dev/null || :
+rm -f /run/*.pid 2>/dev/null || :
+# Not "rm -f /run/arctic/*": that is where this boot's own log lives, and
+# wiping it here threw away every line written before this point - including
+# anything that had already gone wrong. /run is a fresh tmpfs each boot, so
+# there is nothing stale to clear anyway.
+for _f in /run/arctic/*; do
+	[ -e "$_f" ] || continue
+	[ "$_f" = "$RC_LOG" ] && continue
+	rm -rf "$_f" 2>/dev/null || :
+done
+
 : >/var/run/utmp 2>/dev/null || :
 good
 
@@ -214,9 +252,28 @@ if [ -d /etc/arctic/services ]; then
 		[ -e "$s" ] || continue
 		n=$(basename "$s")
 		[ "$n" = "udev" ] && continue     # already handled above
-		[ -x "/etc/rc.d/$n" ] || continue
+		rc_log "service $n: considering"
+		if [ ! -x "/etc/rc.d/$n" ]; then
+			# Enabled but there is no script to run it, or it is not
+			# executable. Silently skipping this is how a service ends up
+			# "enabled" and never running with nothing to show for it.
+			bad "$n (no executable /etc/rc.d/$n)"
+			continue
+		fi
 		begin "starting $n"
-		if "/etc/rc.d/$n" start >/dev/null 2>&1; then good; else bad "$n"; fi
+		# Failures used to go to /dev/null, which meant a service that could
+		# not start left no trace anywhere. Keep the console tidy on success,
+		# but record what went wrong either way.
+		if _out=$("/etc/rc.d/$n" start 2>&1); then
+			good
+			rc_log "service $n: started"
+			[ -n "$_out" ] && rc_log "  $_out"
+		else
+			bad "$n"
+			rc_log "service $n: FAILED"
+			[ -n "$_out" ] && { printf '%s\n' "$_out" | sed 's/^/     /'
+				printf '%s\n' "$_out" | sed 's/^/  /' >>"$RC_LOG" 2>/dev/null || :; }
+		fi
 	done
 fi
 
@@ -228,4 +285,11 @@ if [ -f /var/lib/arctic/firstboot ]; then
 fi
 
 rc_done
+
+# /run is a tmpfs, so keep a copy somewhere that survives the boot. This is
+# the first thing to look at when something did not come up.
+if [ -f /run/arctic/boot.log ]; then
+	mkdir -p /var/log 2>/dev/null && \
+		cp -f /run/arctic/boot.log /var/log/boot.log 2>/dev/null || :
+fi
 exit 0

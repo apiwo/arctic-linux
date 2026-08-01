@@ -151,6 +151,7 @@ render:x:28:
 kvm:x:78:
 storage:x:95:
 network:x:90:
+netdev:x:91:
 messagebus:x:81:
 nobody:x:65534:
 EOF
@@ -213,7 +214,7 @@ fi
 #   nano, vim   editing install.conf is the whole installation procedure now,
 #               so an editor beyond busybox vi is not optional
 #   dhcpcd      wired networking during the install
-LIVE_EXTRAS="nano vim neovim dhcpcd ttf-jetbrains-mono ttf-nerd-fonts-symbols"
+LIVE_EXTRAS="nano vim dhcpcd ttf-jetbrains-mono ttf-nerd-fonts-symbols"
 step "installing live tools"
 for p in $LIVE_EXTRAS; do
 	pkg=$(ls -t "$B"/repo/*/x86_64/"$p"-*.alpmz 2>/dev/null | head -1)
@@ -224,7 +225,13 @@ for p in $LIVE_EXTRAS; do
 	# .alpmz is a plain tar.xz rooted at /, so unpacking it over the live
 	# tree is all an install amounts to here. The metadata files are the
 	# only thing that must not land in the filesystem itself.
-	tar -xf "$pkg" -C "$S" --exclude=.PKGINFO --exclude=.FILES --exclude=.INSTALL \
+	#
+	# --keep-directory-symlink matters on a merged-/usr tree: a package with
+	# files under usr/sbin/ would otherwise make tar replace the
+	# usr/sbin -> bin symlink with a real directory, silently un-merging
+	# /usr and splitting binaries across two places.
+	tar -xf "$pkg" -C "$S" --keep-directory-symlink \
+		--exclude=.PKGINFO --exclude=.FILES --exclude=.INSTALL \
 		2>/dev/null || { printf '   %s failed to unpack\n' "$p" >&2; continue; }
 	# Record it in the live image's own package database, so `alpm list` on
 	# the installer agrees with what is actually installed there.

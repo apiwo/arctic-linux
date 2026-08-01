@@ -103,6 +103,21 @@ A_EXTRA=""
 A_FONTS=""
 A_PKGS=""
 A_SERVICES=""
+A_SETS=""
+A_LOCK_ROOT="no"
+A_SSH_PASSWORD_AUTH="yes"
+A_SSH_KEYS=""
+A_HARDEN_TMP="no"
+A_MAC_RANDOMIZE="no"
+A_MOUNTS=""
+A_BTRFS_NO_SNAPSHOT_CACHE="no"
+A_DISK_RESERVE=""
+A_ZRAM="no"
+A_ZRAM_SIZE="50%"
+A_ZRAM_ALGO="zstd"
+A_POST=""
+A_CHROOT_SHELL="no"
+A_REBOOT="no"
 
 # A_FS was the old name for A_ROOT_FS. Keep reading it so configs written
 # against the previous release still install instead of silently falling
@@ -667,6 +682,14 @@ do_install() {
 		[ -e "$TARGET/$l" ] || ln -s "usr/$l" "$TARGET/$l" 2>/dev/null || :
 	done
 	[ -e "$TARGET/lib64" ] || ln -s usr/lib "$TARGET/lib64" 2>/dev/null || :
+
+	# /var/run -> ../run and /var/lock -> ../run/lock. dbus listens on
+	# /run/dbus/system_bus_socket, but ell - the library iwd is built on -
+	# looks under /var/run/dbus. Without these, iwd cannot reach a perfectly
+	# healthy bus and reports "Failed to initialize D-Bus".
+	rm -rf "$TARGET/var/run" "$TARGET/var/lock" 2>/dev/null || :
+	ln -sfn ../run "$TARGET/var/run" 2>/dev/null || :
+	ln -sfn ../run/lock "$TARGET/var/lock" 2>/dev/null || :
 	mkdir -p "$TARGET/usr/sbin"
 
 	step "Copying the package database" "repositories"
@@ -1115,7 +1138,14 @@ setup_swap() {
 
 create_users() {
 	# Groups first. Arctic uses wheel for administrative access.
-	for g in wheel audio video input storage network render kvm; do
+	#
+	# netdev is not decoration: iwd ships a D-Bus policy granting that group
+	# access to net.connman.iwd, and dbus-daemon rejects a policy naming a
+	# group that does not exist. The whole file is then ignored, iwd cannot
+	# claim its bus name, and it fails with "Failed to initialize D-Bus" -
+	# with a running dbus sitting right there, which is what made it look
+	# like a dbus problem rather than a missing group.
+	for g in wheel audio video input storage network netdev render kvm; do
 		chroot_run "grep -q '^$g:' /etc/group || addgroup -S $g" || :
 	done
 	# dbus-daemon --system drops root to this user once it has bound the bus
