@@ -16,7 +16,7 @@ sha256="SKIP"
 options="!strip"
 
 package() {
-	cd "1.4.0"
+	cd "ath9k-htc-open-1.4.0"
 	install -d "$pkgdir/usr/lib/firmware"
 	cp -a . "$pkgdir/usr/lib/firmware/"
 	find "$pkgdir/usr/lib/firmware" -name 'Makefile' -delete

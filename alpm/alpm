@@ -1309,10 +1309,16 @@ cmd_log() {
 # -------------------------------------------------------------------- dispatch
 
 ALPM_CMDLINE="alpm $*"
-cmd=${1:-}
-[ $# -gt 0 ] && shift
 
-# Global flag scan: -s and -nomod may appear anywhere after the subcommand.
+# Global flags (-y, -s, -nomod, --root=...) may come before the subcommand,
+# after it, or mixed into its own arguments - "alpm -y ins vim" and
+# "doas alpm --noconfirm ins vim" are both a completely ordinary way to type
+# this, the same as every other package manager. Only requiring them after
+# the subcommand meant a flag typed first was read as the subcommand itself
+# ("unknown command: -y") and fell through to the help screen instead of
+# actually running anything. The first token that is not one of these flags
+# becomes the subcommand; everything else is passed through unchanged.
+cmd=""
 args=""
 for a in "$@"; do
 	case "$a" in
@@ -1325,7 +1331,9 @@ for a in "$@"; do
 		ALPM_YES=1; export ALPM_YES ;;
 	--force)      ALPM_FORCE=1 ;;
 	--root=*)     ALPM_ROOT=${a#--root=} ;;
-	*)            args="$args $a" ;;
+	*)
+		if [ -z "$cmd" ]; then cmd=$a; else args="$args $a"; fi
+		;;
 	esac
 done
 # shellcheck disable=SC2086

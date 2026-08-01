@@ -1,0 +1,14 @@
+#!/bin/sh
+# The system message bus. iwd (and so iwctl) cannot start without it - iwd
+# registers itself on this bus, and connecting to a bus that was never
+# started is exactly the "failed to initialize dbus" error iwd gives.
+NAME=dbus
+CMD=/usr/bin/dbus-daemon
+ARGS="--system --fork"
+BACKGROUND=no
+# dbus-daemon writes its own pidfile here (see /usr/share/dbus-1/system.conf's
+# <pidfile>), not the /run/dbus.pid svc.lib would otherwise default to.
+PIDFILE=/run/dbus/pid
+PRESTART="mkdir -p /run/dbus"
+. /etc/arctic/svc.lib
+svc_main "$@"

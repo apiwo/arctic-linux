@@ -258,9 +258,7 @@ chmod +x "$pd/etc/rc.boot" "$pd/etc/rc.shutdown" "$pd/etc/rc.d"/* "$pd/usr/bin"/
 for d in ascii limine plasma wallpaper icons sddm misc; do
 	[ -d "$SRCTREE/branding/$d" ] && cp -a "$SRCTREE/branding/$d" "$pd/usr/share/arctic/"
 done
-install -Dm755 "$SRCTREE/installer/arctic-conf"       "$pd/usr/bin/arctic-conf"
 install -Dm755 "$SRCTREE/installer/arctic-strap"      "$pd/usr/bin/arctic-strap"
-install -Dm755 "$SRCTREE/installer/arctic-boot-conf"  "$pd/usr/bin/arctic-boot-conf"
 install -Dm755 "$SRCTREE/installer/arctic-boot-strap" "$pd/usr/bin/arctic-boot-strap"
 install -Dm755 "$SRCTREE/installer/arctic-chroot"     "$pd/usr/bin/arctic-chroot"
 install -Dm644 "$SRCTREE/installer/lib/tui.sh"        "$pd/usr/lib/arctic/tui.sh"

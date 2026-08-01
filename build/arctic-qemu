@@ -121,9 +121,17 @@ install)
 
 :: booting the installer with a blank disk attached (UEFI)
 
-   Inside the VM, the disk is /dev/vda. Partition, mount and install:
+   Inside the VM, the disk is /dev/vda:
 
-     # an EFI partition and a root partition
+     vi /etc/arctic/install.conf   # uncomment A_DISK=/dev/vda, and anything else
+     arctic-strap
+
+     poweroff
+
+   That one command partitions /dev/vda, formats it, mounts it, installs the
+   base system and the bootloader. For the traditional manual-partitioning
+   path instead, leave A_DISK commented out and do it yourself:
+
      fdisk /dev/vda
        g          new GPT
        n  1  <enter>  +512M   then  t 1  and type 1  (EFI System)
@@ -132,14 +140,11 @@ install)
 
      mkfs.vfat -F32 /dev/vda1
      mkfs.ext4 /dev/vda2
-
      mount /dev/vda2 /mnt
-     arctic-conf /mnt
      arctic-strap /mnt
 
      mkdir -p /mnt/boot
      mount /dev/vda1 /mnt/boot
-     arctic-boot-conf /mnt/boot
      arctic-boot-strap /mnt/boot --efi
 
      poweroff

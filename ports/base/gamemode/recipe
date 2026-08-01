@@ -14,7 +14,7 @@ source="https://github.com/FeralInteractive/gamemode/archive/refs/tags/1.8.tar.g
 sha256="SKIP"
 
 build() {
-	cd "1.8"
+	cd "gamemode-1.8"
 	meson setup build \
 		--prefix=/usr \
 		--libdir=/usr/lib \
@@ -27,6 +27,6 @@ build() {
 }
 
 package() {
-	cd "1.8"
+	cd "gamemode-1.8"
 	DESTDIR="$pkgdir" ninja -C build install
 }

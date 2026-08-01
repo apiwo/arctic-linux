@@ -14,11 +14,11 @@ source="https://github.com/zsh-users/zsh-syntax-highlighting/archive/refs/tags/0
 sha256="SKIP"
 
 build() {
-	cd "0.8.0"
+	cd "zsh-syntax-highlighting-0.8.0"
 	make -j"$JOBS" PREFIX=/usr
 }
 
 package() {
-	cd "0.8.0"
+	cd "zsh-syntax-highlighting-0.8.0"
 	make PREFIX=/usr DESTDIR="$pkgdir" install
 }

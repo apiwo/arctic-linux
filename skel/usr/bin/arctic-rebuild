@@ -1,0 +1,156 @@
+#!/bin/sh
+# arctic-rebuild - reconcile the installed system to match /etc/arctic/system.conf
+#
+#   arctic-rebuild             make the system match the config
+#   arctic-rebuild --dry-run   show what would change, do nothing
+#
+# The declarative core of Arctic: system.conf lists every package and service
+# that should exist, and this makes the real system match it - installs
+# whatever is missing, removes whatever explicit package is no longer listed
+# (its now-unneeded dependencies go with it, same as `alpm del+deps`), and
+# enables/disables services the same way. This is the same relationship
+# NixOS's configuration.nix has to `nixos-rebuild switch`, built on top of
+# alpm rather than replacing it - every install/removal alpm does here is a
+# completely ordinary `alpm ins`/`alpm del+deps` call, snapshotted the exact
+# same way a plain `alpm ins` already snapshots itself.
+#
+# If system.conf is empty or missing, the first run does not remove anything:
+# it seeds SYS_PACKAGES/SYS_SERVICES from whatever is already explicitly
+# installed and enabled, so editing from a known-accurate starting point is
+# always possible. Only once it has real content does a rebuild reconcile.
+# shellcheck shell=sh disable=SC2039
+
+set -u
+PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin
+
+for d in /usr/lib/alpm /usr/lib/arctic/../../alpm ./alpm; do
+	[ -f "$d/libalpm.sh" ] && { . "$d/libalpm.sh"; break; }
+done
+
+CONF=/etc/arctic/system.conf
+DRYRUN=0
+case "${1:-}" in
+--dry-run|-n) DRYRUN=1 ;;
+-h|--help|help) sed -n '2,20p' "$0" | sed 's/^# \?//'; exit 0 ;;
+esac
+
+need_root 2>/dev/null || { echo "Must be run as root." >&2; exit 1; }
+
+if [ -t 1 ]; then
+	R=$(printf '\033[0m'); B=$(printf '\033[1m')
+	TEAL=$(printf '\033[38;5;44m'); MINT=$(printf '\033[38;5;79m')
+	AMB=$(printf '\033[38;5;215m'); GREY=$(printf '\033[38;5;245m')
+else
+	R= ; B= ; TEAL= ; MINT= ; AMB= ; GREY=
+fi
+note() { printf '%s::%s %s\n' "$TEAL" "$R" "$*"; }
+change() { printf '  %s%s%s %s\n' "$MINT" "$1" "$R" "$2"; }
+
+# The explicitly-installed set (dependencies are managed automatically by
+# alpm itself, and should never be listed in system.conf directly).
+explicit_pkgs() {
+	for d in /var/lib/alpm/local/*/; do
+		[ -d "$d" ] || continue
+		[ "$(cat "${d}REASON" 2>/dev/null)" = "explicit" ] || continue
+		basename "$d"
+	done
+}
+
+enabled_services() {
+	for f in /etc/arctic/services/*; do
+		[ -e "$f" ] || continue
+		basename "$f"
+	done
+}
+
+in_list() {
+	# $1 = needle, rest = haystack words
+	needle=$1; shift
+	for w in "$@"; do [ "$w" = "$needle" ] && return 0; done
+	return 1
+}
+
+SYS_PACKAGES=""
+SYS_SERVICES=""
+if [ -f "$CONF" ]; then
+	# shellcheck disable=SC1090
+	. "$CONF"
+fi
+
+cur_pkgs=$(explicit_pkgs)
+cur_svcs=$(enabled_services)
+
+# Bootstrap: nothing declared yet anywhere - seed from reality instead of
+# reconciling against an empty list, which would just remove everything.
+if [ -z "$(printf '%s' "$SYS_PACKAGES" | tr -d '[:space:]')" ] && \
+   [ -z "$(printf '%s' "$SYS_SERVICES" | tr -d '[:space:]')" ]; then
+	note "system.conf has nothing declared yet - seeding it from what is actually installed and enabled"
+	mkdir -p /etc/arctic
+	{
+		printf '# Arctic Linux - declarative system configuration\n'
+		printf '# Seeded by arctic-rebuild %s from the system as it stood then.\n' "$(date '+%Y-%m-%d %H:%M:%S')"
+		printf '# Edit this, then run arctic-rebuild again to apply changes.\n\n'
+		printf 'SYS_PACKAGES="\n'
+		for p in $cur_pkgs; do printf '\t%s\n' "$p"; done
+		printf '"\n\n'
+		printf 'SYS_SERVICES="\n'
+		for s in $cur_svcs; do printf '\t%s\n' "$s"; done
+		printf '"\n'
+	} >"$CONF"
+	printf '  %sWrote %s. Nothing was installed or removed this run.%s\n' "$GREY" "$CONF" "$R"
+	exit 0
+fi
+
+to_install=""
+for p in $SYS_PACKAGES; do
+	in_list "$p" $cur_pkgs || to_install="$to_install $p"
+done
+to_remove=""
+for p in $cur_pkgs; do
+	in_list "$p" $SYS_PACKAGES || to_remove="$to_remove $p"
+done
+svc_enable=""
+for s in $SYS_SERVICES; do
+	in_list "$s" $cur_svcs || svc_enable="$svc_enable $s"
+done
+svc_disable=""
+for s in $cur_svcs; do
+	in_list "$s" $SYS_SERVICES || svc_disable="$svc_disable $s"
+done
+
+if [ -z "$to_install$to_remove$svc_enable$svc_disable" ]; then
+	note "already matches $CONF - nothing to do"
+	exit 0
+fi
+
+note "reconciling against $CONF"
+[ -n "$to_install" ]  && change "+" "install:${to_install}"
+[ -n "$to_remove" ]   && change "-" "remove: ${to_remove}"
+[ -n "$svc_enable" ]  && change "+" "enable services: ${svc_enable}"
+[ -n "$svc_disable" ] && change "-" "disable services:${svc_disable}"
+
+[ "$DRYRUN" = 1 ] && { printf '  %s(dry run - nothing changed)%s\n' "$GREY" "$R"; exit 0; }
+
+command -v arctic-snapshot >/dev/null 2>&1 && arctic-snapshot create "arctic-rebuild" >/dev/null 2>&1
+
+rc=0
+if [ -n "$to_install" ]; then
+	# shellcheck disable=SC2086
+	ALPM_YES=1 alpm ins $to_install || rc=1
+fi
+if [ -n "$to_remove" ]; then
+	# del+deps also drops now-orphaned dependencies; alpm's own
+	# ALPM_NEVER_REMOVE list still protects the base system regardless of
+	# what system.conf says.
+	# shellcheck disable=SC2086
+	ALPM_YES=1 alpm del+deps $to_remove || rc=1
+fi
+for s in $svc_enable;  do service enable  "$s" >/dev/null 2>&1 || rc=1; done
+for s in $svc_disable; do service disable "$s" >/dev/null 2>&1 || rc=1; done
+
+if [ "$rc" = 0 ]; then
+	note "rebuild complete"
+else
+	printf '  %ssome changes failed - see above%s\n' "$AMB" "$R" >&2
+fi
+exit "$rc"

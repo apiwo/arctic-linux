@@ -14,11 +14,11 @@ source="https://github.com/NVIDIA/nvidia-settings/archive/refs/tags/595.84.tar.g
 sha256="SKIP"
 
 build() {
-	cd "595.84"
+	cd "nvidia-settings-595.84"
 	make -j"$JOBS" PREFIX=/usr
 }
 
 package() {
-	cd "595.84"
+	cd "nvidia-settings-595.84"
 	make PREFIX=/usr DESTDIR="$pkgdir" install
 }

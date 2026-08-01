@@ -14,7 +14,7 @@ source="https://github.com/rhboot/efibootmgr/archive/refs/tags/18.tar.gz"
 sha256="SKIP"
 
 build() {
-	cd "18"
+	cd "efibootmgr-18"
 	meson setup build \
 		--prefix=/usr \
 		--libdir=/usr/lib \
@@ -27,6 +27,6 @@ build() {
 }
 
 package() {
-	cd "18"
+	cd "efibootmgr-18"
 	DESTDIR="$pkgdir" ninja -C build install
 }

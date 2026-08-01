@@ -14,7 +14,7 @@ source="https://github.com/intel/compute-runtime/archive/refs/tags/26.27.39122.1
 sha256="SKIP"
 
 build() {
-	cmake -S "26.27.39122.12" -B build -G Ninja \
+	cmake -S "intel-compute-runtime-26.27.39122.12" -B build -G Ninja \
 		-DCMAKE_INSTALL_PREFIX=/usr \
 		-DCMAKE_INSTALL_LIBDIR=lib \
 		-DCMAKE_BUILD_TYPE=Release \

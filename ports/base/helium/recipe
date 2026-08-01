@@ -14,11 +14,11 @@ source="https://github.com/imputnet/helium-chromium/archive/refs/tags/0.5.4.tar.
 sha256="SKIP"
 
 build() {
-	cd "0.5.4"
+	cd "helium-0.5.4"
 	make -j"$JOBS" PREFIX=/usr
 }
 
 package() {
-	cd "0.5.4"
+	cd "helium-0.5.4"
 	make PREFIX=/usr DESTDIR="$pkgdir" install
 }

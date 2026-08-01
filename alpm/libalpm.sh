@@ -7,11 +7,22 @@ ALPM_VERSION="1.0.0"
 ALPM_FORMAT="2"
 
 : "${ALPM_ROOT:=/}"
+# ALPM_CONF/ALPM_REPOD stay host-absolute on purpose even under --root: they
+# are the *tool's* configuration (which repos exist, how many jobs, color),
+# read from wherever alpm itself is actually running - during a target_alpm
+# install that is still the live session, since the target's own /etc/alpm
+# may not even have anything in it yet. ALPM_DB/ALPM_CACHE/ALPM_LOG describe
+# the state of a specific root's own filesystem instead (what is installed
+# there, what is cached there), so they follow ALPM_ROOT by default. Getting
+# this wrong meant `ALPM_ROOT=$TARGET alpm ins ...` recorded every install
+# into the *caller's* /var/lib/alpm instead of the target's - the target
+# filesystem would boot with a completely empty package database despite
+# every file actually being there.
 : "${ALPM_CONF:=/etc/alpm/alpm.conf}"
 : "${ALPM_REPOD:=/etc/alpm/repos.d}"
-: "${ALPM_DB:=/var/lib/alpm}"
-: "${ALPM_CACHE:=/var/cache/alpm}"
-: "${ALPM_LOG:=/var/log/alpm.log}"
+: "${ALPM_DB:=${ALPM_ROOT%/}/var/lib/alpm}"
+: "${ALPM_CACHE:=${ALPM_ROOT%/}/var/cache/alpm}"
+: "${ALPM_LOG:=${ALPM_ROOT%/}/var/log/alpm.log}"
 : "${ALPM_JOBS:=$(nproc 2>/dev/null || echo 1)}"
 
 # ---------------------------------------------------------------- presentation
@@ -162,7 +173,25 @@ metaall() {
 # ------------------------------------------------------------------ repo state
 
 alpm_load_conf() {
-	[ -f "$ALPM_CONF" ] && . "$ALPM_CONF"
+	[ -f "$ALPM_CONF" ] || return 0
+	# A caller's explicit environment override must never lose to a plain
+	# assignment sitting in the config file - target_alpm's
+	# ALPM_ROOT="$TARGET", or anything else scratch-rooting an install, has
+	# to win over alpm.conf's own "ALPM_ROOT=/" line. Sourcing the file
+	# unconditionally used to let the file silently reassert the real root
+	# even when a caller had deliberately pointed elsewhere, which is
+	# exactly how a scratch-root install once ended up writing over the
+	# host's own /usr/lib/libc.so.6. Preserve anything already set, source
+	# the file, then put the caller's values straight back.
+	for _v in ALPM_ROOT ALPM_DB ALPM_CACHE ALPM_BUILDROOT ALPM_REPOD; do
+		eval "_was_${_v}=\${${_v}+set}"
+		eval "_val_${_v}=\${${_v}:-}"
+	done
+	# shellcheck disable=SC1090
+	. "$ALPM_CONF"
+	for _v in ALPM_ROOT ALPM_DB ALPM_CACHE ALPM_BUILDROOT ALPM_REPOD; do
+		eval "[ \"\$_was_${_v}\" = set ] && ${_v}=\$_val_${_v}"
+	done
 	:
 }
 

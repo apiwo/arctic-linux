@@ -14,7 +14,7 @@ source="https://github.com/open-source-parsers/jsoncpp/archive/refs/tags/1.9.6.t
 sha256="SKIP"
 
 build() {
-	cd "1.9.6"
+	cd "jsoncpp-1.9.6"
 	meson setup build \
 		--prefix=/usr \
 		--libdir=/usr/lib \
@@ -27,6 +27,6 @@ build() {
 }
 
 package() {
-	cd "1.9.6"
+	cd "jsoncpp-1.9.6"
 	DESTDIR="$pkgdir" ninja -C build install
 }

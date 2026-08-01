@@ -14,7 +14,7 @@ source="https://github.com/obsproject/obs-studio/archive/refs/tags/32.0.1.tar.gz
 sha256="SKIP"
 
 build() {
-	cmake -S "32.0.1" -B build -G Ninja \
+	cmake -S "obs-studio-32.0.1" -B build -G Ninja \
 		-DCMAKE_INSTALL_PREFIX=/usr \
 		-DCMAKE_INSTALL_LIBDIR=lib \
 		-DCMAKE_BUILD_TYPE=Release \

@@ -14,7 +14,7 @@ source="https://github.com/kcat/openal-soft/archive/refs/tags/1.24.3.tar.gz"
 sha256="SKIP"
 
 build() {
-	cmake -S "1.24.3" -B build -G Ninja \
+	cmake -S "openal-1.24.3" -B build -G Ninja \
 		-DCMAKE_INSTALL_PREFIX=/usr \
 		-DCMAKE_INSTALL_LIBDIR=lib \
 		-DCMAKE_BUILD_TYPE=Release \

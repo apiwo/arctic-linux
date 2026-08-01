@@ -5,15 +5,17 @@
 #   arctic-boot-strap /mnt/boot --bios                BIOS, Limine (default)
 #   arctic-boot-strap /mnt/boot --bios --loader=grub  BIOS, GRUB instead
 #
-# This does the install and nothing else - no menus. Choose first:
+# arctic-strap calls this automatically at the end of a run where the config
+# set A_DISK - normally there is nothing to run here by hand at all. This is
+# only for wiring up a bootloader on its own, for instance after chrooting in
+# to fix one:
 #
 #   mount /dev/nvme0n1p2 /mnt/boot
-#   arctic-boot-conf /mnt/boot
 #   arctic-boot-strap /mnt/boot --efi
 #
-# With no --efi/--bios given it reads /tmp/arctic-boot-strap.conf, the answer
-# file arctic-boot-conf writes; failing that it detects the firmware itself
-# and defaults to Limine.
+# With no --efi/--bios given it reads /tmp/arctic-boot-strap.conf if one
+# happens to exist; failing that it detects the firmware itself and defaults
+# to Limine.
 #
 # shellcheck shell=sh disable=SC2039,SC2059
 
@@ -215,8 +217,9 @@ done
 [ -n "$BOOTDIR" ] || { echo "usage: arctic-boot-strap /mnt/boot --efi|--bios" >&2; exit 1; }
 [ -d "$BOOTDIR" ] || { echo "arctic-boot-strap: $BOOTDIR does not exist - mount the boot partition first" >&2; exit 1; }
 
-# Fill in whatever --efi/--bios/--loader did not give us, from
-# arctic-boot-conf's saved answer, then from what this machine actually is.
+# Fill in whatever --efi/--bios/--loader did not give us from a leftover
+# saved-answer file if one happens to exist, then from what this machine
+# actually is.
 if [ -z "$method" ] && [ -f "$BOOTCONF" ]; then
 	# shellcheck disable=SC1090
 	. "$BOOTCONF"

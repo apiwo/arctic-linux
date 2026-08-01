@@ -18,7 +18,16 @@ build() {
 	# Not every configure script accepts the same options - sqlite rejects
 	# --disable-nls outright, for instance - so only pass the ones this one
 	# actually advertises. Guessing wrong fails the whole build.
-	_opts="--prefix=/usr --sysconfdir=/etc --localstatedir=/var --libdir=/usr/lib"
+	#
+	# vim's own configure auto-detects a GUI toolkit off the build host
+	# (gtk2/gtk3/motif/X11) rather than the target - on a host with a real
+	# desktop installed it happily found GTK3, glib, pango, dbus and elogind
+	# and linked against all of them, none of which Arctic builds or ships.
+	# This is a terminal editor here; --enable-gui=no and --without-x rule
+	# out the whole GUI path regardless of what the build host happens to
+	# have lying around.
+	_opts="--prefix=/usr --sysconfdir=/etc --localstatedir=/var --libdir=/usr/lib \
+		--enable-gui=no --without-x"
 	_help=$(./configure --help 2>/dev/null)
 	case "$_help" in *--disable-static*)  _opts="$_opts --disable-static" ;; esac
 	case "$_help" in *--disable-nls*)     _opts="$_opts --disable-nls" ;; esac

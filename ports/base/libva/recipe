@@ -14,7 +14,7 @@ source="https://github.com/intel/libva/archive/refs/tags/2.24.0.tar.gz"
 sha256="SKIP"
 
 build() {
-	cd "2.24.0"
+	cd "libva-2.24.0"
 	meson setup build \
 		--prefix=/usr \
 		--libdir=/usr/lib \
@@ -27,6 +27,6 @@ build() {
 }
 
 package() {
-	cd "2.24.0"
+	cd "libva-2.24.0"
 	DESTDIR="$pkgdir" ninja -C build install
 }

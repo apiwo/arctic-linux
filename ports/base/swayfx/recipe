@@ -14,7 +14,7 @@ source="https://github.com/WillPower3309/swayfx/archive/refs/tags/0.5.tar.gz"
 sha256="SKIP"
 
 build() {
-	cd "0.5"
+	cd "swayfx-0.5"
 	meson setup build \
 		--prefix=/usr \
 		--libdir=/usr/lib \
@@ -27,6 +27,6 @@ build() {
 }
 
 package() {
-	cd "0.5"
+	cd "swayfx-0.5"
 	DESTDIR="$pkgdir" ninja -C build install
 }

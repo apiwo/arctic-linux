@@ -20,7 +20,7 @@ sha256="SKIP"
 # drive it. /usr/bin/make on Arctic is bmake, so kernel modules ask for gmake
 # explicitly.
 build() {
-	cd "0.7.0"
+	cd "facetimehd-0.7.0"
 	for kdir in /usr/lib/modules/*/build; do
 		[ -d "$kdir" ] || continue
 		gmake -C "$kdir" M="$PWD" modules
@@ -28,7 +28,7 @@ build() {
 }
 
 package() {
-	cd "0.7.0"
+	cd "facetimehd-0.7.0"
 	for kver in $(ls /usr/lib/modules); do
 		install -d "$pkgdir/usr/lib/modules/$kver/extra"
 		for ko in *.ko; do

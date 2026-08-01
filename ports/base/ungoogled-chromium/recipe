@@ -14,11 +14,11 @@ source="https://github.com/ungoogled-software/ungoogled-chromium/archive/refs/ta
 sha256="SKIP"
 
 build() {
-	cd "146.0.7500.60-1"
+	cd "ungoogled-chromium-146.0.7500.60-1"
 	make -j"$JOBS" PREFIX=/usr
 }
 
 package() {
-	cd "146.0.7500.60-1"
+	cd "ungoogled-chromium-146.0.7500.60-1"
 	make PREFIX=/usr DESTDIR="$pkgdir" install
 }

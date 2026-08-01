@@ -14,7 +14,7 @@ source="https://github.com/lloyd/yajl/archive/refs/tags/2.1.0.tar.gz"
 sha256="SKIP"
 
 build() {
-	cmake -S "2.1.0" -B build -G Ninja \
+	cmake -S "yajl-2.1.0" -B build -G Ninja \
 		-DCMAKE_INSTALL_PREFIX=/usr \
 		-DCMAKE_INSTALL_LIBDIR=lib \
 		-DCMAKE_BUILD_TYPE=Release \

@@ -1,19 +1,27 @@
 #!/bin/sh
-# arctic-strap - install Arctic Linux onto a mounted target
+# arctic-strap - install Arctic Linux from a declarative config file
 #
-#   arctic-strap /mnt              install using the saved arctic-conf answers
-#   arctic-strap -c file /mnt      install from a specific answer file instead
-#   arctic-strap -f /mnt           skip the "already installed here" prompt
+#   arctic-strap                   edit /etc/arctic/install.conf, then just this
+#   arctic-strap -c file           install from a specific config file instead
+#   arctic-strap /mnt              install onto an already-mounted target
+#   arctic-strap -f                skip the "already installed here" prompt
 #
-# This does the install and nothing else - no menus, no questions. Configure
-# first:
+# There are no menus and no questions - edit the config, then run this:
+#
+#   vi /etc/arctic/install.conf
+#   arctic-strap
+#
+# Setting A_DISK in the config (e.g. A_DISK=/dev/sda) partitions, formats,
+# mounts and installs the bootloader automatically - the whole machine, one
+# command, nothing to pre-mount by hand. Leaving A_DISK unset is the manual
+# path for anyone who wants to partition themselves: mount a target and pass
+# it on the command line, same as always.
 #
 #   mount /dev/nvme0n1p1 /mnt
-#   arctic-conf /mnt
 #   arctic-strap /mnt
 #
-# With no saved answers at all it installs with the built-in defaults below
-# (a console-only system, no user account, root locked) rather than refusing,
+# With no config file at all it installs with the built-in defaults below (a
+# console-only system, no user account, root locked) rather than refusing,
 # the same way pacstrap does not ask you anything either.
 #
 # shellcheck shell=sh disable=SC2039,SC2059,SC2086
@@ -31,14 +39,19 @@ for d in /usr/lib/alpm "$(dirname "$0")/../alpm" ./alpm; do
 done
 
 VERSION="1.0.0"
-CONF=/tmp/arctic-strap.conf
+CONF=/etc/arctic/install.conf
 LOGF=/tmp/arctic-strap.log
 
 # ------------------------------------------------------------------- defaults
-# Used as-is for anything arctic-conf did not set - either because there is no
-# saved answer file at all, or because a hand-written one only bothered with
-# a few variables.
+# Used as-is for anything the config file leaves unset - either because there
+# is no config file at all, or because it only bothered to uncomment a few
+# lines.
 TARGET=""
+A_DISK=""
+A_ROOTDEV=""
+A_ESP=""
+A_BOOT_FW=""
+A_BOOTLOADER=""
 A_KERNEL="Arctic-base-kernel"
 A_DESKTOP="none"
 A_DM="none"
@@ -99,6 +112,16 @@ detect_microcode() {
 	esac
 }
 
+detect_firmware() { [ -d /sys/firmware/efi ] && echo efi || echo bios; }
+
+# Partition names differ between /dev/sda1 and /dev/nvme0n1p1.
+part_name() {
+	case "$1" in
+	*[0-9]) printf '%sp%s' "$1" "$2" ;;
+	*)      printf '%s%s' "$1" "$2" ;;
+	esac
+}
+
 detect_rotational() {
 	# Returns "ssd" when the target device does not spin.
 	d=$(df "$TARGET" 2>/dev/null | awk 'NR==2{print $1}' | sed 's|/dev/||; s|p\?[0-9]*$||')
@@ -109,12 +132,143 @@ detect_rotational() {
 
 detect_existing_install() { [ -f "$1/etc/arctic-release" ]; }
 
+# ------------------------------------------------------------- disk partitioning
+#
+# Only runs when the config sets A_DISK. Leaving it unset keeps the manual
+# path: partition and mount a target yourself, same as always.
+
+# cryptsetup is not baked into the live rootfs the way util-linux/e2fsprogs
+# are - it comes from the same bundled repo target_alpm installs from later,
+# just applied to the live system's own root instead of a chrooted target.
+ensure_pkg() {
+	have "$2" && return 0
+	ALPM_YES=1 alpm ins "$1" >>"$LOGF" 2>&1
+	have "$2"
+}
+
+list_disks() {
+	for d in /sys/block/*; do
+		n=$(basename "$d")
+		case "$n" in loop*|ram*|sr*|dm-*|md*|zram*) continue ;; esac
+		[ -r "$d/size" ] || continue
+		sz=$(cat "$d/size" 2>/dev/null)
+		[ "${sz:-0}" -gt 0 ] || continue
+		printf '%s\n' "$n"
+	done
+}
+
+# Make the filesystem chosen in the config, and lay out btrfs subvolumes.
+make_root_fs() {
+	dev=$1
+	case "$A_FS" in
+	btrfs)
+		mkfs.btrfs -f -L arctic-root "$dev" >>"$LOGF" 2>&1 || return 1
+		# The @ / @home layout is what both timeshift and snapper expect: the
+		# root subvolume can then be rolled back without taking home with it.
+		mount "$dev" "$TARGET" >>"$LOGF" 2>&1 || return 1
+		btrfs subvolume create "$TARGET/@"          >>"$LOGF" 2>&1 || return 1
+		btrfs subvolume create "$TARGET/@home"      >>"$LOGF" 2>&1 || return 1
+		btrfs subvolume create "$TARGET/@snapshots" >>"$LOGF" 2>&1 || return 1
+		btrfs subvolume create "$TARGET/@log"       >>"$LOGF" 2>&1 || :
+		umount "$TARGET" >>"$LOGF" 2>&1 || return 1
+
+		A_BTRFS_OPTS="rw,noatime,compress=zstd:3,space_cache=v2"
+		mount -o "$A_BTRFS_OPTS,subvol=@" "$dev" "$TARGET" >>"$LOGF" 2>&1 || return 1
+		mkdir -p "$TARGET/home" "$TARGET/.snapshots" "$TARGET/var/log"
+		mount -o "$A_BTRFS_OPTS,subvol=@home"      "$dev" "$TARGET/home"      >>"$LOGF" 2>&1 || :
+		mount -o "$A_BTRFS_OPTS,subvol=@snapshots" "$dev" "$TARGET/.snapshots" >>"$LOGF" 2>&1 || :
+		mount -o "$A_BTRFS_OPTS,subvol=@log"       "$dev" "$TARGET/var/log"   >>"$LOGF" 2>&1 || :
+		;;
+	xfs)  mkfs.xfs -f -L arctic-root "$dev" >>"$LOGF" 2>&1 || return 1
+	      mount "$dev" "$TARGET" >>"$LOGF" 2>&1 || return 1 ;;
+	f2fs) mkfs.f2fs -f -l arctic-root "$dev" >>"$LOGF" 2>&1 || return 1
+	      mount "$dev" "$TARGET" >>"$LOGF" 2>&1 || return 1 ;;
+	ext3) mkfs.ext3 -q -F -L arctic-root "$dev" >>"$LOGF" 2>&1 || return 1
+	      mount "$dev" "$TARGET" >>"$LOGF" 2>&1 || return 1 ;;
+	ext2) mkfs.ext2 -q -F -L arctic-root "$dev" >>"$LOGF" 2>&1 || return 1
+	      mount "$dev" "$TARGET" >>"$LOGF" 2>&1 || return 1 ;;
+	zfs)
+		# Best-effort: Arctic has no zfs-utils package yet (OpenZFS needs an
+		# out-of-tree kernel module), so this path is untested end to end.
+		zpool create -f -O mountpoint=none -O compression=zstd \
+			-O acltype=posixacl -O xattr=sa -o cachefile=none \
+			arctic-root "$dev" >>"$LOGF" 2>&1 || return 1
+		zfs create -o mountpoint=legacy arctic-root/root >>"$LOGF" 2>&1 || return 1
+		mount -t zfs arctic-root/root "$TARGET" >>"$LOGF" 2>&1 || return 1
+		;;
+	*)    mkfs.ext4 -q -F -L arctic-root "$dev" >>"$LOGF" 2>&1 || return 1
+	      mount "$dev" "$TARGET" >>"$LOGF" 2>&1 || return 1 ;;
+	esac
+	return 0
+}
+
+# Lay down a GPT and format it: one EFI partition when the machine booted
+# through UEFI, one root filesystem taking the rest. Sets A_ESP/A_ROOTDEV/
+# A_BOOT_FW for do_install's own bootloader step at the end.
+partition_disk() {
+	disk=$A_DISK
+	[ -b "$disk" ] || bail "A_DISK=$disk is not a block device"
+	fw=$(detect_firmware)
+	A_BOOT_FW=$fw
+
+	step "Partitioning $disk" "wiping old signatures"
+	wipefs -a "$disk" >>"$LOGF" 2>&1 || :
+
+	if [ "$fw" = efi ]; then
+		step "Partitioning $disk" "GPT: EFI + root"
+		# sfdisk reads the whole layout on stdin, which avoids a pile of
+		# interactive fdisk keystrokes.
+		printf 'label: gpt\n,512M,U\n,,L\n' | sfdisk --quiet "$disk" >>"$LOGF" 2>&1 \
+			|| bail "partitioning $disk failed - see $LOGF"
+		p1=$(part_name "$disk" 1); p2=$(part_name "$disk" 2)
+		step "Formatting $p1" "EFI (FAT32)"
+		mkfs.vfat -F32 -n ARCTIC_EFI "$p1" >>"$LOGF" 2>&1 \
+			|| bail "mkfs.vfat failed on $p1 - see $LOGF"
+	else
+		step "Partitioning $disk" "GPT: BIOS boot + root"
+		printf 'label: gpt\n,1M,21686148-6449-6E6F-744E-656564454649\n,,L\n' \
+			| sfdisk --quiet "$disk" >>"$LOGF" 2>&1 \
+			|| bail "partitioning $disk failed - see $LOGF"
+		p1=""; p2=$(part_name "$disk" 2)
+	fi
+
+	rootsrc=$p2
+	if [ "$A_ENCRYPT" = yes ]; then
+		step "Encrypting $p2" "LUKS"
+		ensure_pkg cryptsetup cryptsetup || bail "cryptsetup could not be installed from the medium"
+		# --key-file - reads the whole of stdin as the key verbatim, so this
+		# must not add a trailing newline the way echo would - whatever
+		# passphrase is typed back at the interactive unlock prompt at boot
+		# will not have one either, and the two have to match exactly.
+		printf '%s' "$A_ENCRYPT_PASS" | \
+			cryptsetup luksFormat -q --key-file - "$p2" >>"$LOGF" 2>&1 \
+			|| bail "cryptsetup luksFormat failed on $p2 - see $LOGF"
+		printf '%s' "$A_ENCRYPT_PASS" | \
+			cryptsetup open --key-file - "$p2" cryptroot >>"$LOGF" 2>&1 \
+			|| bail "could not unlock the new encrypted volume - see $LOGF"
+		rootsrc=/dev/mapper/cryptroot
+	fi
+
+	step "Formatting $rootsrc" "$A_FS"
+	mkdir -p "$TARGET"
+	make_root_fs "$rootsrc" || bail "could not create the $A_FS filesystem on $rootsrc - see $LOGF"
+
+	if [ -n "$p1" ]; then
+		step "Mounting $p1" "$TARGET/boot"
+		mkdir -p "$TARGET/boot"
+		mount "$p1" "$TARGET/boot" >>"$LOGF" 2>&1 || :
+		A_ESP=$p1
+	fi
+	A_ROOTDEV=$p2
+	logit "disk $disk ready and mounted on $TARGET"
+}
+
 # ------------------------------------------------------------------ the install
 
 # Package sets, per repo. main is what every Arctic system needs.
 PKGS_MAIN="glibc busybox toybox zsh doas libarchive mandoc onetrueawk bmake byacc \
 alpm arctic-base arctic-init iana-etc tzdata ca-certificates"
-PKGS_NET="iwd dhcpcd openssl curl"
+PKGS_NET="iwd dhcpcd openssl curl dbus"
 PKGS_EXTRA_BASE="foot vim less htop fastfetch pciutils usbutils"
 
 step() {
@@ -139,10 +293,6 @@ target_alpm() {
 }
 
 do_install() {
-	: >"$LOGF"
-	total=24
-	tui_gauge_init "$total"
-
 	step "Checking the target" "$TARGET"
 	[ -d "$TARGET" ] || bail "$TARGET is not a directory"
 	mountpoint -q "$TARGET" 2>/dev/null || \
@@ -160,11 +310,20 @@ do_install() {
 	done
 	chmod 1777 "$TARGET/tmp" "$TARGET/var/tmp"
 	chmod 700 "$TARGET/root"
-	# Arctic is a merged-/usr system; /bin, /sbin and /lib are symlinks.
-	for l in bin sbin lib lib64; do
+	# Arctic is a merged-/usr system; /bin, /sbin, /lib and /lib64 are
+	# symlinks. glibc here installs into usr/lib (slibdir=/usr/lib, no
+	# separate lib64), but the host gcc used to build every native package
+	# still bakes in /lib64/ld-linux-x86-64.so.2 as the interpreter path -
+	# that is the standard x86_64 default regardless of where the library
+	# actually lives. /lib64 -> usr/lib64 (a separate, empty directory)
+	# looked plausible but left every dynamically linked binary unable to
+	# find its own interpreter after boot; it must point at usr/lib, same
+	# as the live ISO's own rootfs already does.
+	for l in bin sbin lib; do
 		[ -e "$TARGET/$l" ] || ln -s "usr/$l" "$TARGET/$l" 2>/dev/null || :
 	done
-	mkdir -p "$TARGET/usr/sbin" "$TARGET/usr/lib64"
+	[ -e "$TARGET/lib64" ] || ln -s usr/lib "$TARGET/lib64" 2>/dev/null || :
+	mkdir -p "$TARGET/usr/sbin"
 
 	step "Copying the package database" "repositories"
 	for f in /etc/alpm/alpm.conf; do
@@ -327,6 +486,42 @@ EOF
 	sleep 1
 }
 
+# The single entry point: partition (if A_DISK asked for it), install, and
+# wire up the bootloader - one command, nothing to pre-mount by hand.
+run_install() {
+	: >"$LOGF"
+	total=24
+	[ -n "$A_DISK" ] && total=$((total + 8))
+	tui_gauge_init "$total"
+
+	[ -n "$A_DISK" ] && partition_disk
+
+	do_install
+
+	if [ -n "$A_DISK" ]; then
+		bootstrap=$(dirname "$0")/arctic-boot-strap
+		[ -x "$bootstrap" ] || bootstrap=arctic-boot-strap
+		if [ -n "$A_ESP" ]; then
+			bootdir="$TARGET/boot"; bootflag="--efi"
+		else
+			# No ESP to speak of on BIOS - there is no separate /boot mount
+			# for a BIOS layout, so hand it the root itself.
+			bootdir="$TARGET"; bootflag="--bios"
+		fi
+		step "Installing the bootloader" "$A_BOOT_FW"
+		if [ -n "$A_BOOTLOADER" ] && [ "$A_BOOT_FW" = bios ]; then
+			set -- "$bootdir" "$bootflag" "--loader=$A_BOOTLOADER"
+		else
+			set -- "$bootdir" "$bootflag"
+		fi
+		if "$bootstrap" "$@" >>"$LOGF" 2>&1; then
+			logit "bootloader installed"
+		else
+			warn_soft "arctic-boot-strap failed - see $LOGF, then run it by hand"
+		fi
+	fi
+}
+
 warn_soft() { logit "warning: $*"; }
 
 # Snapshots only mean anything on btrfs, so everything here is conditional on it.
@@ -463,6 +658,13 @@ create_users() {
 	for g in wheel audio video input storage network render kvm; do
 		chroot_run "grep -q '^$g:' /etc/group || addgroup -S $g" || :
 	done
+	# dbus-daemon --system drops root to this user once it has bound the bus
+	# socket - see /usr/share/dbus-1/system.conf. Without the account it
+	# cannot start at all, which is why plain iwd (needs the system bus to
+	# register itself) used to fail with "failed to initialize dbus".
+	chroot_run "grep -q '^messagebus:' /etc/group || addgroup -S messagebus" || :
+	chroot_run "grep -q '^messagebus:' /etc/passwd || \
+		adduser -S -H -D -G messagebus -s /sbin/nologin messagebus" || :
 	if [ -n "$A_USER" ]; then
 		chroot_run "adduser -D -s $A_SHELL -h /home/$A_USER $A_USER" || \
 			chroot_run "useradd -m -s $A_SHELL $A_USER" || :
@@ -539,6 +741,7 @@ enable_services() {
 	}
 	svc udev
 	svc network
+	svc dbus
 	[ "$A_NET" = wifi ] && svc iwd
 	[ "$A_NTP" = yes ] && svc ntpd
 	[ "$A_SSH" = yes ] && svc sshd
@@ -575,7 +778,22 @@ EOF
 }
 
 finished_banner() {
-	cat <<EOF
+	if [ -n "$A_DISK" ]; then
+		cat <<EOF
+
+$(printf '%s' "$c_teal$t_bold")  Arctic Linux is installed on $A_DISK, bootloader included.$(printf '%s' "$t_reset")
+
+  To change anything inside the new system first:
+
+      $(printf '%s' "$c_snow")arctic-chroot$(printf '%s' "$t_reset")
+
+  Otherwise:
+
+      $(printf '%s' "$c_snow")reboot$(printf '%s' "$t_reset")
+
+EOF
+	else
+		cat <<EOF
 
 $(printf '%s' "$c_teal$t_bold")  Arctic Linux is installed.$(printf '%s' "$t_reset")
 
@@ -593,6 +811,7 @@ $(printf '%s' "$c_teal$t_bold")  Arctic Linux is installed.$(printf '%s' "$t_res
       $(printf '%s' "$c_snow")reboot$(printf '%s' "$t_reset")
 
 EOF
+	fi
 }
 
 # ----------------------------------------------------------------------- main
@@ -604,10 +823,10 @@ CFFILE="$CONF"
 ARGTARGET=""
 while [ $# -gt 0 ]; do
 	case "$1" in
-	-c|--config) shift; CFFILE=${1:?usage: arctic-strap -c <file> <target>}; shift ;;
+	-c|--config) shift; CFFILE=${1:?usage: arctic-strap -c <file> [<target>]}; shift ;;
 	-f|--force)  FORCE=1; shift ;;
 	-h|--help|help)
-		sed -n '2,16p' "$0" | sed 's/^# \?//'; exit 0 ;;
+		sed -n '2,25p' "$0" | sed 's/^# \?//'; exit 0 ;;
 	--version)
 		printf 'arctic-strap %s\n' "$VERSION"; exit 0 ;;
 	-*) echo "arctic-strap: unknown option $1" >&2; exit 1 ;;
@@ -623,34 +842,37 @@ while [ $# -gt 0 ]; do
 	esac
 done
 
-[ -n "$ARGTARGET" ] || { echo "usage: arctic-strap /mnt" >&2; exit 1; }
-TARGET=$ARGTARGET
-case "$TARGET" in
-/*) ;;
-*) TARGET="$(pwd)/$TARGET" ;;
-esac
-TARGET=$(printf '%s' "$TARGET" | sed 's|/*$||')
-[ -d "$TARGET" ] || bail "$TARGET does not exist. Mount the target first, for example:
-  mount /dev/nvme0n1p1 /mnt"
-
 # The dot builtin searches PATH when given a bare filename, so a relative path
-# like "answers.conf" is not found. Make it absolute first.
+# like "install.conf" is not found. Make it absolute first.
 case "$CFFILE" in
 /*) ;;
 *) CFFILE="$(pwd)/$CFFILE" ;;
 esac
 if [ -f "$CFFILE" ]; then
-	cli_target=$TARGET
 	# shellcheck disable=SC1090
 	. "$CFFILE"
-	# The command line always wins over whatever TARGET the answer file
-	# happened to record - re-deriving it from the raw argument here instead
-	# would throw away the pwd-prefix/trailing-slash normalization above.
-	TARGET=$cli_target
 elif [ "$CFFILE" != "$CONF" ]; then
-	bail "no such answer file: $CFFILE"
+	bail "no such config file: $CFFILE"
 else
-	echo "arctic-strap: no saved answers at $CONF - installing with defaults" >&2
+	echo "arctic-strap: no config at $CONF - installing with built-in defaults" >&2
+fi
+
+# The command line always wins over whatever the config file set. TARGET is
+# only something the manual (A_DISK unset) path needs to think about at all;
+# when A_DISK is set this is just where partition_disk mounts things, created
+# if it does not exist yet, so /mnt as a fallback is fine either way.
+[ -n "$ARGTARGET" ] && TARGET=$ARGTARGET
+[ -n "$TARGET" ] || TARGET=/mnt
+case "$TARGET" in
+/*) ;;
+*) TARGET="$(pwd)/$TARGET" ;;
+esac
+TARGET=$(printf '%s' "$TARGET" | sed 's|/*$||')
+
+if [ -z "$A_DISK" ]; then
+	[ -d "$TARGET" ] || bail "$TARGET does not exist. Either mount a target yourself first:
+  mount /dev/nvme0n1p1 /mnt
+or set A_DISK in the config to partition one automatically."
 fi
 
 if [ -z "$FORCE" ] && detect_existing_install "$TARGET"; then
@@ -662,6 +884,6 @@ if [ -z "$FORCE" ] && detect_existing_install "$TARGET"; then
 fi
 
 tui_init
-do_install
+run_install
 tui_done
 finished_banner

@@ -14,7 +14,7 @@ source="https://github.com/wlrfx/scenefx/archive/refs/tags/0.3.tar.gz"
 sha256="SKIP"
 
 build() {
-	cd "0.3"
+	cd "scenefx-0.3"
 	meson setup build \
 		--prefix=/usr \
 		--libdir=/usr/lib \
@@ -27,6 +27,6 @@ build() {
 }
 
 package() {
-	cd "0.3"
+	cd "scenefx-0.3"
 	DESTDIR="$pkgdir" ninja -C build install
 }

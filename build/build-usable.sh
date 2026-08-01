@@ -164,6 +164,57 @@ else
 	ok "dosfstools already built"
 fi
 
+# dbus's build needs expat's headers/library. It has never been built by this
+# from-source pipeline, but alpm already built and shipped it (same recipe
+# the target installs from) - reuse those exact bits into $DEPS/$R instead of
+# compiling it a second time.
+step "staging expat (dbus's only real dependency)"
+if [ ! -f "$DEPS/usr/lib/libexpat.so" ]; then
+	pkg=$(ls -t "$B"/repo/*/x86_64/expat-*.alpmz 2>/dev/null | head -1)
+	[ -n "$pkg" ] && { tar -xf "$pkg" -C "$DEPS" usr 2>/dev/null; tar -xf "$pkg" -C "$R" usr 2>/dev/null; }
+	# The .pc file it ships has prefix=/usr baked in from its own build - real
+	# for the target, wrong here, since that makes pkg-config report its libdir
+	# as the *host's* /usr/lib rather than this staging tree, no matter where
+	# the .pc file itself sits. dbus's meson build resolves expat straight from
+	# that reported libdir rather than searching -L paths, so it silently
+	# linked the host's own libexpat.so instead ("file in wrong format" - it is
+	# not even the same architecture-agnostic format the host linker expected).
+	# Repoint it at $DEPS so pkg-config reports the staged copy instead. libdir
+	# is its own independent absolute value in this .pc file, not derived from
+	# ${prefix} the way includedir is - patching prefix alone still left
+	# libdir=/usr/lib untouched, which was the actual value dbus's build used.
+	for pc in "$DEPS"/usr/lib/pkgconfig/expat.pc; do
+		[ -f "$pc" ] || continue
+		sed -i "s|^prefix=/usr|prefix=$DEPS/usr|" "$pc"
+		sed -i "s|^libdir=/usr/lib|libdir=$DEPS/usr/lib|" "$pc"
+	done
+	[ -f "$DEPS/usr/lib/libexpat.so" ] && ok "expat" || bad "expat (no built package in repo/*/x86_64)"
+else
+	ok "expat already staged"
+fi
+
+# ---------------------------------------------------------------------- dbus
+# iwd/iwctl link against ell, not libdbus - ell has its own client-side D-Bus
+# wire protocol implementation - but that client still has to connect to an
+# actual bus, and nothing was ever installed to be one. Plain `iwd &` with no
+# bus running is exactly the "failed to initialize dbus" error iwd gives, and
+# nothing on the live medium could provide one before this.
+step "building dbus 1.16.2 (iwd needs a running system bus, not just a library)"
+if [ ! -x "$R/usr/bin/dbus-daemon" ]; then
+	unpack dbus-1.16.2 dbus-1.16.2.tar.xz
+	( cd "$W/dbus-1.16.2" && \
+	  PKG_CONFIG_PATH="$DEPS/usr/lib/pkgconfig" \
+	  CFLAGS="$CFLAGS -I$DEPS/usr/include" \
+	  LDFLAGS="-L$DEPS/usr/lib" \
+	  meson setup build --prefix=/usr --libdir=/usr/lib --sysconfdir=/etc \
+		--localstatedir=/var --buildtype=release --wrap-mode=nodownload \
+	  && ninja -C build -j"$J" \
+	  && DESTDIR="$R" ninja -C build install \
+	) >"$L/dbus.log" 2>&1 && ok "dbus" || bad "dbus (see logs/dbus.log)"
+else
+	ok "dbus already built"
+fi
+
 # ------------------------------------------------------------------- ell + iwd
 step "building ell 0.83"
 if [ ! -f "$DEPS/usr/lib/libell.so" ]; then

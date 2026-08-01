@@ -117,10 +117,21 @@ package() {{
     "cargo": """
 build() {{
 	cd "{srcdir}"
-	# Arctic builds Rust offline against a vendored tree so packages are
-	# reproducible and the build host needs no network.
-	export RUSTFLAGS="-C linker=clang -C link-arg=-fuse-ld=lld"
-	cargo build --release --locked --offline
+	# --offline needs a vendored dependency tree that nothing here produces -
+	# every crate the recipe does not vendor itself fails with "no matching
+	# package found" before a single line of Rust compiles. The build
+	# sandbox already reaches the network to fetch the source tarball
+	# itself; letting cargo reach crates.io the same way is the same trust
+	# boundary, not a new one.
+	#
+	# CARGO_HOME defaults to ~/.cargo - under the sandbox's read-only host
+	# bind when building as root, so cargo's own registry cache had nowhere
+	# to write and every download failed with "Read-only file system".
+	export CARGO_HOME="${{CARGO_HOME:-/tmp/arctic-cargo-home}}"
+	# Not clang/lld - nothing else in this tree builds with them (every other
+	# recipe just uses cc, which is gcc here), and forcing a linker that is
+	# not actually installed failed every single Rust package the same way.
+	cargo build --release --locked
 }}
 
 package() {{
@@ -291,9 +302,15 @@ def srcdir_for(name, version, source):
         if fn.endswith(ext):
             fn = fn[: -len(ext)]
             break
-    # A github archive tarball named v1.2.3.tar.gz unpacks to name-1.2.3.
-    if fn.startswith("v") and fn[1:2].isdigit():
-        fn = f"{name}-{fn[1:]}"
+    # A github archive tarball named v1.2.3.tar.gz OR bare 1.2.3.tar.gz (not
+    # every project tags with a leading v - ripgrep and helix do not) unpacks
+    # to name-1.2.3: GitHub always prefixes the repo name onto the tag,
+    # whichever way the tag itself was spelled. Only kicks in when fn is
+    # actually bare-version-shaped; a project's own release tarball already
+    # names itself correctly and is left alone.
+    bare = fn[1:] if fn.startswith("v") and fn[1:2].isdigit() else fn
+    if bare and bare[0].isdigit():
+        fn = f"{name}-{bare}"
     return fn or f"{name}-{version}"
 
 

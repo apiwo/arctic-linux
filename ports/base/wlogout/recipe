@@ -14,7 +14,7 @@ source="https://github.com/ArtsyMacaw/wlogout/archive/refs/tags/1.1.1.tar.gz"
 sha256="SKIP"
 
 build() {
-	cd "1.1.1"
+	cd "wlogout-1.1.1"
 	meson setup build \
 		--prefix=/usr \
 		--libdir=/usr/lib \
@@ -27,6 +27,6 @@ build() {
 }
 
 package() {
-	cd "1.1.1"
+	cd "wlogout-1.1.1"
 	DESTDIR="$pkgdir" ninja -C build install
 }

@@ -14,7 +14,7 @@ source="https://github.com/ValveSoftware/gamescope/archive/refs/tags/3.16.20.tar
 sha256="SKIP"
 
 build() {
-	cd "3.16.20"
+	cd "gamescope-3.16.20"
 	meson setup build \
 		--prefix=/usr \
 		--libdir=/usr/lib \
@@ -27,6 +27,6 @@ build() {
 }
 
 package() {
-	cd "3.16.20"
+	cd "gamescope-3.16.20"
 	DESTDIR="$pkgdir" ninja -C build install
 }

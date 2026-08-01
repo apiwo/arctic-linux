@@ -74,9 +74,7 @@ install -Dm755 "$SRCTREE/alpm/alpm"        "$S/usr/bin/alpm"
 install -Dm755 "$SRCTREE/alpm/alpm-build"  "$S/usr/bin/alpm-build"
 install -Dm755 "$SRCTREE/alpm/alpm-repo"   "$S/usr/bin/alpm-repo"
 install -Dm644 "$SRCTREE/alpm/libalpm.sh"  "$S/usr/lib/alpm/libalpm.sh"
-install -Dm755 "$SRCTREE/installer/arctic-conf"       "$S/usr/bin/arctic-conf"
 install -Dm755 "$SRCTREE/installer/arctic-strap"      "$S/usr/bin/arctic-strap"
-install -Dm755 "$SRCTREE/installer/arctic-boot-conf"  "$S/usr/bin/arctic-boot-conf"
 install -Dm755 "$SRCTREE/installer/arctic-boot-strap" "$S/usr/bin/arctic-boot-strap"
 install -Dm755 "$SRCTREE/installer/arctic-chroot"     "$S/usr/bin/arctic-chroot"
 install -Dm644 "$SRCTREE/installer/lib/tui.sh"        "$S/usr/lib/arctic/tui.sh"
@@ -138,6 +136,7 @@ printf 'KEYMAP=us\n' >"$S/etc/vconsole.conf"
 # on a read-only image, and the installer needs root anyway.
 cat >"$S/etc/passwd" <<'EOF'
 root:x:0:0:root:/root:/bin/zsh
+messagebus:x:81:81:D-Bus system bus:/:/sbin/nologin
 nobody:x:65534:65534:nobody:/:/sbin/nologin
 EOF
 cat >"$S/etc/group" <<'EOF'
@@ -152,9 +151,10 @@ render:x:28:
 kvm:x:78:
 storage:x:95:
 network:x:90:
+messagebus:x:81:
 nobody:x:65534:
 EOF
-printf 'root::20000:0:99999:7:::\nnobody:!:20000:0:99999:7:::\n' >"$S/etc/shadow"
+printf 'root::20000:0:99999:7:::\nmessagebus:!:20000:0:99999:7:::\nnobody:!:20000:0:99999:7:::\n' >"$S/etc/shadow"
 chmod 600 "$S/etc/shadow"
 printf '/bin/sh\n/bin/zsh\n/usr/bin/zsh\n' >"$S/etc/shells"
 
@@ -215,10 +215,16 @@ sysfs	/sys	sysfs	rw,nosuid,nodev,noexec	0 0
 devpts	/dev/pts	devpts	rw,nosuid,noexec,gid=5,mode=620	0 0
 EOF
 
-# Services that should be up on the installer image.
+# Services that should be up on the installer image. dbus before iwd - iwd
+# registers itself on the system bus at startup, so it needs one already
+# running or it fails immediately ("failed to initialize dbus"). Enabled by
+# default so a bare `iwctl` from the login shell just works, with nothing
+# more to start by hand.
 mkdir -p "$S/etc/arctic/services"
 : >"$S/etc/arctic/services/network"
 : >"$S/etc/arctic/services/syslogd"
+: >"$S/etc/arctic/services/dbus"
+: >"$S/etc/arctic/services/iwd"
 printf 'NET_MODE=dhcp\n' >"$S/etc/arctic/network.conf"
 
 # Log in on tty1 without asking, and greet the operator.
@@ -269,55 +275,13 @@ if [ -n "$found" ]; then
 ARCTIC
 	printf '%s\n' "$R"
 	printf '  %sArctic Linux is already installed on %s.%s\n\n' "$GREY" "$found" "$R"
-	printf '  Run %sarctic-chroot%s after mounting it to make changes,\n' "$SNOW" "$R"
-	printf '  or %sarctic-conf /mnt%s then %sarctic-strap /mnt%s to install again.\n\n' \
-		"$SNOW" "$R" "$SNOW" "$R"
 else
 	arcticfetch 2>/dev/null || true
-	printf '  %sWelcome to the Arctic Linux installer.%s\n\n' "$SNOW$B" "$R"
-	printf '  Configuring and installing are separate: %sarctic-conf%s only asks\n' "$SNOW" "$R"
-	printf '  questions and saves them, %sarctic-strap%s only installs, from what was\n' \
-		"$SNOW" "$R"
-	printf '  saved. Same split for the bootloader, with %s-boot-%s in the name.\n\n' "$SNOW" "$R"
-	printf '  %s1.%s Get online (optional - the ISO can install without a network):\n' "$TEAL" "$R"
-	printf '       %siwctl station wlan0 connect YOUR-NETWORK%s   (wireless)\n' "$SNOW" "$R"
-	printf '       %sudhcpc -i eth0%s                              (wired)\n\n' "$SNOW" "$R"
-	printf '  %s2.%s Configure, then install. arctic-conf can partition and format\n' "$TEAL" "$R"
-	printf '       the disk for you - step 1 of its menu - so you do not have to\n'
-	printf '       mount anything first:\n'
-	printf '       %sarctic-conf /mnt%s\n' "$SNOW" "$R"
-	printf '       %sarctic-strap /mnt%s\n\n' "$SNOW" "$R"
-	printf '  %s3.%s Then the bootloader:\n' "$TEAL" "$R"
-	printf '       %sarctic-boot-conf /mnt/boot%s\n' "$SNOW" "$R"
-	printf '       %sarctic-boot-strap /mnt/boot --efi%s   (or --bios)\n\n' "$SNOW" "$R"
-	printf '  %sPrefer to do the disk yourself?  cfdisk  mkfs.ext4  mkfs.vfat  lsblk%s\n' \
-		"$GREY" "$R"
-	printf '  %sare all here.%s\n\n' "$GREY" "$R"
-	printf '  %sType %sarctic-conf /mnt%s%s to begin, or %sarctic-install%s for this reminder.%s\n\n' \
-		"$GREY" "$SNOW$B" "$R" "$GREY" "$SNOW" "$GREY" "$R"
+	printf '\n'
 fi
 exec /bin/zsh -l
 WELCOME
 chmod 755 "$S/usr/bin/arctic-welcome"
-
-# Reprint the installer instructions on demand.
-#
-# This used to be called 'install'. Do not do that: /usr/bin/install is a
-# symlink to the toybox multiplexer, so the redirect below followed the link and
-# replaced the toybox binary itself with this three-line script. Every toybox
-# command then became "exec arctic-welcome", which starts an interactive shell -
-# so ls, cat and cut all hung forever and the boot never finished.
-#
-# Two rules come out of that: never take a name that already exists in /usr/bin,
-# and always unlink before writing, because almost everything in there is a
-# symlink to busybox or toybox.
-rm -f "$S/usr/bin/arctic-install"
-cat >"$S/usr/bin/arctic-install" <<'INST'
-#!/bin/sh
-# Reprint the Arctic installer instructions.
-exec arctic-welcome
-INST
-chmod 755 "$S/usr/bin/arctic-install"
 
 ok "image configured"
 
