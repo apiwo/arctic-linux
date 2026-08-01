@@ -63,7 +63,27 @@ done
 ln -sfn "usr/bin" "$R/sbin" 2>/dev/null
 ln -sfn "usr/lib" "$R/lib" 2>/dev/null
 ln -sfn "usr/lib" "$R/lib64" 2>/dev/null
-ln -sfn "bin" "$R/usr/sbin" 2>/dev/null
+
+# /usr/sbin -> bin, the last of the merged-/usr symlinks.
+#
+# This one needs care that the others do not. By the time this runs,
+# /usr/sbin may already be a real directory with binaries in it, because
+# packages install there. `ln -sfn bin /usr/sbin` against a real directory
+# does not replace it - it creates /usr/sbin/bin -> bin *inside* it, a
+# symlink pointing at itself, and leaves /usr/sbin unmerged. That is
+# exactly what was in the shipped image.
+#
+# So: move anything already there into /usr/bin first, then replace the
+# empty directory with the symlink.
+if [ -d "$R/usr/sbin" ] && [ ! -L "$R/usr/sbin" ]; then
+	rm -f "$R/usr/sbin/bin" 2>/dev/null || :
+	for f in "$R/usr/sbin"/* "$R/usr/sbin"/.[!.]*; do
+		[ -e "$f" ] || continue
+		mv -f "$f" "$R/usr/bin/" 2>/dev/null || :
+	done
+	rmdir "$R/usr/sbin" 2>/dev/null || :
+fi
+[ -e "$R/usr/sbin" ] || ln -sfn "bin" "$R/usr/sbin"
 chmod 1777 "$R/tmp" "$R/var/tmp"
 chmod 0700 "$R/root"
 chmod 0555 "$R/var/empty"
