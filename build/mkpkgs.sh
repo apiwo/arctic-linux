@@ -454,6 +454,20 @@ emit "$pd" Arctic-base-kernel 7.1.3 kernels \
 	"Arctic Linux kernel, broad hardware support" "GPL-2.0-only" \
 	"https://kernel.org/" "glibc"
 
+step "packaging Arctic-kernel"
+if [ -d "$B/stage/kernel-zen/boot" ]; then
+	pd=$PKGDIRS/Arctic-kernel; rm -rf "$pd"; mkdir -p "$pd/boot" "$pd/usr/lib/modules"
+	cp -a "$B/stage/kernel-zen/boot/." "$pd/boot/"
+	cp -a "$B/stage/kernel-zen/lib/modules/." "$pd/usr/lib/modules/"
+	KREL=$(ls "$B/stage/kernel-zen/lib/modules" | head -1)
+	rm -f "$pd/usr/lib/modules/$KREL/build" "$pd/usr/lib/modules/$KREL/source"
+	emit "$pd" Arctic-kernel 6.12.100 kernels \
+		"ZEN patchset on the 6.12 LTS line - PDS/BMQ, ACS override, ntsync, vhba" \
+		"GPL-2.0-only" "https://github.com/apiwo/arctic-kernel" "glibc"
+else
+	echo "   (skipped - $B/stage/kernel-zen not built)"
+fi
+
 step "packaging linux-headers"
 pd=$PKGDIRS/linux-headers; rm -rf "$pd"; mkdir -p "$pd/usr"
 if ( cd "$W/linux-7.1.3" && make headers_install INSTALL_HDR_PATH="$pd/usr" ) \

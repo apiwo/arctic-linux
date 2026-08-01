@@ -1,7 +1,7 @@
 #!/bin/sh
 # mkiso - build an Arctic Linux installation image.
 #
-#   mkiso minimal     Arctic-minimal: a TTY, zsh, and the installer
+#   mkiso minimal     Arctic-base-glibc: a TTY, zsh, and the installer
 #
 # There is one image on purpose. Arctic boots to a text console running zsh -
 # no display manager, no desktop, no bash anywhere in the tree.
@@ -32,7 +32,7 @@ BUILD_ID=$(date '+%Y.%m.%d')
 LABEL="ARCTIC"
 
 case "$PROFILE" in
-minimal) ISONAME="Arctic-minimal-$BUILD_ID-x86_64.iso"; LABEL="ARCTIC_MIN" ;;
+minimal) ISONAME="Arctic-base-glibc-$BUILD_ID-x86_64.iso"; LABEL="ARCTIC_MIN" ;;
 *) echo "mkiso: unknown profile '$PROFILE' (only 'minimal' exists)" >&2; exit 1 ;;
 esac
 

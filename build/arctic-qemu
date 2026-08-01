@@ -34,7 +34,7 @@ for f in /usr/share/edk2-ovmf/OVMF_CODE.fd /usr/share/edk2/x64/OVMF_CODE.4m.fd \
 done
 OVMF_VARS_SRC=$(printf '%s' "$OVMF_CODE" | sed 's/CODE/VARS/')
 
-ISO=${ARCTIC_ISO:-$(ls -t "$B"/iso/Arctic-minimal-*.iso 2>/dev/null | head -1)}
+ISO=${ARCTIC_ISO:-$(ls -t "$B"/iso/Arctic-base-glibc-*.iso 2>/dev/null | head -1)}
 [ -n "$ISO" ] && [ -f "$ISO" ] || {
 	echo "arctic-qemu: no ISO found. Build one first:" >&2
 	echo "  build/arctic-sandbox iso/mkiso minimal" >&2

@@ -1,21 +1,24 @@
 #!/bin/sh
 # arctic-boot-strap - install the bootloader for an Arctic Linux install
 #
-#   arctic-boot-strap /mnt/boot --efi                 UEFI, Limine
-#   arctic-boot-strap /mnt/boot --bios                BIOS, Limine (default)
-#   arctic-boot-strap /mnt/boot --bios --loader=grub  BIOS, GRUB instead
+#   arctic-boot-strap /mnt/boot/efi                    UEFI, Limine (path says efi)
+#   arctic-boot-strap /mnt/boot                        BIOS, Limine (path doesn't)
+#   arctic-boot-strap /mnt/boot --bios --loader=grub   BIOS, GRUB instead
+#
+# --efi/--bios are optional - a path ending in efi/EFI means UEFI, anything
+# else means BIOS, without needing to say which on the command line too.
 #
 # arctic-strap calls this automatically at the end of a run where the config
 # set A_DISK - normally there is nothing to run here by hand at all. This is
 # only for wiring up a bootloader on its own, for instance after chrooting in
 # to fix one:
 #
-#   mount /dev/nvme0n1p2 /mnt/boot
-#   arctic-boot-strap /mnt/boot --efi
+#   mount /dev/nvme0n1p2 /mnt/boot/efi
+#   arctic-boot-strap /mnt/boot/efi
 #
-# With no --efi/--bios given it reads /tmp/arctic-boot-strap.conf if one
-# happens to exist; failing that it detects the firmware itself and defaults
-# to Limine.
+# With no --efi/--bios given and no efi/EFI in the path, it reads
+# /tmp/arctic-boot-strap.conf if one happens to exist; failing that it
+# detects the firmware itself and defaults to Limine.
 #
 # shellcheck shell=sh disable=SC2039,SC2059
 
@@ -225,6 +228,15 @@ if [ -z "$method" ] && [ -f "$BOOTCONF" ]; then
 	. "$BOOTCONF"
 	method=${BOOT_METHOD:-}
 	[ -z "$loader" ] && loader=${BOOT_LOADER:-}
+fi
+# Still nothing? Read it off the path itself before falling back to asking
+# the live system what firmware it booted under - /mnt/boot/efi means EFI
+# regardless of what this machine happens to be, the same way a plain
+# /mnt/boot with no efi/EFI component means BIOS.
+if [ -z "$method" ]; then
+	case "$BOOTDIR" in
+	*/efi|*/EFI|*/Efi) method=efi ;;
+	esac
 fi
 [ -n "$method" ] || method=$(detect_firmware)
 [ -n "$loader" ] || loader=limine

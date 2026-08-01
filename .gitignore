@@ -18,6 +18,9 @@ branding/misc/
 # Still needed locally to build - just not published here.
 ports/
 
+# Rust build output
+alpm-rs/target/
+
 # Editor and OS noise
 *.swp
 *~
