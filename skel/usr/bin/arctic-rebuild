@@ -133,6 +133,18 @@ note "reconciling against $CONF"
 
 command -v arctic-snapshot >/dev/null 2>&1 && arctic-snapshot create "arctic-rebuild" >/dev/null 2>&1
 
+# Record where the system is *before* changing it, so this rebuild is
+# escapable. arctic-generation switch puts system.conf back and reconciles;
+# the bootloader lists the recent ones so even a rebuild that will not boot
+# can be backed out of from the boot menu.
+#
+# Skipped when we are already inside a switch, or the rollback itself would
+# create a generation on every hop.
+if [ "${ARCTIC_GEN_SWITCH:-0}" != 1 ] && command -v arctic-generation >/dev/null 2>&1; then
+	gen=$(arctic-generation create "before rebuild" 2>/dev/null)
+	[ -n "$gen" ] && note "recorded generation $gen"
+fi
+
 rc=0
 if [ -n "$to_install" ]; then
 	# shellcheck disable=SC2086
@@ -149,6 +161,26 @@ for s in $svc_enable;  do service enable  "$s" >/dev/null 2>&1 || rc=1; done
 for s in $svc_disable; do service disable "$s" >/dev/null 2>&1 || rc=1; done
 
 if [ "$rc" = 0 ]; then
+	# The system now matches the config, so record that as the generation
+	# the machine is actually on and refresh the boot menu.
+	if [ "${ARCTIC_GEN_SWITCH:-0}" != 1 ] && command -v arctic-generation >/dev/null 2>&1; then
+		gen=$(arctic-generation create "rebuild" 2>/dev/null)
+		[ -n "$gen" ] && note "now on generation $gen"
+	fi
+	command -v arctic-boot-generations >/dev/null 2>&1 && \
+		arctic-boot-generations >/dev/null 2>&1 || :
+
+	# Services are declared once and translated per init, so a rebuild that
+	# changed the enabled set has to regenerate them for whatever init this
+	# machine actually runs.
+	if [ -n "$svc_enable$svc_disable" ] && [ -f /etc/arctic/init ]; then
+		myinit=$(cat /etc/arctic/init 2>/dev/null)
+		if [ -n "$myinit" ] && [ "$myinit" != busybox ] && \
+		   command -v arctic-init-setup >/dev/null 2>&1; then
+			arctic-init-setup "$myinit" >/dev/null 2>&1 && \
+				note "$myinit service definitions regenerated"
+		fi
+	fi
 	note "rebuild complete"
 else
 	printf '  %ssome changes failed - see above%s\n' "$AMB" "$R" >&2

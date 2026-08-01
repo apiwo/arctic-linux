@@ -38,9 +38,9 @@ export CXXFLAGS="$CFLAGS"
 # ------------------------------------------------------------------ util-linux
 # cfdisk, sfdisk, wipefs, lsblk, blkid, mount, umount, findmnt, and the real
 # libblkid/libmount that e2fsprogs and iwd expect.
-step "building util-linux 2.41.5 (cfdisk, sfdisk, wipefs, lsblk, blkid)"
+step "building util-linux 2.42.2 (cfdisk, sfdisk, wipefs, lsblk, blkid)"
 if [ ! -x "$R/usr/bin/cfdisk" ]; then
-	unpack util-linux-2.41.5 util-linux-2.41.5.tar.xz
+	unpack util-linux-2.42.2 util-linux-2.42.2.tar.xz
 	# cfdisk needs a curses library and libsmartcols (lsblk, findmnt, ...) wants
 	# terminfo for column widths. Without PKG_CONFIG_PATH pointing at $DEPS,
 	# configure happily finds the build host's GNU ncurses instead - Arctic
@@ -61,7 +61,7 @@ if [ ! -x "$R/usr/bin/cfdisk" ]; then
 	# "undefined reference to acs_map". Forcing the *_CONFIG tools to "false"
 	# pushes the probe straight to pkg-config, so header and library come
 	# from the same (Arctic) place.
-	( cd "$W/util-linux-2.41.5" && \
+	( cd "$W/util-linux-2.42.2" && \
 	  PKG_CONFIG_PATH="$DEPS/usr/lib/pkgconfig" \
 	  CFLAGS="$CFLAGS -I$DEPS/usr/include" \
 	  LDFLAGS="-L$DEPS/usr/lib -Wl,-rpath-link,$DEPS/usr/lib" \
@@ -80,7 +80,7 @@ if [ ! -x "$R/usr/bin/cfdisk" ]; then
 		--disable-last --disable-utmpdump --without-readline \
 	  && make -j"$J" \
 	) >"$L/util-linux.log" 2>&1 && {
-		d=$W/util-linux-2.41.5
+		d=$W/util-linux-2.42.2
 		# Copy the built artefacts directly. "make install" relinks with libtool
 		# and fails on libmount.la; the binaries are already correct, and Arctic
 		# only wants the partitioning and block-device tools anyway.

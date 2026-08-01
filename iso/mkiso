@@ -206,6 +206,52 @@ if [ -d "$B/repo" ]; then
 	ok "sync database seeded ($(cat "$S"/var/lib/alpm/sync/*.idx 2>/dev/null | wc -l) packages)"
 fi
 
+# Tools that have to be on the installer image itself, not just available to
+# install onto the target. The rootfs build only produces the minimum needed
+# to boot; these come out of the packages the repo already has.
+#
+#   nano, vim   editing install.conf is the whole installation procedure now,
+#               so an editor beyond busybox vi is not optional
+#   dhcpcd      wired networking during the install
+LIVE_EXTRAS="nano vim neovim dhcpcd ttf-jetbrains-mono ttf-nerd-fonts-symbols"
+step "installing live tools"
+for p in $LIVE_EXTRAS; do
+	pkg=$(ls -t "$B"/repo/*/x86_64/"$p"-*.alpmz 2>/dev/null | head -1)
+	if [ -z "$pkg" ]; then
+		printf '   %s not built - skipping\n' "$p" >&2
+		continue
+	fi
+	# .alpmz is a plain tar.xz rooted at /, so unpacking it over the live
+	# tree is all an install amounts to here. The metadata files are the
+	# only thing that must not land in the filesystem itself.
+	tar -xf "$pkg" -C "$S" --exclude=.PKGINFO --exclude=.FILES --exclude=.INSTALL \
+		2>/dev/null || { printf '   %s failed to unpack\n' "$p" >&2; continue; }
+	# Record it in the live image's own package database, so `alpm list` on
+	# the installer agrees with what is actually installed there.
+	d="$S/var/lib/alpm/local/$p"
+	mkdir -p "$d"
+	tar -xOf "$pkg" .PKGINFO >"$d/PKGINFO" 2>/dev/null || :
+	tar -xOf "$pkg" .FILES   >"$d/FILES"   2>/dev/null || :
+	printf 'explicit\n' >"$d/REASON"
+	printf 'activated = yes\n' >"$d/STATE"
+	ok "$(basename "$pkg")"
+done
+
+# busybox --install symlinks every applet it was built with, vi among them.
+# Arctic ships real vim and neovim, so the busybox one is only ever a worse
+# editor that happens to win on PATH order. Point vi at vim instead of
+# deleting it outright - plenty of muscle memory and more than one script
+# still types "vi", and they should all get the real thing.
+if [ -e "$S/usr/bin/vim" ]; then
+	rm -f "$S/usr/bin/vi"
+	ln -sf vim "$S/usr/bin/vi"
+	ok "vi -> vim (busybox vi dropped)"
+elif [ -e "$S/usr/bin/nvim" ]; then
+	rm -f "$S/usr/bin/vi"
+	ln -sf nvim "$S/usr/bin/vi"
+	ok "vi -> nvim (busybox vi dropped)"
+fi
+
 # The live image mounts itself, so its fstab only describes the pseudo mounts.
 cat >"$S/etc/fstab" <<'EOF'
 # Arctic Linux live image
@@ -226,6 +272,14 @@ mkdir -p "$S/etc/arctic/services"
 : >"$S/etc/arctic/services/dbus"
 : >"$S/etc/arctic/services/iwd"
 printf 'NET_MODE=dhcp\n' >"$S/etc/arctic/network.conf"
+
+# dbus-daemon --system will not start without a machine ID, and rc.boot
+# throws service stderr away, so a missing one looked like dbus simply not
+# running - which is what made iwctl report "failed to initialize dbus" on
+# the last image. The live session generates its own on first boot (see
+# /etc/rc.d/dbus); shipping one in the image would give every machine that
+# boots this ISO an identical ID, which is worse.
+rm -f "$S/etc/machine-id"
 
 # Log in on tty1 without asking, and greet the operator.
 sed -i 's|^tty1::respawn:/sbin/getty 38400 tty1 linux|tty1::respawn:/sbin/getty -n -l /usr/bin/arctic-welcome 38400 tty1 linux|' \

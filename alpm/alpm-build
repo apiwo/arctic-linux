@@ -87,7 +87,22 @@ options=""; provides=""; conflicts=""; replaces=""; backup=""; kind=""
 pkgbase="$name-$version-$release.$arch"
 srcdir="$ALPM_BUILDROOT/$name/src"
 pkgdir="$ALPM_BUILDROOT/$name/pkg"
-export srcdir pkgdir
+
+# pkgdir is exported; srcdir deliberately is not.
+#
+# "srcdir" is autoconf's own variable name for where a configure script's
+# sources live. Exporting ours puts a path autoconf never chose into the
+# environment of every configure script a recipe runs, and any of them that
+# re-exec a nested configure (vim's ./configure is a stub that runs
+# src/configure, which runs auto/configure) picks it up and looks for the
+# sources somewhere they are not. vim failed this way with no error at all:
+# configure produced empty output, the recipe's $(./configure --help) came
+# back blank, and set -e killed the build with nothing in the log.
+#
+# Recipes are sourced into this shell, so they still see $srcdir as an
+# ordinary variable - and subshells inherit it too. Only external programs
+# stop seeing it, which is exactly the point.
+export pkgdir
 
 printf '\n'
 msg "Building $name $version-$release"

@@ -109,7 +109,24 @@ info_mem() {
 }
 
 info_disk() {
-	df -h / 2>/dev/null | awk 'NR==2{printf "%s / %s (%s)", $3, $2, $5}'
+	# On a live session / is an overlay of a read-only squashfs under a tmpfs,
+	# and overlayfs has no storage of its own to report - df answers with a
+	# nominal handful of kilobytes, which is where the "8.0K" came from. Ask
+	# the writable layer instead, since that is the space actually available.
+	fstype=$(awk '$2=="/"{print $3}' /proc/mounts | tail -1)
+	case "$fstype" in
+	overlay|overlayfs|squashfs|rootfs)
+		for m in /run/upper /run /tmp; do
+			[ -d "$m" ] || continue
+			out=$(df -h "$m" 2>/dev/null | awk 'NR==2{printf "%s / %s (%s)", $3, $2, $5}')
+			[ -n "$out" ] && { printf '%s, live session' "$out"; return; }
+		done
+		printf 'live session'
+		;;
+	*)
+		df -h / 2>/dev/null | awk 'NR==2{printf "%s / %s (%s)", $3, $2, $5}'
+		;;
+	esac
 }
 
 info_shell() {

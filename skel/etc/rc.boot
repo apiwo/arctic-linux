@@ -107,10 +107,55 @@ else
 fi
 good
 
-begin "setting the console font and keymap"
+begin "setting up the console"
 [ -f /etc/vconsole.conf ] && . /etc/vconsole.conf
 [ -n "${KEYMAP:-}" ] && loadkmap </usr/share/keymaps/"$KEYMAP".bmap 2>/dev/null || :
-[ -n "${FONT:-}" ] && setfont /usr/share/consolefonts/"$FONT".psf 2>/dev/null || :
+
+# Console fonts ship in several shapes (.psf, .psfu, and either gzipped)
+# depending on where they came from, and setfont only takes the file it is
+# handed - so find whichever one actually exists rather than assuming .psf.
+if [ -n "${FONT:-}" ]; then
+	for _e in .psfu.gz .psf.gz .psfu .psf ""; do
+		_f=/usr/share/consolefonts/$FONT$_e
+		[ -f "$_f" ] && { setfont "$_f" 2>/dev/null; break; }
+	done
+fi
+
+# Repaint the 16 console colours in Arctic's palette. The default VGA set is
+# the one every distribution has looked like since 1991; this is the same
+# ice/blue scheme the bootloader and the website use, so a bare TTY looks
+# like part of the system rather than a generic Linux console.
+#
+# ESC]P<index><rrggbb> is the console's own palette escape - it needs no
+# tools and works on every VT before anything is installed.
+set_palette() {
+	printf '\033]P0%s' "1a1b26"   # black
+	printf '\033]P1%s' "f38ba8"   # red
+	printf '\033]P2%s' "a6e3a1"   # green
+	printf '\033]P3%s' "f9e2af"   # yellow
+	printf '\033]P4%s' "89b4fa"   # blue
+	printf '\033]P5%s' "cba6f7"   # magenta
+	printf '\033]P6%s' "94e2d5"   # cyan
+	printf '\033]P7%s' "bac2de"   # white
+	printf '\033]P8%s' "45475a"   # bright black
+	printf '\033]P9%s' "f38ba8"
+	printf '\033]PA%s' "a6e3a1"
+	printf '\033]PB%s' "f9e2af"
+	printf '\033]PC%s' "89b4fa"
+	printf '\033]PD%s' "cba6f7"
+	printf '\033]PE%s' "94e2d5"
+	printf '\033]PF%s' "cdd6f4"   # bright white
+	printf '\033[H\033[2J'        # repaint with the new palette in effect
+}
+for _t in /dev/tty1 /dev/tty2 /dev/tty3 /dev/tty4; do
+	[ -w "$_t" ] && set_palette >"$_t" 2>/dev/null
+done
+
+# Stop the console blanking after 10 minutes mid-install, and turn off the
+# power-management blank that some laptops otherwise apply on top of it.
+for _t in /dev/tty1 /dev/tty2 /dev/tty3 /dev/tty4; do
+	[ -w "$_t" ] && printf '\033[9;0]\033[14;0]' >"$_t" 2>/dev/null
+done
 good
 
 begin "seeding the random pool"
@@ -134,6 +179,34 @@ good
 begin "bringing up the loopback interface"
 ip link set lo up 2>/dev/null || ifconfig lo 127.0.0.1 up 2>/dev/null
 good
+
+# --------------------------------------------------------------------- generation
+# Booting an "Arctic Linux (generation N)" entry from the boot menu puts
+# arctic.generation=N on the kernel command line. Reconciling here, before
+# services start, is what makes that entry mean the same thing as having run
+# `arctic-generation switch N` - the machine comes up as that configuration,
+# not as the current one with an old label.
+#
+# This is the escape hatch for a rebuild that made the system unbootable, so
+# it deliberately never aborts the boot: if the switch fails, the machine
+# still comes all the way up and says so.
+for _a in $(cat /proc/cmdline 2>/dev/null); do
+	case "$_a" in
+	arctic.generation=*)
+		_g=${_a#arctic.generation=}
+		[ -n "$_g" ] || continue
+		[ -d "/var/lib/arctic/generations/$_g" ] || continue
+		[ "$_g" = "$(cat /var/lib/arctic/generations/current 2>/dev/null)" ] && continue
+		begin "switching to generation $_g"
+		if command -v arctic-generation >/dev/null 2>&1 && \
+		   arctic-generation switch "$_g" >/var/log/arctic-generation-boot.log 2>&1; then
+			good
+		else
+			bad "generation $_g (see /var/log/arctic-generation-boot.log)"
+		fi
+		;;
+	esac
+done
 
 # ------------------------------------------------------------------------ services
 if [ -d /etc/arctic/services ]; then
