@@ -1052,18 +1052,43 @@ seed_system_conf() {
 		printf '#\n'
 		printf '#     arctic-rebuild\n'
 		printf '#\n'
-		printf '# SYS_PACKAGES is the complete list of explicitly installed packages -\n'
-		printf '# not things to add, the actual list. Removing a name removes the package\n'
-		printf '# (and anything only it needed) on the next rebuild. Dependencies are\n'
-		printf '# managed for you; do not list them here.\n'
-		printf '#\n'
-		printf '# SYS_SERVICES is the same for what runs at boot.\n'
+		printf '# Every field below is the complete, authoritative value - not something\n'
+		printf '# to add to. SYS_PACKAGES/SYS_SERVICES/SYS_USERS list everything that\n'
+		printf '# should exist; removing a name removes it on the next rebuild. SYS_USERS\n'
+		printf '# is the one exception: an existing account not listed is left alone\n'
+		printf '# rather than deleted.\n'
 		printf '#\n'
 		printf '# Every rebuild records a generation first, so a bad edit can be undone\n'
 		printf '# with `arctic rollback` - or from the boot menu if it will not boot.\n'
 		printf '#\n'
 		printf '# Written by arctic-strap %s from the install itself.\n\n' \
 			"$(date '+%Y-%m-%d %H:%M:%S')"
+
+		printf 'SYS_DESCRIPTION=""\n\n'
+
+		printf 'SYS_HOSTNAME="%s"\n' "$A_HOSTNAME"
+		printf 'SYS_TZ="%s"\n' "$A_TZ"
+		printf 'SYS_LOCALE="%s"\n' "$A_LOCALE"
+		printf 'SYS_LANG="%s"\n' "$A_LANG"
+		printf 'SYS_KEYMAP="%s"\n\n' "$A_KEYMAP"
+
+		printf 'SYS_USERS="\n'
+		if [ -n "$A_USER" ]; then
+			# chroot_run logs to $LOGF rather than returning output through a
+			# command substitution, so this uses what the config itself
+			# declared rather than querying the account back out of the
+			# chroot - the same groups create_users() actually applied.
+			ug=$(printf '%s' "$A_USER_GROUPS" | tr -s ' ' ',')
+			printf '\t%s:%s:%s\n' "$A_USER" "$A_SHELL" "$ug"
+		fi
+		printf '"\n\n'
+
+		printf 'SYS_SERVICES="\n'
+		for s in "$TARGET"/etc/arctic/services/*; do
+			[ -e "$s" ] || continue
+			printf '\t%s\n' "$(basename "$s")"
+		done
+		printf '"\n\n'
 
 		printf 'SYS_PACKAGES="\n'
 		for d in "$TARGET"/var/lib/alpm/local/*/; do
@@ -1073,12 +1098,12 @@ seed_system_conf() {
 		done
 		printf '"\n\n'
 
-		printf 'SYS_SERVICES="\n'
-		for s in "$TARGET"/etc/arctic/services/*; do
-			[ -e "$s" ] || continue
-			printf '\t%s\n' "$(basename "$s")"
+		nf=no
+		for r in "$TARGET"/etc/alpm/repos.d/*nonfree*.repo; do
+			[ -f "$r" ] || continue
+			grep -q '^enabled = yes' "$r" 2>/dev/null && nf=yes
 		done
-		printf '"\n'
+		printf 'SYS_ALLOW_NONFREE="%s"\n' "$nf"
 	} >"$f"
 	logit "seeded $f"
 }

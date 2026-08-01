@@ -4,20 +4,27 @@
 #   arctic-rebuild             make the system match the config
 #   arctic-rebuild --dry-run   show what would change, do nothing
 #
-# The declarative core of Arctic: system.conf lists every package and service
-# that should exist, and this makes the real system match it - installs
-# whatever is missing, removes whatever explicit package is no longer listed
-# (its now-unneeded dependencies go with it, same as `alpm del+deps`), and
-# enables/disables services the same way. This is the same relationship
-# NixOS's configuration.nix has to `nixos-rebuild switch`, built on top of
-# alpm rather than replacing it - every install/removal alpm does here is a
+# The declarative core of Arctic: system.conf lists everything the machine
+# should be - hostname, timezone, locale, keymap, user accounts, packages
+# and services - and this makes the real system match it. This is the same
+# relationship NixOS's configuration.nix has to `nixos-rebuild switch`, built
+# on top of alpm rather than replacing it: every install/removal here is a
 # completely ordinary `alpm ins`/`alpm del+deps` call, snapshotted the exact
-# same way a plain `alpm ins` already snapshots itself.
+# same way a plain `alpm ins` already snapshots itself, and every reconciled
+# setting below is a real, individually testable step, not a single opaque
+# "apply everything" operation.
 #
-# If system.conf is empty or missing, the first run does not remove anything:
-# it seeds SYS_PACKAGES/SYS_SERVICES from whatever is already explicitly
-# installed and enabled, so editing from a known-accurate starting point is
-# always possible. Only once it has real content does a rebuild reconcile.
+# If system.conf is empty or missing, the first run does not change
+# anything: it seeds every field from what the machine already is, so
+# editing from a known-accurate starting point is always possible. Only
+# once it has real content does a rebuild reconcile.
+#
+# What this does NOT do: user accounts are additive only (a declared user
+# that does not exist is created; an existing account not declared is left
+# alone rather than deleted - see SYS_USERS in system.conf for why). There
+# is also no "outputs" concept the way a Nix flake exposes reusable modules
+# and packages to other configurations - system.conf describes one machine,
+# not a library other machines import from.
 # shellcheck shell=sh disable=SC2039
 
 set -u
@@ -28,6 +35,7 @@ for d in /usr/lib/alpm /usr/lib/arctic/../../alpm ./alpm; do
 done
 
 CONF=/etc/arctic/system.conf
+LOCKF=/etc/arctic/system.lock
 DRYRUN=0
 case "${1:-}" in
 --dry-run|-n) DRYRUN=1 ;;
@@ -56,6 +64,18 @@ explicit_pkgs() {
 	done
 }
 
+# name<TAB>version-release for every explicit package, for system.lock.
+explicit_pkgs_versioned() {
+	for d in /var/lib/alpm/local/*/; do
+		[ -d "$d" ] || continue
+		[ "$(cat "${d}REASON" 2>/dev/null)" = "explicit" ] || continue
+		n=$(basename "$d")
+		v=$(awk -F' *= *' '$1=="version"{print $2}' "${d}PKGINFO" 2>/dev/null)
+		r=$(awk -F' *= *' '$1=="release"{print $2}' "${d}PKGINFO" 2>/dev/null)
+		printf '%s\t%s-%s\n' "$n" "${v:-?}" "${r:-1}"
+	done | sort
+}
+
 enabled_services() {
 	for f in /etc/arctic/services/*; do
 		[ -e "$f" ] || continue
@@ -70,8 +90,25 @@ in_list() {
 	return 1
 }
 
-SYS_PACKAGES=""
+current_hostname() { cat /etc/hostname 2>/dev/null || hostname 2>/dev/null; }
+current_tz() {
+	# /etc/localtime is normally a symlink into /usr/share/zoneinfo; the
+	# timezone name is just the tail of that path.
+	[ -L /etc/localtime ] && readlink /etc/localtime 2>/dev/null | sed 's|.*/zoneinfo/||'
+}
+current_locale() { awk -F= '$1=="LANG"{print $2; exit}' /etc/locale.conf 2>/dev/null; }
+current_keymap() { awk -F= '$1=="KEYMAP"{print $2; exit}' /etc/vconsole.conf 2>/dev/null; }
+
+SYS_DESCRIPTION=""
+SYS_HOSTNAME=""
+SYS_TZ=""
+SYS_LOCALE=""
+SYS_LANG=""
+SYS_KEYMAP=""
+SYS_USERS=""
 SYS_SERVICES=""
+SYS_PACKAGES=""
+SYS_ALLOW_NONFREE="no"
 if [ -f "$CONF" ]; then
 	# shellcheck disable=SC1090
 	. "$CONF"
@@ -80,27 +117,82 @@ fi
 cur_pkgs=$(explicit_pkgs)
 cur_svcs=$(enabled_services)
 
-# Bootstrap: nothing declared yet anywhere - seed from reality instead of
-# reconciling against an empty list, which would just remove everything.
-if [ -z "$(printf '%s' "$SYS_PACKAGES" | tr -d '[:space:]')" ] && \
-   [ -z "$(printf '%s' "$SYS_SERVICES" | tr -d '[:space:]')" ]; then
-	note "system.conf has nothing declared yet - seeding it from what is actually installed and enabled"
+# ------------------------------------------------------------------ bootstrap
+# Nothing declared yet anywhere - seed every field from what the machine
+# already is, instead of reconciling against a mostly-empty file, which for
+# packages/services would mean "remove everything" and for identity would
+# mean "wipe the hostname". A machine that already went through
+# arctic-strap has this seeded from the install itself; this path mainly
+# covers a machine from before system.conf existed, or a deleted file.
+all_empty=1
+for v in "$SYS_DESCRIPTION" "$SYS_HOSTNAME" "$SYS_TZ" "$SYS_LOCALE" "$SYS_LANG" \
+         "$SYS_KEYMAP" "$SYS_USERS" "$SYS_SERVICES" "$SYS_PACKAGES"; do
+	[ -n "$(printf '%s' "$v" | tr -d '[:space:]')" ] && all_empty=0
+done
+
+if [ "$all_empty" = 1 ]; then
+	note "system.conf has nothing declared yet - seeding it from what the machine already is"
 	mkdir -p /etc/arctic
+	h=$(current_hostname); tz=$(current_tz); loc=$(current_locale); km=$(current_keymap)
 	{
 		printf '# Arctic Linux - declarative system configuration\n'
 		printf '# Seeded by arctic-rebuild %s from the system as it stood then.\n' "$(date '+%Y-%m-%d %H:%M:%S')"
 		printf '# Edit this, then run arctic-rebuild again to apply changes.\n\n'
+		printf 'SYS_DESCRIPTION=""\n\n'
+		printf 'SYS_HOSTNAME="%s"\n' "$h"
+		printf 'SYS_TZ="%s"\n' "$tz"
+		printf 'SYS_LOCALE="%s"\n' "$loc"
+		printf 'SYS_LANG="%s"\n' "$loc"
+		printf 'SYS_KEYMAP="%s"\n\n' "$km"
+		printf 'SYS_USERS=""\n\n'
+		printf 'SYS_SERVICES="\n'
+		for s in $cur_svcs; do printf '\t%s\n' "$s"; done
+		printf '"\n\n'
 		printf 'SYS_PACKAGES="\n'
 		for p in $cur_pkgs; do printf '\t%s\n' "$p"; done
 		printf '"\n\n'
-		printf 'SYS_SERVICES="\n'
-		for s in $cur_svcs; do printf '\t%s\n' "$s"; done
-		printf '"\n'
+		nf=no
+		for r in /etc/alpm/repos.d/nonfree.repo /etc/alpm/repos.d/*nonfree*.repo; do
+			[ -f "$r" ] || continue
+			grep -q '^enabled = yes' "$r" 2>/dev/null && nf=yes
+		done
+		printf 'SYS_ALLOW_NONFREE="%s"\n' "$nf"
 	} >"$CONF"
-	printf '  %sWrote %s. Nothing was installed or removed this run.%s\n' "$GREY" "$CONF" "$R"
+	printf '  %sWrote %s. Nothing was changed this run.%s\n' "$GREY" "$CONF" "$R"
 	exit 0
 fi
 
+[ -n "$SYS_DESCRIPTION" ] && note "$SYS_DESCRIPTION"
+
+# ------------------------------------------------------------------- identity
+identity_changes=""
+[ -n "$SYS_HOSTNAME" ] && [ "$SYS_HOSTNAME" != "$(current_hostname)" ] && \
+	identity_changes="$identity_changes hostname"
+[ -n "$SYS_TZ" ] && [ "$SYS_TZ" != "$(current_tz)" ] && \
+	identity_changes="$identity_changes timezone"
+[ -n "$SYS_LOCALE" ] && [ "$SYS_LOCALE" != "$(current_locale)" ] && \
+	identity_changes="$identity_changes locale"
+[ -n "$SYS_KEYMAP" ] && [ "$SYS_KEYMAP" != "$(current_keymap)" ] && \
+	identity_changes="$identity_changes keymap"
+
+# --------------------------------------------------------------- user accounts
+users_to_create=""
+for u in $SYS_USERS; do
+	name=${u%%:*}
+	[ -n "$name" ] || continue
+	getent passwd "$name" >/dev/null 2>&1 || users_to_create="$users_to_create $u"
+done
+
+# ---------------------------------------------------------------- unfree flag
+nonfree_change=""
+nf_now=no
+for r in /etc/alpm/repos.d/*nonfree*.repo; do
+	[ -f "$r" ] || continue
+	grep -q '^enabled = yes' "$r" 2>/dev/null && nf_now=yes
+done
+[ "$SYS_ALLOW_NONFREE" != "$nf_now" ] && nonfree_change="$nf_now -> $SYS_ALLOW_NONFREE"
+
+# --------------------------------------------------------------------- packages
 to_install=""
 for p in $SYS_PACKAGES; do
 	in_list "$p" $cur_pkgs || to_install="$to_install $p"
@@ -118,16 +210,19 @@ for s in $cur_svcs; do
 	in_list "$s" $SYS_SERVICES || svc_disable="$svc_disable $s"
 done
 
-if [ -z "$to_install$to_remove$svc_enable$svc_disable" ]; then
+if [ -z "$to_install$to_remove$svc_enable$svc_disable$identity_changes$users_to_create$nonfree_change" ]; then
 	note "already matches $CONF - nothing to do"
 	exit 0
 fi
 
 note "reconciling against $CONF"
-[ -n "$to_install" ]  && change "+" "install:${to_install}"
-[ -n "$to_remove" ]   && change "-" "remove: ${to_remove}"
-[ -n "$svc_enable" ]  && change "+" "enable services: ${svc_enable}"
-[ -n "$svc_disable" ] && change "-" "disable services:${svc_disable}"
+[ -n "$identity_changes" ]  && change "~" "identity:${identity_changes}"
+[ -n "$users_to_create" ]   && change "+" "create users:${users_to_create}"
+[ -n "$nonfree_change" ]    && change "~" "nonfree repos: $nonfree_change"
+[ -n "$to_install" ]        && change "+" "install:${to_install}"
+[ -n "$to_remove" ]         && change "-" "remove: ${to_remove}"
+[ -n "$svc_enable" ]        && change "+" "enable services: ${svc_enable}"
+[ -n "$svc_disable" ]       && change "-" "disable services:${svc_disable}"
 
 [ "$DRYRUN" = 1 ] && { printf '  %s(dry run - nothing changed)%s\n' "$GREY" "$R"; exit 0; }
 
@@ -146,6 +241,66 @@ if [ "${ARCTIC_GEN_SWITCH:-0}" != 1 ] && command -v arctic-generation >/dev/null
 fi
 
 rc=0
+
+# Identity, first - cheap, local, and nothing else here depends on it
+# succeeding or failing.
+if [ -n "$SYS_HOSTNAME" ] && [ "$SYS_HOSTNAME" != "$(current_hostname)" ]; then
+	printf '%s\n' "$SYS_HOSTNAME" >/etc/hostname
+	hostname "$SYS_HOSTNAME" 2>/dev/null || :
+fi
+if [ -n "$SYS_TZ" ] && [ "$SYS_TZ" != "$(current_tz)" ]; then
+	if [ -e "/usr/share/zoneinfo/$SYS_TZ" ]; then
+		ln -sf "/usr/share/zoneinfo/$SYS_TZ" /etc/localtime
+	else
+		printf '  %sSYS_TZ=%s not found under /usr/share/zoneinfo - skipped%s\n' "$AMB" "$SYS_TZ" "$R" >&2
+		rc=1
+	fi
+fi
+if [ -n "$SYS_LOCALE" ] && [ "$SYS_LOCALE" != "$(current_locale)" ]; then
+	{
+		printf 'LANG=%s\n' "$SYS_LOCALE"
+		[ -n "$SYS_LANG" ] && [ "$SYS_LANG" != "$SYS_LOCALE" ] && printf 'LC_ALL=%s\n' "$SYS_LANG"
+	} >/etc/locale.conf
+fi
+if [ -n "$SYS_KEYMAP" ] && [ "$SYS_KEYMAP" != "$(current_keymap)" ]; then
+	printf 'KEYMAP=%s\n' "$SYS_KEYMAP" >/etc/vconsole.conf
+	loadkmap </usr/share/keymaps/"$SYS_KEYMAP".bmap 2>/dev/null || :
+fi
+
+# Users - additive only. See system.conf's own comment on SYS_USERS for why
+# an account not listed here is never removed automatically.
+for u in $users_to_create; do
+	name=${u%%:*}
+	rest=${u#*:}
+	sh_=${rest%%:*}
+	grps=${rest#*:}
+	[ "$grps" = "$rest" ] && grps=""
+	sh_=${sh_:-/bin/sh}
+	add_args="-D -s $sh_ -h /home/$name"
+	[ -n "$grps" ] && add_args="$add_args -G ${grps%%,*}"
+	# shellcheck disable=SC2086
+	adduser $add_args "$name" 2>/dev/null || { rc=1; continue; }
+	if [ -n "$grps" ]; then
+		OIFS=$IFS; IFS=,
+		for g in $grps; do addgroup "$name" "$g" 2>/dev/null || :; done
+		IFS=$OIFS
+	fi
+done
+
+# The nonfree/alt-nonfree repos - toggled, not installed or removed from.
+# Turning this off does not uninstall anything already pulled from them;
+# it only stops new installs from reaching those repos.
+if [ -n "$nonfree_change" ]; then
+	for r in /etc/alpm/repos.d/*nonfree*.repo; do
+		[ -f "$r" ] || continue
+		if [ "$SYS_ALLOW_NONFREE" = yes ]; then
+			sed -i 's/^enabled = no/enabled = yes/' "$r"
+		else
+			sed -i 's/^enabled = yes/enabled = no/' "$r"
+		fi
+	done
+fi
+
 if [ -n "$to_install" ]; then
 	# shellcheck disable=SC2086
 	ALPM_YES=1 alpm ins $to_install || rc=1
@@ -181,6 +336,19 @@ if [ "$rc" = 0 ]; then
 				note "$myinit service definitions regenerated"
 		fi
 	fi
+
+	# The lock file: exactly what version of everything explicit is on the
+	# machine right now, the same reason a flake.lock exists next to a
+	# flake.nix. Nothing reads this back automatically on the next rebuild
+	# yet - it is a record of what was actually applied, not (yet) a pin
+	# enforced against repository drift.
+	{
+		printf '# Arctic Linux - package lock\n'
+		printf '# Written by arctic-rebuild %s. Not hand-edited; read %s instead.\n\n' \
+			"$(date '+%Y-%m-%d %H:%M:%S')" "$CONF"
+		explicit_pkgs_versioned
+	} >"$LOCKF" 2>/dev/null || :
+
 	note "rebuild complete"
 else
 	printf '  %ssome changes failed - see above%s\n' "$AMB" "$R" >&2
