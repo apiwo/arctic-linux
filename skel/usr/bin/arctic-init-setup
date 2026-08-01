@@ -3,7 +3,7 @@
 #
 #   arctic-init-setup <init> [--root DIR]
 #
-#   busybox openrc sysvinit runit dinit s6-66 systemd systemd-libre
+#   busybox openrc sysvinit runit dinit systemd-libre
 #
 # Arctic declares services once, in /etc/rc.d - a handful of variables
 # (NAME, CMD, ARGS, BACKGROUND) and a call to svc_main. That is the single
@@ -355,7 +355,6 @@ openrc)                 setup_openrc ;;
 sysvinit)               setup_sysvinit ;;
 runit)                  setup_runit ;;
 dinit)                  setup_dinit ;;
-s6-66)                  setup_s6 ;;
-systemd|systemd-libre)  setup_systemd ;;
+systemd-libre)          setup_systemd ;;
 *) echo "arctic-init-setup: unknown init '$INIT'" >&2; exit 1 ;;
 esac

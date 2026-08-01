@@ -252,7 +252,7 @@ check_config() {
 	cfg_enum A_BOOT_FW "$A_BOOT_FW" "efi bios"
 	cfg_enum A_BOOTLOADER "$A_BOOTLOADER" "limine grub"
 	cfg_enum A_MICROCODE "$A_MICROCODE" "auto intel amd none"
-	cfg_enum A_INIT "$A_INIT" "busybox openrc sysvinit runit dinit s6-66 systemd systemd-libre"
+	cfg_enum A_INIT "$A_INIT" "busybox openrc sysvinit runit dinit systemd-libre"
 	cfg_enum A_PKGIT "$A_PKGIT" "yes no"
 	cfg_enum A_NET "$A_NET" "offline dhcp wifi static"
 	cfg_enum A_DESKTOP "$A_DESKTOP" "none xfce kde niri dwm"
@@ -557,8 +557,7 @@ init_packages() {
 	sysvinit)      echo "sysvinit" ;;
 	runit)         echo "runit" ;;
 	dinit)         echo "dinit" ;;
-	s6-66)         echo "skalibs execline s6 s6-rc s6-linux-init" ;;
-	systemd|systemd-libre) echo "systemd" ;;
+	systemd-libre)         echo "systemd" ;;
 	esac
 }
 
@@ -570,8 +569,7 @@ init_path() {
 	sysvinit)      echo "/sbin/init" ;;
 	runit)         echo "/sbin/runit-init" ;;
 	dinit)         echo "/sbin/dinit" ;;
-	s6-66)         echo "/sbin/s6-linux-init" ;;
-	systemd|systemd-libre) echo "/usr/lib/systemd/systemd" ;;
+	systemd-libre)         echo "/usr/lib/systemd/systemd" ;;
 	esac
 }
 
