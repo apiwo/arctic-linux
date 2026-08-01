@@ -1,2 +1,0 @@
-# musl installs to /usr/musl, not /usr - it must not overwrite glibc's own
-# libc.so/crt files/headers on the same system. Do not regenerate.

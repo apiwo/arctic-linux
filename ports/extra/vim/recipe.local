@@ -1,4 +1,0 @@
-# --enable-gui=no --without-x is a hand fix (see recipe) - vim's own configure
-# auto-detects a GUI toolkit off the build host rather than the target, which
-# pulled in the host's GTK3/dbus/elogind stack. Do not let gen-ports.py
-# regenerate this file.

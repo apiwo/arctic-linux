@@ -13,6 +13,11 @@ branding/icons/
 branding/wallpaper/
 branding/misc/
 
+# Package recipes and ports live in their own repos now:
+# github.com/apiwo/arctic-linux-ports (source), arctic-linux-pkgs (binaries).
+# Still needed locally to build - just not published here.
+ports/
+
 # Editor and OS noise
 *.swp
 *~

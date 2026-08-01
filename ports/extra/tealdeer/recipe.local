@@ -1,2 +1,0 @@
-# package() installs target/release/tldr, not tealdeer - the crate's own
-# Cargo.toml names the binary tldr. Do not let gen-ports.py regenerate this.

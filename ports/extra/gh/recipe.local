@@ -1,3 +1,0 @@
-# GitHub CLI's own repo is cli/cli, not gh/gh - the archive tarball unpacks
-# to cli-{version}, not gh-{version}. gen-ports.py's directory-name heuristic
-# has no way to know that; do not let it regenerate this.
