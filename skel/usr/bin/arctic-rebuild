@@ -122,7 +122,7 @@ cur_svcs=$(enabled_services)
 # already is, instead of reconciling against a mostly-empty file, which for
 # packages/services would mean "remove everything" and for identity would
 # mean "wipe the hostname". A machine that already went through
-# arctic-strap has this seeded from the install itself; this path mainly
+# arctic-install has this seeded from the install itself; this path mainly
 # covers a machine from before system.conf existed, or a deleted file.
 all_empty=1
 for v in "$SYS_DESCRIPTION" "$SYS_HOSTNAME" "$SYS_TZ" "$SYS_LOCALE" "$SYS_LANG" \

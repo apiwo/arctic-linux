@@ -163,8 +163,16 @@ ZSH_AUTOSUGGEST_HIGHLIGHT_STYLE='fg=238'
 # Anything dropped in here is picked up automatically.
 for f in /etc/zsh/zshrc.d/*.zsh(N); do source $f; done
 
-# A quiet greeting on the first interactive shell of a login session.
+# A quiet greeting on the first interactive shell of a login session. The
+# install reminder only shows up on the live ISO - INSTALLED= is only ever
+# written into /etc/arctic-release by arctic-install itself, so its absence
+# is what tells the live image apart from a real install.
 if [[ -o interactive ]] && [[ -z $ARCTIC_GREETED ]] && [[ -z $ARCTIC_CHROOT ]]; then
 	export ARCTIC_GREETED=1
-	[[ -x /usr/bin/arcticfetch ]] && [[ $SHLVL -eq 1 ]] && arcticfetch
+	if [[ -x /usr/bin/arcticfetch ]] && [[ $SHLVL -eq 1 ]]; then
+		arcticfetch
+		if ! grep -q '^INSTALLED=' /etc/arctic-release 2>/dev/null; then
+			print -P "%F{245}Connect with %F{44}iwctl%F{245} or plug in Ethernet, edit %F{44}/etc/arctic/install.conf%F{245}, then run %F{44}arctic-install%F{245} to install.%f"
+		fi
+	fi
 fi

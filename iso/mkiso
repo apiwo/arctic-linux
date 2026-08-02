@@ -74,7 +74,7 @@ install -Dm755 "$SRCTREE/alpm/alpm"        "$S/usr/bin/alpm"
 install -Dm755 "$SRCTREE/alpm/alpm-build"  "$S/usr/bin/alpm-build"
 install -Dm755 "$SRCTREE/alpm/alpm-repo"   "$S/usr/bin/alpm-repo"
 install -Dm644 "$SRCTREE/alpm/libalpm.sh"  "$S/usr/lib/alpm/libalpm.sh"
-install -Dm755 "$SRCTREE/installer/arctic-strap"      "$S/usr/bin/arctic-strap"
+install -Dm755 "$SRCTREE/installer/arctic-install"      "$S/usr/bin/arctic-install"
 install -Dm755 "$SRCTREE/installer/arctic-boot-strap" "$S/usr/bin/arctic-boot-strap"
 install -Dm755 "$SRCTREE/installer/arctic-chroot"     "$S/usr/bin/arctic-chroot"
 install -Dm644 "$SRCTREE/installer/lib/tui.sh"        "$S/usr/lib/arctic/tui.sh"
@@ -171,7 +171,7 @@ mkdir -p "$S/etc/alpm/repos.d"
 cp -f "$SRCTREE/skel/etc/alpm/alpm.conf" "$S/etc/alpm/alpm.conf"
 cp -f "$SRCTREE/skel/etc/alpm/repos.d/"*.repo "$S/etc/alpm/repos.d/"
 
-# The image carries its own copy of the repositories, so arctic-strap can
+# The image carries its own copy of the repositories, so arctic-install can
 # install a complete system with no network at all. These entries come first;
 # the network mirrors stay configured behind them for anything not on the disc.
 if [ -d "$B/repo" ]; then
@@ -185,7 +185,7 @@ enabled = yes
 priority = 1
 EOF
 		# The network repo of the same name would collide, so retire it here and
-		# let arctic-strap re-enable it on the installed system.
+		# let arctic-install re-enable it on the installed system.
 		[ -f "$S/etc/alpm/repos.d/$r.repo" ] && \
 			sed -i 's/^enabled = yes/enabled = no/' "$S/etc/alpm/repos.d/$r.repo"
 	done

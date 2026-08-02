@@ -8,7 +8,7 @@
 # --efi/--bios are optional - a path ending in efi/EFI means UEFI, anything
 # else means BIOS, without needing to say which on the command line too.
 #
-# arctic-strap calls this automatically at the end of a run where the config
+# arctic-install calls this automatically at the end of a run where the config
 # set A_DISK - normally there is nothing to run here by hand at all. This is
 # only for wiring up a bootloader on its own, for instance after chrooting in
 # to fix one:
@@ -34,9 +34,9 @@ for d in /usr/lib/alpm "$(dirname "$0")/../alpm" ./alpm; do
 	[ -f "$d/libalpm.sh" ] && { . "$d/libalpm.sh"; break; }
 done
 
-CONF=/tmp/arctic-strap.conf
+CONF=/tmp/arctic-install.conf
 BOOTCONF=/tmp/arctic-boot-strap.conf
-LOGF=/tmp/arctic-strap.log
+LOGF=/tmp/arctic-install.log
 
 detect_firmware() { [ -d /sys/firmware/efi ] && echo efi || echo bios; }
 logit() { printf '[%s] %s\n' "$(date '+%H:%M:%S')" "$*" >>"$LOGF"; }
@@ -57,7 +57,7 @@ write_limine_conf() {
 
 	# An encrypted root needs the initramfs to unlock it before "root=" means
 	# anything - rd.luks.uuid= is what arctic-mkinitramfs's /init looks for
-	# to trigger the passphrase prompt. crypttab (written by arctic-strap) is
+	# to trigger the passphrase prompt. crypttab (written by arctic-install) is
 	# the one place that UUID is recorded, so read it back from there rather
 	# than needing a separate answer-file variable to stay in sync with it.
 	luks=""
@@ -241,7 +241,7 @@ fi
 [ -n "$method" ] || method=$(detect_firmware)
 [ -n "$loader" ] || loader=limine
 
-# The kernel choice is remembered from arctic-strap's run, if there was one.
+# The kernel choice is remembered from arctic-install's run, if there was one.
 K=Arctic-base-kernel
 [ -f "$CONF" ] && . "$CONF" 2>/dev/null && K=${A_KERNEL:-$K}
 

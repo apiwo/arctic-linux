@@ -26,7 +26,8 @@ start() {
 	static)
 		ip addr add "$NET_ADDR" dev "$iface" 2>/dev/null
 		ip route add default via "$NET_GATEWAY" 2>/dev/null
-		printf 'nameserver %s\n' "$NET_DNS" >/etc/resolv.conf ;;
+		: >/etc/resolv.conf
+		for d in $NET_DNS; do printf 'nameserver %s\n' "$d" >>/etc/resolv.conf; done ;;
 	wifi)
 		# iwd owns the link; it only needs an address once associated.
 		udhcpc -b -i "$iface" -p "/run/udhcpc.$iface.pid" \

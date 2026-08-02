@@ -11,12 +11,14 @@ Boot the ISO, edit the config, run one command:
 
 ```sh
 vi /etc/arctic/install.conf
-arctic-strap
+arctic-install
 ```
 
 Set `A_DISK=/dev/sdX` in the config and that one command partitions,
 formats, mounts, installs, and sets up the bootloader. Leave it commented
-out to partition manually first, then `arctic-strap /mnt`.
+out and set `A_ROOT_PART=/dev/sdX2` instead to use partitions you made
+yourself. Either way, `arctic-install` shows what it is about to do and
+asks for confirmation before it touches anything.
 
 ## Configure
 

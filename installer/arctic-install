@@ -1,25 +1,29 @@
 #!/bin/sh
-# arctic-strap - install Arctic Linux from a declarative config file
+# arctic-install - install Arctic Linux from a declarative config file
 #
-#   arctic-strap                   edit /etc/arctic/install.conf, then just this
-#   arctic-strap -n                check the config and stop, install nothing
-#   arctic-strap -c file           install from a specific config file instead
-#   arctic-strap -f                skip the "already installed here" prompt
+#   arctic-install                   edit /etc/arctic/install.conf, then just this
+#   arctic-install -n                check the config and stop, install nothing
+#   arctic-install -c file           install from a specific config file instead
+#   arctic-install -f                skip the "make these changes?" prompt
 #
 # There are no menus, no questions and no arguments - edit the config, then
 # run it:
 #
 #   vi /etc/arctic/install.conf
-#   arctic-strap
+#   arctic-install
 #
 # The config says which disk (A_DISK, wiped and partitioned automatically)
 # or which existing partitions (A_ROOT_PART / A_BOOT_PART, used as they are)
 # to install onto. Where those get mounted during the install is internal -
 # there is no target directory to pass in and keep in sync.
 #
-# The config is checked before anything is touched. It either says
-# "config accepted" and installs, or lists what is wrong and stops without
-# having written a thing.
+# The config is checked before anything is touched. If it does not parse
+# cleanly, everything it found wrong is listed and nothing is installed.
+# If it does, it prints a summary of what it is about to do - which disk
+# or partitions, which filesystem, encryption, kernel, hostname - and asks
+# for confirmation before touching anything. The bootloader is configured
+# automatically at the end, from the same config, since A_BOOTLOADER and
+# friends already say everything it needs to know.
 #
 # shellcheck shell=sh disable=SC2039,SC2059,SC2086
 
@@ -29,7 +33,7 @@ LIB=/usr/lib/arctic
 for d in "$LIB" "$(dirname "$0")/lib" ./lib; do
 	[ -f "$d/tui.sh" ] && { . "$d/tui.sh"; TUILIB=$d; break; }
 done
-[ -n "${c_teal:-}" ] || { echo "arctic-strap: cannot find tui.sh" >&2; exit 1; }
+[ -n "${c_teal:-}" ] || { echo "arctic-install: cannot find tui.sh" >&2; exit 1; }
 
 for d in /usr/lib/alpm "$(dirname "$0")/../alpm" ./alpm; do
 	[ -f "$d/libalpm.sh" ] && { . "$d/libalpm.sh"; break; }
@@ -37,7 +41,7 @@ done
 
 VERSION="1.0.0"
 CONF=/etc/arctic/install.conf
-LOGF=/tmp/arctic-strap.log
+LOGF=/tmp/arctic-install.log
 
 # ------------------------------------------------------------------- defaults
 # Used as-is for anything the config file leaves unset - either because there
@@ -186,6 +190,18 @@ detect_rotational() {
 
 detect_existing_install() { [ -f "$1/etc/arctic-release" ]; }
 
+# "20G", "512M", "1T" -> bytes. Used for A_DISK_RESERVE, which needs to do
+# arithmetic on a size sfdisk would otherwise just accept as text.
+size_to_bytes() {
+	case "$1" in
+	*T|*t) awk -v n="${1%[Tt]}" 'BEGIN{printf "%.0f", n*1024*1024*1024*1024}' ;;
+	*G|*g) awk -v n="${1%[Gg]}" 'BEGIN{printf "%.0f", n*1024*1024*1024}' ;;
+	*M|*m) awk -v n="${1%[Mm]}" 'BEGIN{printf "%.0f", n*1024*1024}' ;;
+	*K|*k) awk -v n="${1%[Kk]}" 'BEGIN{printf "%.0f", n*1024}' ;;
+	*)     printf '%s' "$1" ;;
+	esac
+}
+
 # ------------------------------------------------------------ config checking
 #
 # Everything the config says is checked before a single byte is written. A
@@ -223,6 +239,12 @@ check_config() {
 		cfg_warn "A_FS is the old name for A_ROOT_FS - still honoured, but rename it"
 	fi
 	[ -n "$A_ROOT_FS" ] || A_ROOT_FS=ext4
+
+	# Same for A_EXTRA, the old name for A_PKGS.
+	if [ -n "$A_EXTRA" ]; then
+		A_PKGS="${A_PKGS:+$A_PKGS }$A_EXTRA"
+		cfg_warn "A_EXTRA is the old name for A_PKGS - still honoured, but rename it"
+	fi
 
 	# --- disk -------------------------------------------------------
 	if [ -n "$A_DISK" ] && [ -n "$A_ROOT_PART" ]; then
@@ -265,6 +287,20 @@ check_config() {
 	cfg_enum A_NTP "$A_NTP" "yes no"
 	cfg_enum A_TRIM "$A_TRIM" "auto yes no"
 	cfg_enum A_DOAS_NOPASS "$A_DOAS_NOPASS" "yes no"
+	cfg_enum A_LOCK_ROOT "$A_LOCK_ROOT" "yes no"
+	cfg_enum A_SSH_PASSWORD_AUTH "$A_SSH_PASSWORD_AUTH" "yes no"
+	cfg_enum A_HARDEN_TMP "$A_HARDEN_TMP" "yes no"
+	cfg_enum A_MAC_RANDOMIZE "$A_MAC_RANDOMIZE" "yes no"
+	cfg_enum A_BTRFS_NO_SNAPSHOT_CACHE "$A_BTRFS_NO_SNAPSHOT_CACHE" "yes no"
+	cfg_enum A_ZRAM "$A_ZRAM" "yes no"
+	cfg_enum A_CHROOT_SHELL "$A_CHROOT_SHELL" "yes no"
+	cfg_enum A_REBOOT "$A_REBOOT" "yes no"
+	for _s in $A_SETS; do
+		case " devel net media office virt gaming cli " in
+		*" $_s "*) ;;
+		*) cfg_err "A_SETS contains an unknown set '$_s' (try: devel net media office virt gaming cli)" ;;
+		esac
+	done
 
 	# --- things that only make sense together -----------------------
 	[ "$A_SNAPSHOT" = btrfs ] && [ "$A_ROOT_FS" != btrfs ] && \
@@ -283,6 +319,12 @@ check_config() {
 		cfg_warn "A_USERPASS is set but A_USER is empty - no account will be created"
 	[ -n "$A_ROOT_PART" ] && [ "$A_FORMAT" = no ] && \
 		cfg_warn "installing onto $A_ROOT_PART without formatting - whatever is already there stays"
+	[ "$A_LOCK_ROOT" = yes ] && [ -z "$A_USER" ] && \
+		cfg_warn "A_LOCK_ROOT=yes but A_USER is empty - ignored, that would leave no way in at all"
+	[ "$A_SSH_PASSWORD_AUTH" = no ] && [ "$A_SSH" != yes ] && \
+		cfg_warn "A_SSH_PASSWORD_AUTH=no has nothing to do - A_SSH is not yes"
+	[ -n "$A_SSH_KEYS" ] && [ "$A_SSH" != yes ] && \
+		cfg_warn "A_SSH_KEYS is set but A_SSH is not yes - the keys are still written, sshd just is not running to use them"
 
 	# Wiping a disk that is currently mounted is never what anyone means.
 	if [ -n "$A_DISK" ]; then
@@ -298,7 +340,7 @@ check_config() {
 		printf '%s\n' "  $CFFILE"
 		printf '%s\n' "$CFG_ERRORS"
 		[ -n "$CFG_WARNINGS" ] && printf '\n  also:%s\n' "$CFG_WARNINGS"
-		printf '\nNothing has been changed. Fix the config and run arctic-strap again.\n\n'
+		printf '\nNothing has been changed. Fix the config and run arctic-install again.\n\n'
 		exit 1
 	fi
 	printf '%sConfig file accepted%s\n' "${c_teal:-}" "${t_reset:-}"
@@ -350,21 +392,40 @@ make_root_fs() {
 	case "$A_ROOT_FS" in
 	btrfs)
 		mkfs.btrfs -f -L arctic-root "$dev" >>"$LOGF" 2>&1 || return 1
-		# The @ / @home layout is what both timeshift and snapper expect: the
+		# The @ / @home split is what both timeshift and snapper expect: the
 		# root subvolume can then be rolled back without taking home with it.
+		# A_BTRFS_SUBVOLS names which ones to create; A_BTRFS_NO_SNAPSHOT_CACHE
+		# adds @cache for /var/cache when the config asks for it, so cache
+		# churn does not bloat every root snapshot taken afterward.
+		subvols=${A_BTRFS_SUBVOLS:-"@ @home @snapshots @log"}
+		[ "$A_BTRFS_NO_SNAPSHOT_CACHE" = yes ] && \
+			case " $subvols " in *" @cache "*) ;; *) subvols="$subvols @cache" ;; esac
+
 		mount "$dev" "$TARGET" >>"$LOGF" 2>&1 || return 1
-		btrfs subvolume create "$TARGET/@"          >>"$LOGF" 2>&1 || return 1
-		btrfs subvolume create "$TARGET/@home"      >>"$LOGF" 2>&1 || return 1
-		btrfs subvolume create "$TARGET/@snapshots" >>"$LOGF" 2>&1 || return 1
-		btrfs subvolume create "$TARGET/@log"       >>"$LOGF" 2>&1 || :
+		for sv in $subvols; do
+			btrfs subvolume create "$TARGET/$sv" >>"$LOGF" 2>&1 || \
+				{ [ "$sv" = "@" ] && { umount "$TARGET" >>"$LOGF" 2>&1; return 1; }; }
+		done
 		umount "$TARGET" >>"$LOGF" 2>&1 || return 1
 
-		A_BTRFS_OPTS="rw,noatime,compress=zstd:3,space_cache=v2"
+		A_BTRFS_OPTS=${A_BTRFS_OPTS:-rw,noatime,compress=zstd:3,space_cache=v2}
 		mount -o "$A_BTRFS_OPTS,subvol=@" "$dev" "$TARGET" >>"$LOGF" 2>&1 || return 1
-		mkdir -p "$TARGET/home" "$TARGET/.snapshots" "$TARGET/var/log"
-		mount -o "$A_BTRFS_OPTS,subvol=@home"      "$dev" "$TARGET/home"      >>"$LOGF" 2>&1 || :
-		mount -o "$A_BTRFS_OPTS,subvol=@snapshots" "$dev" "$TARGET/.snapshots" >>"$LOGF" 2>&1 || :
-		mount -o "$A_BTRFS_OPTS,subvol=@log"       "$dev" "$TARGET/var/log"   >>"$LOGF" 2>&1 || :
+		for sv in $subvols; do
+			case "$sv" in
+			"@")          continue ;;
+			"@home")      d=home ;;
+			"@snapshots") d=.snapshots ;;
+			"@log")       d=var/log ;;
+			"@cache")     d=var/cache ;;
+			# A subvolume with no known mountpoint is still created above -
+			# it exists on disk for whoever wants it - but nothing here
+			# knows where it should live, so it is left unmounted. Say so
+			# in A_MOUNTS with subvol=<name> if you want it mounted too.
+			*) logit "btrfs subvolume $sv created but not auto-mounted (unknown name)"; continue ;;
+			esac
+			mkdir -p "$TARGET/$d"
+			mount -o "$A_BTRFS_OPTS,subvol=$sv" "$dev" "$TARGET/$d" >>"$LOGF" 2>&1 || :
+		done
 		;;
 	xfs)  mkfs.xfs -f -L arctic-root "$dev" >>"$LOGF" 2>&1 || return 1
 	      mount "$dev" "$TARGET" >>"$LOGF" 2>&1 || return 1 ;;
@@ -401,11 +462,30 @@ partition_disk() {
 	step "Partitioning $disk" "wiping old signatures"
 	wipefs -a "$disk" >>"$LOGF" 2>&1 || :
 
+	# A_DISK_RESERVE leaves free space at the end of the disk instead of
+	# giving all of it to root - for a partition to be added later. The
+	# root partition is always last, so this only has to turn its size
+	# from "the rest of the disk" into an explicit sector count - sfdisk's
+	# script format takes a bare number as sectors, not bytes.
+	rootsize=""
+	if [ -n "$A_DISK_RESERVE" ]; then
+		reserve_b=$(size_to_bytes "$A_DISK_RESERVE")
+		disk_b=$(blockdev --getsize64 "$disk" 2>/dev/null)
+		ss=$(blockdev --getss "$disk" 2>/dev/null); ss=${ss:-512}
+		fw_b=$([ "$fw" = efi ] && echo $((512*1024*1024)) || echo $((1*1024*1024)))
+		if [ -n "$disk_b" ] && [ -n "$reserve_b" ]; then
+			rootsize=$(( (disk_b - fw_b - reserve_b) / ss ))
+			[ "$rootsize" -gt 0 ] || bail "A_DISK_RESERVE=$A_DISK_RESERVE leaves no room for root on $disk"
+		else
+			warn_soft "could not size $disk to honour A_DISK_RESERVE - using the whole disk"
+		fi
+	fi
+
 	if [ "$fw" = efi ]; then
 		step "Partitioning $disk" "GPT: EFI + root"
 		# sfdisk reads the whole layout on stdin, which avoids a pile of
 		# interactive fdisk keystrokes.
-		printf 'label: gpt\n,512M,U\n,,L\n' | sfdisk --quiet "$disk" >>"$LOGF" 2>&1 \
+		printf 'label: gpt\n,512M,U\n,%s,L\n' "$rootsize" | sfdisk --quiet "$disk" >>"$LOGF" 2>&1 \
 			|| bail "partitioning $disk failed - see $LOGF"
 		p1=$(part_name "$disk" 1); p2=$(part_name "$disk" 2)
 		step "Formatting $p1" "EFI (FAT32)"
@@ -413,7 +493,7 @@ partition_disk() {
 			|| bail "mkfs.vfat failed on $p1 - see $LOGF"
 	else
 		step "Partitioning $disk" "GPT: BIOS boot + root"
-		printf 'label: gpt\n,1M,21686148-6449-6E6F-744E-656564454649\n,,L\n' \
+		printf 'label: gpt\n,1M,21686148-6449-6E6F-744E-656564454649\n,%s,L\n' "$rootsize" \
 			| sfdisk --quiet "$disk" >>"$LOGF" 2>&1 \
 			|| bail "partitioning $disk failed - see $LOGF"
 		p1=""; p2=$(part_name "$disk" 2)
@@ -484,11 +564,14 @@ mount_existing() {
 			A_ROOT_FS=btrfs
 			A_BTRFS_OPTS=${A_BTRFS_OPTS:-rw,noatime,compress=zstd:3,space_cache=v2}
 			if mount -o "$A_BTRFS_OPTS,subvol=@" "$rootsrc" "$TARGET" >>"$LOGF" 2>&1; then
-				for sv in home .snapshots var/log; do
+				dirs="home .snapshots var/log"
+				[ "$A_BTRFS_NO_SNAPSHOT_CACHE" = yes ] && dirs="$dirs var/cache"
+				for sv in $dirs; do
 					case "$sv" in
 					home)       s=@home ;;
 					.snapshots) s=@snapshots ;;
 					var/log)    s=@log ;;
+					var/cache)  s=@cache ;;
 					esac
 					mkdir -p "$TARGET/$sv"
 					mount -o "$A_BTRFS_OPTS,subvol=$s" "$rootsrc" "$TARGET/$sv" >>"$LOGF" 2>&1 || :
@@ -776,19 +859,39 @@ do_install() {
 	esac
 	A_DM=$dm
 
-	step "Installing extra packages" "${A_EXTRA:-none}"
-	[ -n "$A_EXTRA" ] && target_alpm ins $A_EXTRA || :
 	step "Installing fonts" "${A_FONTS:-none}"
 	[ -n "$A_FONTS" ] && target_alpm ins $A_FONTS || :
 	step "Installing selected packages" "${A_PKGS:-none}"
 	[ -n "$A_PKGS" ] && target_alpm ins $A_PKGS || :
+	step "Installing package sets" "${A_SETS:-none}"
+	for _set in $A_SETS; do
+		case "$_set" in
+		devel)  target_alpm ins cmake llvm meson ninja pkgconf gmake gdb || : ;;
+		net)    target_alpm ins curl wget rsync openssh nmap || : ;;
+		media)  target_alpm ins ffmpeg mpv || : ;;
+		office) target_alpm ins libreoffice || : ;;
+		virt)   target_alpm ins qemu libvirt docker podman containerd crun conmon || : ;;
+		gaming) target_alpm ins wine steam gamemode gamescope dxvk || : ;;
+		cli)    target_alpm ins ripgrep fd bat eza fzf zoxide || : ;;
+		esac
+	done
 	# arctic-sound is the whole working stack: pipewire, wireplumber, the
 	# pulse shim so anything expecting PulseAudio still plays, and alsamixer
 	# for when levels need setting directly.
 	[ "$A_AUDIO" = yes ] && { target_alpm ins arctic-sound || \
 		target_alpm ins pipewire wireplumber pipewire-pulse alsa-utils || :; }
 	[ "$A_BLUETOOTH" = yes ] && target_alpm ins bluez bluez-utils || :
-	[ "$A_SSH" = yes ] && target_alpm ins openssh || :
+	if [ "$A_SSH" = yes ]; then
+		target_alpm ins openssh || :
+		if [ "$A_SSH_PASSWORD_AUTH" = no ] && [ -f "$TARGET/etc/ssh/sshd_config" ]; then
+			if grep -q '^#\?PasswordAuthentication' "$TARGET/etc/ssh/sshd_config"; then
+				sed -i 's/^#\?PasswordAuthentication.*/PasswordAuthentication no/' \
+					"$TARGET/etc/ssh/sshd_config"
+			else
+				printf 'PasswordAuthentication no\n' >>"$TARGET/etc/ssh/sshd_config"
+			fi
+		fi
+	fi
 	[ "$A_FIREWALL" = yes ] && target_alpm ins nftables || :
 
 	step "Installing filesystem tools" "$A_ROOT_FS"
@@ -816,10 +919,19 @@ do_install() {
 	step "Setting up swap" "$A_SWAP"
 	setup_swap
 
+	if [ "$A_ZRAM" = yes ]; then
+		step "Setting up zram" "$A_ZRAM_SIZE compressed with $A_ZRAM_ALGO"
+		mkdir -p "$TARGET/etc/arctic" "$TARGET/etc/modules-load.d"
+		printf 'ZRAM_SIZE=%s\nZRAM_ALGO=%s\n' "$A_ZRAM_SIZE" "$A_ZRAM_ALGO" \
+			>"$TARGET/etc/arctic/zram.conf"
+		grep -q '^zram$' "$TARGET/etc/modules-load.d/arctic.conf" 2>/dev/null || \
+			printf 'zram\n' >>"$TARGET/etc/modules-load.d/arctic.conf"
+	fi
+
 	step "Configuring locale" "$A_LOCALE"
 	printf '%s UTF-8\n' "$A_LOCALE" >"$TARGET/etc/locale.gen"
 	printf 'LANG=%s\nLC_COLLATE=C\n' "$A_LANG" >"$TARGET/etc/locale.conf"
-	printf 'KEYMAP=%s\nFONT=arctic\n' "$A_KEYMAP" >"$TARGET/etc/vconsole.conf"
+	printf 'KEYMAP=%s\nFONT=%s\n' "$A_KEYMAP" "${A_CONSOLE_FONT:-arctic}" >"$TARGET/etc/vconsole.conf"
 	chroot_run locale-gen 2>/dev/null || logit "locale-gen unavailable, skipped"
 
 	step "Setting the time zone" "$A_TZ"
@@ -874,6 +986,15 @@ EOF
 	chroot_run arctic-generation create "initial install" >/dev/null 2>&1 || \
 		logit "could not record generation 1"
 
+	if [ -n "$A_POST" ]; then
+		step "Running post-install commands" "A_POST"
+		if chroot_run "$A_POST"; then
+			logit "A_POST commands finished"
+		else
+			warn_soft "one or more A_POST commands failed - see $LOGF"
+		fi
+	fi
+
 	step "Finishing up" "cleaning the cache"
 	rm -rf "$TARGET/var/cache/alpm/build"/* 2>/dev/null || :
 	# The first boot of a finished install shows the Arctic greeting.
@@ -889,9 +1010,7 @@ EOF
 # wire up the bootloader - one command, nothing to pre-mount by hand.
 run_install() {
 	: >"$LOGF"
-	total=24
-	[ -n "$A_DISK" ] && total=$((total + 8))
-	tui_gauge_init "$total"
+	tui_gauge_init 41
 
 	if [ -n "$A_DISK" ]; then
 		partition_disk
@@ -937,7 +1056,7 @@ setup_snapshots() {
 
 	mkdir -p "$TARGET/etc/arctic" "$TARGET/.snapshots"
 	cat >"$TARGET/etc/arctic/snapshot.conf" <<-EOF
-		# Written by arctic-strap.
+		# Written by arctic-install.
 		# Which tool arctic-snapshot hands over to. It drives btrfs directly
 		# when that tool is not installed, which is what both of them do
 		# underneath anyway.
@@ -983,7 +1102,7 @@ chroot_run() {
 genfstab() {
 	_t=${1:-$TARGET}
 	printf '# Arctic Linux - /etc/fstab\n'
-	printf '# Generated by arctic-strap from the live mount table.\n'
+	printf '# Generated by arctic-install from the live mount table.\n'
 	printf '# <device>\t<mount>\t<type>\t<options>\t<dump>\t<pass>\n'
 
 	# Longest paths last so /boot/efi is written after /boot, which is the
@@ -1059,7 +1178,7 @@ seed_system_conf() {
 		printf '# Every rebuild records a generation first, so a bad edit can be undone\n'
 		printf '# with `arctic rollback` - or from the boot menu if it will not boot.\n'
 		printf '#\n'
-		printf '# Written by arctic-strap %s from the install itself.\n\n' \
+		printf '# Written by arctic-install %s from the install itself.\n\n' \
 			"$(date '+%Y-%m-%d %H:%M:%S')"
 
 		printf 'SYS_DESCRIPTION=""\n\n'
@@ -1108,6 +1227,23 @@ seed_system_conf() {
 
 write_fstab() {
 	genfstab "$TARGET" >"$TARGET/etc/fstab"
+
+	# genfstab always gives /tmp a plain tmpfs line; A_HARDEN_TMP just adds
+	# noexec to it rather than writing a second, conflicting entry.
+	if [ "$A_HARDEN_TMP" = yes ]; then
+		sed -i \
+			's#^tmpfs\t/tmp\ttmpfs\trw,nosuid,nodev,#tmpfs\t/tmp\ttmpfs\trw,nosuid,nodev,noexec,#' \
+			"$TARGET/etc/fstab"
+	fi
+
+	if [ -n "$A_MOUNTS" ]; then
+		printf '\n# Extra mounts from install.conf (A_MOUNTS)\n' >>"$TARGET/etc/fstab"
+		printf '%s\n' "$A_MOUNTS" | while read -r dev mnt fst opts; do
+			case "$dev" in ""|\#*) continue ;; esac
+			printf '%s\t%s\t%s\t%s\t0\t2\n' "$dev" "$mnt" "$fst" "${opts:-defaults}"
+		done >>"$TARGET/etc/fstab"
+	fi
+
 	logit "fstab written:"
 	sed 's/^/    /' "$TARGET/etc/fstab" >>"$LOGF"
 }
@@ -1130,13 +1266,6 @@ write_crypttab() {
 setup_swap() {
 	case "$A_SWAP" in
 	none) return 0 ;;
-	zram)
-		mkdir -p "$TARGET/etc/arctic"
-		printf 'ZRAM_SIZE=%s\nZRAM_ALGO=zstd\n' "$A_SWAPSIZE" >"$TARGET/etc/arctic/zram.conf"
-		printf 'zram\n' >>"$TARGET/etc/modules-load.d/arctic.conf" 2>/dev/null || {
-			mkdir -p "$TARGET/etc/modules-load.d"
-			printf 'zram\n' >"$TARGET/etc/modules-load.d/arctic.conf"; }
-		return 0 ;;
 	partition)
 		[ -n "$A_SWAPDEV" ] || return 0
 		run mkswap -L arctic-swap "$A_SWAPDEV" || return 0
@@ -1194,9 +1323,22 @@ create_users() {
 			[ -f "$TARGET/etc/skel/$f" ] && \
 				cp -f "$TARGET/etc/skel/$f" "$TARGET/home/$A_USER/$f"
 		done
-		chroot_run "chown -R $A_USER:$A_USER /home/$A_USER" || :
 	fi
-	if [ "$A_ROOTPASS" = "!locked" ]; then
+	# A_SSH_KEYS goes to whichever account will actually be logged into -
+	# A_USER if there is one, root otherwise.
+	if [ -n "$A_SSH_KEYS" ]; then
+		if [ -n "$A_USER" ]; then kd="$TARGET/home/$A_USER/.ssh"
+		else kd="$TARGET/root/.ssh"; fi
+		mkdir -p "$kd"
+		printf '%s\n' "$A_SSH_KEYS" >"$kd/authorized_keys"
+		chmod 700 "$kd"; chmod 600 "$kd/authorized_keys"
+		logit "wrote authorized_keys to $kd"
+	fi
+	[ -n "$A_USER" ] && { chroot_run "chown -R $A_USER:$A_USER /home/$A_USER" || :; }
+	if [ "$A_LOCK_ROOT" = yes ] && [ -n "$A_USER" ]; then
+		chroot_run "passwd -l root" || :
+		logit "root account locked (A_LOCK_ROOT=yes)"
+	elif [ "$A_ROOTPASS" = "!locked" ]; then
 		chroot_run "passwd -l root" || :
 		logit "root account locked"
 	elif [ -n "$A_ROOTPASS" ]; then
@@ -1224,19 +1366,15 @@ configure_network() {
 			[ -n "$A_WIFI_IFACE" ] && printf 'NET_IFACE=%s\n' "$A_WIFI_IFACE"
 		} >"$TARGET/etc/arctic/network.conf"
 		;;
-	static:*)
-		iface=$(printf '%s' "$A_NET" | cut -d: -f2)
-		addr=$(printf '%s' "$A_NET" | cut -d: -f3)
-		gw=$(printf '%s' "$A_NET" | cut -d: -f4)
-		dns=$(printf '%s' "$A_NET" | cut -d: -f5)
+	static)
 		cat >"$TARGET/etc/arctic/network.conf" <<EOF
 NET_MODE=static
-NET_IFACE=$iface
-NET_ADDR=$addr
-NET_GATEWAY=$gw
-NET_DNS=$dns
+NET_ADDR=$A_IP
+NET_GATEWAY=$A_GATEWAY
+NET_DNS=$A_DNS
 EOF
-		printf 'nameserver %s\n' "$dns" >"$TARGET/etc/resolv.conf"
+		: >"$TARGET/etc/resolv.conf"
+		for d in $A_DNS; do printf 'nameserver %s\n' "$d" >>"$TARGET/etc/resolv.conf"; done
 		;;
 	*)
 		printf 'NET_MODE=dhcp\n' >"$TARGET/etc/arctic/network.conf"
@@ -1244,6 +1382,15 @@ EOF
 			printf 'nameserver 1.1.1.1\nnameserver 9.9.9.9\n' >"$TARGET/etc/resolv.conf"
 		;;
 	esac
+
+	# Randomise the MAC iwd presents per network rather than broadcasting the
+	# adapter's real, permanent one - see iwd.config(5) for what "network"
+	# means here (a MAC derived from the SSID, stable per-network, not
+	# traceable back to the hardware).
+	if [ "$A_MAC_RANDOMIZE" = yes ]; then
+		mkdir -p "$TARGET/etc/iwd"
+		printf '[General]\nAddressRandomization=network\n' >"$TARGET/etc/iwd/main.conf"
+	fi
 }
 
 enable_services() {
@@ -1265,13 +1412,13 @@ enable_services() {
 	[ "$A_BLUETOOTH" = yes ] && svc bluetoothd
 	[ "$A_AUDIO" = yes ] && svc pipewire
 	[ "$A_TRIM" = yes ] && [ "$(detect_rotational)" = ssd ] && svc fstrim
+	[ "$A_ZRAM" = yes ] && svc zram
 	case "${A_DM:-none}" in
 	sddm)    svc sddm ;;
 	lightdm) svc lightdm ;;
 	greetd)  svc greetd ;;
 	esac
 	for s in $A_SERVICES; do svc "$s"; done
-	[ "$A_AUDIO" = yes ] && svc pipewire
 	:
 }
 
@@ -1283,7 +1430,7 @@ ID=arctic
 BUILD_ID=$(date '+%Y.%m.%d')
 KERNEL=$A_KERNEL
 INSTALLED=$(date '+%Y-%m-%d %H:%M:%S')
-INSTALLER=arctic-strap $VERSION
+INSTALLER="arctic-install $VERSION"
 LIBC=glibc
 TOOLCHAIN=llvm
 USERLAND=bsd
@@ -1341,20 +1488,20 @@ CHECKONLY=""
 CFFILE="$CONF"
 while [ $# -gt 0 ]; do
 	case "$1" in
-	-c|--config) shift; CFFILE=${1:?usage: arctic-strap -c <file>}; shift ;;
+	-c|--config) shift; CFFILE=${1:?usage: arctic-install -c <file>}; shift ;;
 	-f|--force)  FORCE=1; shift ;;
 	-n|--check|--dry-run) CHECKONLY=1; shift ;;
 	-h|--help|help)
-		sed -n '2,25p' "$0" | sed 's/^# \?//'; exit 0 ;;
+		sed -n '2,27p' "$0" | sed 's/^# \?//'; exit 0 ;;
 	--version)
-		printf 'arctic-strap %s\n' "$VERSION"; exit 0 ;;
-	-*) echo "arctic-strap: unknown option $1" >&2; exit 1 ;;
+		printf 'arctic-install %s\n' "$VERSION"; exit 0 ;;
+	-*) echo "arctic-install: unknown option $1" >&2; exit 1 ;;
 	*)
 		# There is deliberately no target argument any more. The config
 		# says which disk or partitions to use; where they get mounted
-		# while installing is arctic-strap's own business, not something
+		# while installing is arctic-install's own business, not something
 		# to type on the command line and keep in sync by hand.
-		echo "arctic-strap: unexpected argument: $1" >&2
+		echo "arctic-install: unexpected argument: $1" >&2
 		echo "  the target is set in $CONF (A_DISK or A_ROOT_PART), not here." >&2
 		exit 1 ;;
 	esac
@@ -1372,7 +1519,7 @@ if [ -f "$CFFILE" ]; then
 elif [ "$CFFILE" != "$CONF" ]; then
 	bail "no such config file: $CFFILE"
 else
-	echo "arctic-strap: no config at $CONF - installing with built-in defaults" >&2
+	echo "arctic-install: no config at $CONF - installing with built-in defaults" >&2
 fi
 
 # Where the target gets mounted while installing. Private to this script -
@@ -1384,10 +1531,12 @@ mkdir -p "$TARGET"
 check_config
 [ -n "$CHECKONLY" ] && exit 0
 
-if [ -z "$FORCE" ] && detect_existing_install "$TARGET"; then
-	printf '\n\033[38;5;215mThere is already an Arctic install on %s.\033[0m\n' "$TARGET"
-	printf 'Continuing will overwrite files that belong to packages.\n\n'
-	printf 'Continue? [y/N] '
+if [ -z "$FORCE" ]; then
+	if detect_existing_install "$TARGET"; then
+		printf '\033[38;5;215mThere is already an Arctic install on %s.\033[0m\n' "$TARGET"
+		printf 'Continuing will overwrite files that belong to packages.\n\n'
+	fi
+	printf 'Make these changes? [y/N] '
 	read -r a
 	case "$a" in y|Y|yes) ;; *) echo "nothing was changed."; exit 0 ;; esac
 fi
@@ -1395,4 +1544,20 @@ fi
 tui_init
 run_install
 tui_done
+
+if [ "$A_CHROOT_SHELL" = yes ]; then
+	printf '\nA_CHROOT_SHELL=yes - dropping into %s. Type "exit" when done.\n\n' "$TARGET"
+	mount --bind /dev "$TARGET/dev" 2>/dev/null || :
+	mount --bind /proc "$TARGET/proc" 2>/dev/null || :
+	mount --bind /sys "$TARGET/sys" 2>/dev/null || :
+	chroot "$TARGET" /bin/sh -l
+	umount "$TARGET/dev" "$TARGET/proc" "$TARGET/sys" 2>/dev/null || :
+fi
+
 finished_banner
+
+if [ "$A_REBOOT" = yes ]; then
+	printf '\nA_REBOOT=yes - rebooting.\n'
+	sleep 2
+	reboot
+fi

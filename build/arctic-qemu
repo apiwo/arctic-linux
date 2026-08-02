@@ -124,13 +124,14 @@ install)
    Inside the VM, the disk is /dev/vda:
 
      vi /etc/arctic/install.conf   # uncomment A_DISK=/dev/vda, and anything else
-     arctic-strap
+     arctic-install
 
      poweroff
 
-   That one command partitions /dev/vda, formats it, mounts it, installs the
-   base system and the bootloader. For the traditional manual-partitioning
-   path instead, leave A_DISK commented out and do it yourself:
+   That one command partitions /dev/vda, formats it, installs the base
+   system and the bootloader, asking for confirmation first. To use
+   partitions you made yourself instead, leave A_DISK commented out and
+   point A_ROOT_PART / A_BOOT_PART at what you made:
 
      fdisk /dev/vda
        g          new GPT
@@ -140,12 +141,10 @@ install)
 
      mkfs.vfat -F32 /dev/vda1
      mkfs.ext4 /dev/vda2
-     mount /dev/vda2 /mnt
-     arctic-strap /mnt
-
-     mkdir -p /mnt/boot
-     mount /dev/vda1 /mnt/boot
-     arctic-boot-strap /mnt/boot --efi
+     vi /etc/arctic/install.conf
+       A_ROOT_PART=/dev/vda2
+       A_BOOT_PART=/dev/vda1
+     arctic-install
 
      poweroff
 

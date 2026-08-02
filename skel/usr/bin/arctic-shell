@@ -79,7 +79,7 @@ if [ ! -d "$ENVROOT/usr" ]; then
 	mkdir -p "$ENVROOT/var/lib/alpm/sync"
 	# ALPM_DB follows ALPM_ROOT, so a scratch root starts with no sync index
 	# of its own - copy the one this session already has, same as
-	# arctic-strap does before its first target_alpm call. ALPM_CONF/
+	# arctic-install does before its first target_alpm call. ALPM_CONF/
 	# ALPM_REPOD stay host-absolute regardless (see libalpm.sh), so the repo
 	# definitions themselves do not need copying in, only the index.
 	cp -a /var/lib/alpm/sync/. "$ENVROOT/var/lib/alpm/sync/" 2>/dev/null || :
@@ -87,7 +87,7 @@ if [ ! -d "$ENVROOT/usr" ]; then
 	# /lib64 -> usr/lib (not usr/lib64 - glibc has no separate lib64 here,
 	# but the host gcc used for every native build still bakes in
 	# /lib64/ld-linux-x86-64.so.2 as the interpreter regardless). A plain
-	# package install has nowhere to create these; arctic-strap sets them up
+	# package install has nowhere to create these; arctic-install sets them up
 	# by hand for the same reason before its first install.
 	mkdir -p "$ENVROOT/usr/bin" "$ENVROOT/usr/sbin" "$ENVROOT/usr/lib"
 	for l in bin sbin lib; do

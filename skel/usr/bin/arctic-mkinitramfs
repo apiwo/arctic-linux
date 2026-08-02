@@ -15,7 +15,7 @@
 #
 # alpm calls this after every kernel install and after installing a driver
 # that touches the boot path (see alpm's tx handling and
-# ports/nonfree/nvidia-drivers/install); arctic-strap calls it once at the
+# ports/nonfree/nvidia-drivers/install); arctic-install calls it once at the
 # end of a fresh install. All of those call sites already guard with
 # `have arctic-mkinitramfs`, so before this existed they silently did
 # nothing - which is why a from-scratch encrypted install could not
@@ -81,7 +81,7 @@ done
 # support Arctic's kernel config leaves as modules instead of building in;
 # everything else it needs - device-mapper itself, AES, CBC, XTS, SHA256 -
 # is already compiled directly into the kernel) if something actually asked
-# for it. crypttab with a real (non-comment) line is arctic-strap's own
+# for it. crypttab with a real (non-comment) line is arctic-install's own
 # signal that the target has an encrypted volume.
 NEED_LUKS=0
 if [ -s /etc/crypttab ] && grep -qv '^[[:space:]]*#\|^[[:space:]]*$' /etc/crypttab 2>/dev/null; then

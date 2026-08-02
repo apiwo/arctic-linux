@@ -22,14 +22,17 @@ log, not a tutorial.
 ## Installer
 
 Fully declarative, no menus. Edit `/etc/arctic/install.conf`, run
-`arctic-strap`. Setting `A_DISK=/dev/sdX` partitions, formats, mounts,
-installs the base system and the bootloader in one shot; leaving it unset is
-the manual path (partition/mount yourself, then `arctic-strap /mnt`).
+`arctic-install`. Setting `A_DISK=/dev/sdX` partitions, formats, installs
+the base system and the bootloader in one shot, after a confirmation
+prompt; leaving it unset and setting `A_ROOT_PART`/`A_BOOT_PART` instead
+uses partitions made ahead of time. Either way there is no target
+directory to mount and keep in sync by hand — that is internal to the
+tool now.
 
-`arctic-strap` and `arctic-boot-strap` are the only install-time binaries.
-The old interactive `arctic-conf`/`arctic-boot-conf` TUI tools are gone —
-partitioning logic moved into `arctic-strap` itself, driven by the config
-file instead of menu answers.
+`arctic-install` and `arctic-boot-strap` are the only install-time
+binaries. The old interactive `arctic-conf`/`arctic-boot-conf` TUI tools
+are gone — partitioning logic moved into `arctic-install` itself, driven
+by the config file instead of menu answers.
 
 Declarative system management on top of that, once installed:
 
