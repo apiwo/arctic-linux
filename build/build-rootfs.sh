@@ -310,6 +310,19 @@ if [ ! -f "$DEPS/usr/lib/libcurses.so" ]; then
 			ln -sf libterminfo.so "$base/usr/lib/libtinfo.so"
 			ln -sf libterminfo.so "$base/usr/lib/libtinfow.so"
 			ln -sf libterminfo.so "$base/usr/lib/libtermcap.so"
+			# The unversioned names above are what satisfy -ltinfow at link
+			# time, but that did not stop dmesg (and others) from recording
+			# a *versioned* NEEDED entry - libtinfow.so.6 - in the built
+			# binary anyway, presumably because the sandboxed build still
+			# found the host's own real, versioned ncurses ahead of these
+			# symlinks for that particular package. Whatever the exact
+			# reason, the fix that actually holds regardless of it is
+			# shipping the versioned names too, so the binary that already
+			# exists finds what it is actually asking for.
+			ln -sf libcurses.so   "$base/usr/lib/libncurses.so.6"
+			ln -sf libcurses.so   "$base/usr/lib/libncursesw.so.6"
+			ln -sf libterminfo.so "$base/usr/lib/libtinfo.so.6"
+			ln -sf libterminfo.so "$base/usr/lib/libtinfow.so.6"
 			# Packages written against GNU ncurses probe for headers under an
 			# "ncursesw/" subdirectory before falling back to a flat ncurses.h.
 			# netbsd-curses has no such subdirectory, so that probe walks past
@@ -450,6 +463,16 @@ if [ ! -x "$R/usr/bin/toybox" ]; then
 else
 	ok "toybox already built"
 fi
+
+# util-linux is built with --disable-more, so toybox's own applet is
+# supposed to be what /usr/bin/more actually is - but a stale standalone
+# more binary from an older build of this script (from before that flag
+# existed) was found still sitting there, silently shadowing the symlink
+# and shipping with a dangling libmagic.so.1 dependency that made it fail
+# to start at all. Nothing in Arctic is meant to provide a real, separate
+# more binary; reassert the symlink unconditionally so this cannot recur
+# regardless of what an earlier build left behind.
+[ -x "$R/usr/bin/toybox" ] && ln -sf toybox "$R/usr/bin/more" 2>/dev/null || :
 
 # --------------------------------------------------------------------- 5. zsh
 step "building zsh 5.9.2 (the Arctic login shell)"
